@@ -50,6 +50,8 @@ export function renderIndex(meta?: PageMeta): string {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#e9e5d8" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#16150f" />
 <title>${esc(ogTitle)}</title>
 ${ogMeta}
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -69,7 +71,7 @@ ${ogMeta}
       --fg:#ece7d8; --fg2:#c9c3b2; --fg3:#b0ab99; --fg4:#8f8b7a; --fg5:#6f6b5c;
       --line:#403c2d; --line2:#322f24; --line3:#2a2820; --line4:#3a372b;
       --sig:#e2592d; --sigH:#f06a3e; --sigT:#33231a; --amber:#d6a94a; --green:#8fbf72;
-      --inv-bg:#ece7d8; --inv-fg:#16150f; --inv-fg2:#57543f; --inv-fg3:#6f6b5c; --on-sig:#faf8f2;
+      --inv-bg:#16150f; --inv-fg:#ece7d8; --inv-fg2:#c9c3b2; --inv-fg3:#8f8b7a; --on-sig:#faf8f2;
     }
   }
   *{box-sizing:border-box;margin:0;padding:0}
