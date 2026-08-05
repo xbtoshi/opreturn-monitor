@@ -12,6 +12,12 @@ export interface TxFee {
   feeRate: number | null;
 }
 
+/** On-chain confirmation time (unix seconds), or null if unconfirmed. */
+export function blockTimeFromTx(tx: RawTx): number | null {
+  const t = tx.status?.block_time;
+  return typeof t === 'number' && Number.isFinite(t) && t > 0 ? t : null;
+}
+
 /** Total fee (sats) + fee rate (sat/vB) from a mempool.space tx payload. */
 export function feeFromTx(tx: RawTx): TxFee {
   const fee = typeof tx.fee === 'number' && Number.isFinite(tx.fee) ? tx.fee : null;

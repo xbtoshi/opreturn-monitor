@@ -1,7 +1,7 @@
 [
   {
     "name": "Coldcard Exploit Bulletin Board",
-    "description": "Main attacker consolidation addresses from the July-August 2026 Coldcard firmware RNG exploit. These addresses became a highly active public message board filled with begging, laundry service ads, threats, philosophical notes, haikus, and prompt injections.",
+    "description": "Main attacker consolidation addresses from the July-August 2026 Coldcard firmware RNG exploit. These became the most active public OP_RETURN message boards, filled with begging, laundry ads, threats, haikus, philosophical notes and prompt injections.",
     "slug": "coldcard-exploit-bulletin-board",
     "addresses": [
       {
@@ -30,7 +30,7 @@
       },
       {
         "address": "bc1qsjrf5ze5tmulz7y2x4pc7qaex2a35sanp3rqlx",
-        "label": "Additional monitored holding address (Galaxy)"
+        "label": "Additional monitored holding address"
       },
       {
         "address": "bc1q0rvn88w08j75k4h48lf9fvhan7unjp7vjf5q6m",
@@ -40,7 +40,7 @@
   },
   {
     "name": "High-Value Dormant Wallet Notices",
-    "description": "Early high-balance (mostly 2010-2011 era) addresses that have received systematic OP_RETURN legal-style notices, ownership claims, phishing links, and 'abandoned property' messages (including the 2025 Salomon Brothers-style campaigns).",
+    "description": "High-balance early (mostly 2010-2011) addresses that have received systematic OP_RETURN legal notices, ownership claims, phishing links and 'abandoned property' messages (including the 2025 Salomon Brothers-style campaigns).",
     "slug": "high-value-dormant-wallet-notices",
     "addresses": [
       {
@@ -82,7 +82,7 @@
   },
   {
     "name": "Russian Intelligence Marking Campaign",
-    "description": "Addresses targeted in the early 2022 OP_RETURN campaign that publicly labeled them as belonging to Russian intelligence agencies (GRU / SVR / FSB). Classic example of geopolitical on-chain marking.",
+    "description": "Addresses publicly labeled via OP_RETURN in early 2022 as belonging to Russian intelligence agencies (GRU / SVR / FSB). Classic geopolitical on-chain marking campaign.",
     "slug": "russian-intelligence-marking-campaign",
     "addresses": [
       {

@@ -133,7 +133,7 @@ export async function classifyMessage(
     endpoint,
     SYSTEM_PROMPT,
     `Classify this message:\n"""${content.slice(0, 500)}"""`,
-    16,
+    1024,
     fetchFn
   );
   return text ? normalizeCategory(text) : null;
@@ -176,9 +176,9 @@ export async function classifyBatch(
     const text = await chatCompletion(
       endpoint,
       BATCH_SYSTEM_PROMPT,
-      `Classify each of these ${chunk.length} messages. Reply with one "N: Category" line per message.\n\n${list}`,
-      100 + chunk.length * 32,
-      fetchFn
+       `Classify each of these ${chunk.length} messages. Reply with one "N: Category" line per message.\n\n${list}`,
+       300 + chunk.length * 200,
+       fetchFn
     );
 
     const parsed = text ? parseBatchResponse(text, chunk.length) : new Array(chunk.length).fill(null);

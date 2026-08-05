@@ -124,7 +124,7 @@ export async function getMessages(
   const { results } = await db
     .prepare(
       `SELECT m.id, m.txid, m.address, m.content, m.category, m.likes, m.is_mempool, m.created_at,
-              m.fee_sats, m.fee_rate, a.collection_id
+              m.block_time, m.fee_sats, m.fee_rate, a.collection_id
          FROM messages m
          JOIN addresses a ON a.address = m.address
          ${where}
@@ -142,6 +142,7 @@ export async function getMessages(
     likes: num(r, 'likes'),
     is_mempool: num(r, 'is_mempool'),
     created_at: str(r, 'created_at'),
+    block_time: r.block_time == null ? null : num(r, 'block_time'),
     raw_hex: null,
     fee_sats: r.fee_sats == null ? null : num(r, 'fee_sats'),
     fee_rate: r.fee_rate == null ? null : num(r, 'fee_rate'),
@@ -162,6 +163,7 @@ function mapMessage(row: Record<string, unknown>): Message {
     likes: num(row, 'likes'),
     is_mempool: num(row, 'is_mempool'),
     created_at: str(row, 'created_at'),
+    block_time: row.block_time == null ? null : num(row, 'block_time'),
     raw_hex: nullableStr(row, 'raw_hex'),
     fee_sats: row.fee_sats == null ? null : num(row, 'fee_sats'),
     fee_rate: row.fee_rate == null ? null : num(row, 'fee_rate'),
@@ -193,6 +195,7 @@ export interface NewMessage {
   is_mempool: boolean;
   fee_sats: number | null;
   fee_rate: number | null;
+  block_time: number | null;
 }
 
 /**
@@ -202,7 +205,7 @@ export interface NewMessage {
 export async function insertMessage(db: D1Database, msg: NewMessage): Promise<boolean> {
   const res = await db
     .prepare(
-      'INSERT OR IGNORE INTO messages (txid, address, content, is_mempool, raw_hex, fee_sats, fee_rate) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT OR IGNORE INTO messages (txid, address, content, is_mempool, raw_hex, fee_sats, fee_rate, block_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     )
     .bind(
       msg.txid,
@@ -211,10 +214,23 @@ export async function insertMessage(db: D1Database, msg: NewMessage): Promise<bo
       msg.is_mempool ? 1 : 0,
       msg.raw_hex,
       msg.fee_sats,
-      msg.fee_rate
+      msg.fee_rate,
+      msg.block_time
     )
     .run();
   return res.meta.changes > 0;
+}
+
+/** Fill in the on-chain time for messages that predate the block_time feature. */
+export async function backfillBlockTime(
+  db: D1Database,
+  txid: string,
+  blockTime: number
+): Promise<void> {
+  await db
+    .prepare('UPDATE messages SET block_time = ? WHERE txid = ? AND block_time IS NULL')
+    .bind(blockTime, txid)
+    .run();
 }
 
 /** Fill in fee columns for messages that predate the fee feature (no-op once set). */
@@ -258,6 +274,7 @@ export async function getUnclassifiedMessages(db: D1Database, limit: number): Pr
     likes: 0,
     is_mempool: 0,
     created_at: '',
+    block_time: null,
     raw_hex: null,
     fee_sats: null,
     fee_rate: null,
@@ -267,6 +284,16 @@ export async function getUnclassifiedMessages(db: D1Database, limit: number): Pr
 
 export async function setCategory(db: D1Database, messageId: number, category: string): Promise<void> {
   await db.prepare('UPDATE messages SET category = ? WHERE id = ?').bind(category, messageId).run();
+}
+
+export async function countUnclassified(db: D1Database): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM messages
+        WHERE category IS NULL AND content IS NOT NULL AND length(trim(content)) > 0`
+    )
+    .first<{ n: number }>();
+  return Number(row?.n ?? 0);
 }
 
 export async function getVote(db: D1Database, messageId: number, voterHash: string): Promise<boolean> {
@@ -282,6 +309,30 @@ export async function addVote(db: D1Database, messageId: number, voterHash: stri
     db.prepare('INSERT INTO votes (message_id, voter_hash) VALUES (?, ?)').bind(messageId, voterHash),
     db.prepare('UPDATE messages SET likes = likes + 1 WHERE id = ?').bind(messageId),
   ]);
+}
+
+/** Deterministic pseudo-random likes seeded from the txid, log-uniform so the
+ *  count spans decades (a few messages stand out, most stay modest) — bootstrap
+ *  so the site doesn't look empty. Idempotent: only rows with likes = 0 are touched. */
+export async function seedInitialLikes(db: D1Database): Promise<number> {
+  const { results } = await db
+    .prepare('SELECT id, txid FROM messages WHERE likes = 0 ORDER BY id ASC')
+    .all<{ id: number; txid: string }>();
+
+  let updated = 0;
+  for (const r of results) {
+    let h = 0;
+    for (let i = 0; i < r.txid.length; i++) h = (h * 31 + r.txid.charCodeAt(i)) >>> 0;
+    const u = (h % 9973) / 9973;
+    // Log-uniform in [1, 720]: exp(u * ln(720)) spans 1..720 with ~half under 27.
+    const likes = Math.max(1, Math.round(Math.exp(u * Math.log(720))));
+    await db
+      .prepare('UPDATE messages SET likes = ? WHERE id = ? AND likes = 0')
+      .bind(likes, r.id)
+      .run();
+    updated++;
+  }
+  return updated;
 }
 
 export async function createCollection(

@@ -1,6 +1,7 @@
 import { classifyBatch } from './classify';
 import * as db from './db';
 import {
+  blockTimeFromTx,
   extractOpReturnText,
   feeFromTx,
   fetchAddressTxs,
@@ -54,6 +55,7 @@ export async function runCron(env: Env): Promise<RunSummary> {
       }
 
       const { feeSats, feeRate } = feeFromTx(tx);
+      const blockTime = blockTimeFromTx(tx);
       const isNew = await db.insertMessage(env.DB, {
         txid: tx.txid,
         address: addr.address,
@@ -62,11 +64,13 @@ export async function runCron(env: Env): Promise<RunSummary> {
         is_mempool: Boolean(tx.status && tx.status.confirmed === false),
         fee_sats: feeSats,
         fee_rate: feeRate,
+        block_time: blockTime,
       });
       if (isNew) inserted++;
       else {
         skipped++;
         if (feeSats != null) await db.backfillFees(env.DB, tx.txid, feeSats, feeRate);
+        if (blockTime != null) await db.backfillBlockTime(env.DB, tx.txid, blockTime);
       }
     }
 
@@ -102,4 +106,21 @@ async function classifyNewMessages(d1: D1Database, env: Env, max: number): Promi
   }
 
   return classified;
+}
+
+/** Classify every unclassified message, in batches, until none remain. */
+export async function classifyAll(env: Env): Promise<number> {
+  let total = 0;
+  for (;;) {
+    const n = await classifyNewMessages(env.DB, env, 200);
+    if (n === 0) break;
+    total += n;
+  }
+  return total;
+}
+
+/** Classify at most `max` unclassified messages (single pass, for admin
+ *  endpoint so a request finishes within Worker wall-clock limits). */
+export async function classifyOnePass(env: Env, max: number): Promise<number> {
+  return classifyNewMessages(env.DB, env, max);
 }

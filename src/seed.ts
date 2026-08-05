@@ -52,7 +52,9 @@ export async function ensureSeeded(db: D1Database): Promise<void> {
 
     for (const addr of col.addresses) {
       await db
-        .prepare('INSERT OR IGNORE INTO addresses (address, label, collection_id) VALUES (?, ?, ?)')
+        .prepare(
+          'INSERT INTO addresses (address, label, collection_id) VALUES (?, ?, ?) ON CONFLICT(address) DO UPDATE SET label = excluded.label'
+        )
         .bind(addr.address, addr.label, collectionId)
         .run();
     }

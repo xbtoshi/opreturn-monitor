@@ -28,6 +28,8 @@ export interface Message {
   likes: number;
   is_mempool: number;
   created_at: string;
+  /** Unix seconds the tx confirmed on-chain; NULL if unconfirmed. */
+  block_time: number | null;
   raw_hex: string | null;
   fee_sats: number | null;
   fee_rate: number | null;
@@ -36,6 +38,7 @@ export interface Message {
 
 export interface Env {
   DB: D1Database;
+  SITE_URL?: string;
   OPENAI_API_BASE?: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;

@@ -202,8 +202,9 @@ ${ogMeta}
   .artifact .bar .st.conf{color:var(--green)}
   .artifact .pad{padding:clamp(26px,5vw,52px) clamp(22px,4vw,44px)}
   .artifact blockquote{font-size:clamp(26px,5vw,46px);line-height:1.2;font-weight:600;letter-spacing:-.022em;margin:22px 0 30px;word-break:break-word}
-  .metagrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line2);border:1px solid var(--line2);font-family:'Martian Mono',monospace}
+  .metagrid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line2);border:1px solid var(--line2);font-family:'Martian Mono',monospace}
   .metagrid .cell{background:var(--card);padding:14px 16px;min-width:0}
+  .metagrid .cell.full{grid-column:1 / -1}
   .metagrid .k{font-size:10px;letter-spacing:.1em;color:var(--fg4);text-transform:uppercase}
   .metagrid .v{font-size:13px;color:var(--fg);margin-top:5px;word-break:break-all;min-width:0}
   .metagrid .v.single{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -257,6 +258,7 @@ ${ogMeta}
 <footer>
   <span>OP_RETURN &middot; opreturn.xyz</span>
   <span>DATA: mempool.space &middot; CLASSIFICATION: AI &middot; NOT FINANCIAL ADVICE</span>
+  <span>created by <a href="https://x.com/xbtoshi" target="_blank" rel="noopener">@xbtoshi</a></span>
   <span id="foot-count">&mdash;</span>
 </footer>
 
@@ -274,7 +276,8 @@ ${ogMeta}
   function attr(s){return esc(s);}
   function shortAddr(a){a=String(a||'');return a.length>16?a.slice(0,10)+'\\u2026'+a.slice(-4):a;}
   function catCode(c){return 'COL-'+('0'+c).slice(-2);}
-  function timeAgo(ts){if(!ts)return '';var s=String(ts);var d=new Date(s.replace(' ','T')+(s.indexOf('Z')<0?'Z':''));var diff=(Date.now()-d.getTime())/60000;if(isNaN(diff))return '';if(diff<1)return 'just now';if(diff<60)return Math.floor(diff)+'m ago';if(diff<1440)return Math.floor(diff/60)+'h ago';return Math.floor(diff/1440)+'d ago';}
+  function timeAgo(ts){if(ts==null||ts==='')return '';var ms=typeof ts==='number'?ts*1000:new Date(String(ts).replace(' ','T')+(String(ts).indexOf('Z')<0?'Z':'')).getTime();if(isNaN(ms))return '';var diff=(Date.now()-ms)/60000;if(diff<1)return 'just now';if(diff<60)return Math.floor(diff)+'m ago';if(diff<1440)return Math.floor(diff/60)+'h ago';return Math.floor(diff/1440)+'d ago';}
+  function msgTime(m){return m.block_time!=null?m.block_time:m.created_at;}
   function isHot(c){return c.message_count>=100;}
   function feeText(m){if(m.fee_rate!=null)return m.fee_rate+' sat/vB';if(m.fee_sats!=null)return m.fee_sats.toLocaleString()+' sats';return '';}
 
@@ -333,7 +336,7 @@ ${ogMeta}
     if(feat){
       h+='<section class="featured" data-action="open-msg" data-txid="'+attr(feat.txid)+'" style="cursor:pointer"><div class="inner"><div class="k">\u25c6 TRANSMISSION OF THE DAY</div>';
       h+='<blockquote>\u201c'+esc(feat.content)+'\u201d</blockquote>';
-      h+='<div class="meta"><span class="strong">\u21b3 '+esc(colName(feat.collection_id))+'</span><span>'+esc(timeAgo(feat.created_at))+'</span><span>'+esc(shortAddr(feat.address))+'</span><span class="sig">\u2665 '+feat.likes+'</span></div>';
+      h+='<div class="meta"><span class="strong">\u21b3 '+esc(colName(feat.collection_id))+'</span><span>'+esc(timeAgo(msgTime(feat)))+'</span><span>'+esc(shortAddr(feat.address))+'</span><span class="sig">\u2665 '+feat.likes+'</span></div>';
       h+='</div></section>';
     }
     h+='<section class="wrap" style="padding-top:clamp(32px,5vw,64px)"><div class="stats">';
@@ -377,7 +380,7 @@ ${ogMeta}
     h+=(m.category?'<a class="cat'+(hostile?' sig':'')+'" href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a>':'<span class="cat'+(hostile?' sig':'')+'">Unclassified</span>');
     h+='<span class="st '+(m.is_mempool?'mem':'conf')+'">'+(m.is_mempool?'\\u25f7 IN MEMPOOL':'\\u2713 CONFIRMED')+'</span>';
     h+='<span class="fee">'+esc(feeText(m))+'</span>';
-    h+='<span class="time">'+esc(timeAgo(m.created_at))+'</span></div>';
+    h+='<span class="time">'+esc(timeAgo(msgTime(m)))+'</span></div>';
     h+='<button class="content-btn" data-action="open-msg" data-txid="'+attr(m.txid)+'"><p class="content">'+esc(m.content)+'</p></button>';
     h+='<div class="foot">';
     if(m.collection_id){h+='<span>\u21b3 <a href="/c/'+attr(colSlug(colById(m.collection_id)))+'">'+esc(colName(m.collection_id))+'</a></span>';}
@@ -419,12 +422,12 @@ ${ogMeta}
     h+='<div class="pad"><span class="cat'+(hostile?' sig':'')+'">'+esc(m.category||'Unclassified')+'</span>';
     h+='<blockquote>\\u201c'+esc(m.content)+'\\u201d</blockquote>';
     h+='<div class="metagrid">';
-    if(m.collection_id){h+='<div class="cell"><div class="k">Collection</div><div class="v single"><a href="/c/'+attr(colSlug(colById(m.collection_id)))+'">'+esc(colName(m.collection_id))+'</a></div></div>';}
+    if(m.collection_id){h+='<div class="cell full"><div class="k">Collection</div><div class="v single"><a href="/c/'+attr(colSlug(colById(m.collection_id)))+'">'+esc(colName(m.collection_id))+'</a></div></div>';}
     h+=cellCopy('Address',m.address);
     h+=cellCopy('Transaction',m.txid);
     h+=cell('Status',m.is_mempool?'pending':'confirmed');
     h+=cell('Fee',feeText(m)||'\\u2014');
-    h+=cell('Time',timeAgo(m.created_at));
+    h+=cell('Time',timeAgo(msgTime(m)));
     h+=(m.category?'<div class="cell"><div class="k">Category</div><div class="v single"><a href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a></div></div>':cell('Category','unclassified'));
     h+='</div></div>';
     h+='<div class="actions"><button class="act act-like'+(liked?' liked':'')+'" data-action="like" data-id="'+m.id+'">\\u2665 <span data-lc="'+m.id+'">'+m.likes+'</span> likes</button>';

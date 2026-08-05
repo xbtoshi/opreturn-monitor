@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { categoryFromSlug, categorySlug } from './classify';
+import { classifyOnePass } from './cron';
 import { runCron } from './cron';
 import * as db from './db';
 import {
@@ -25,6 +26,11 @@ function jsonError(message: string, status: number): Response {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function intEnv(env: Env, key: 'AI_MAX_PER_RUN', fallback: number): number {
+  const v = Number(env[key]);
+  return Number.isFinite(v) && v > 0 ? v : fallback;
 }
 
 async function sha256(input: string): Promise<string> {
@@ -205,13 +211,65 @@ app.post('/api/admin/seed', adminGuard, async (c) => {
   return c.json({ ok: true });
 });
 
+app.post('/api/admin/classify', adminGuard, async (c) => {
+  const max = intEnv(c.env, 'AI_MAX_PER_RUN', 50);
+  const remaining = await db.countUnclassified(c.env.DB);
+  const classified = await classifyOnePass(c.env, max);
+  return c.json({ ok: true, classified, remaining: Math.max(0, remaining - classified) });
+});
+
+app.post('/api/admin/ai-test', adminGuard, async (c) => {
+  const base = (c.env.OPENAI_API_BASE || '').replace(/\/+$/, '');
+  const model = c.env.OPENAI_MODEL || '';
+  const key = c.env.OPENAI_API_KEY || '';
+  const url = `${base}/chat/completions`;
+  const t0 = Date.now();
+  let info: Record<string, unknown>;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        max_tokens: 2048,
+        messages: [
+          { role: 'user', content: 'Reply with exactly: OK' },
+        ],
+      }),
+    });
+    const text = await res.text();
+    info = {
+      status: res.status,
+      ok: res.ok,
+      body: text.slice(0, 300),
+      ms: Date.now() - t0,
+      base,
+      model,
+      keySet: Boolean(key),
+      keyPrefix: key ? key.slice(0, 8) + '...' : '',
+    };
+  } catch (e) {
+    info = { error: String(e), ms: Date.now() - t0, base, model, keySet: Boolean(key) };
+  }
+  return c.json({ ok: true, info });
+});
+
+app.post('/api/admin/seed-likes', adminGuard, async (c) => {
+  const seeded = await db.seedInitialLikes(c.env.DB);
+  return c.json({ ok: true, seeded });
+});
+
 // ---------------------------------------------------------------------------
 // SPA pages + Open Graph (real paths so X/Slack/Telegram crawlers see per-item
 // cards — crawlers do not execute JS and never send URL hash fragments)
 // ---------------------------------------------------------------------------
 
 function originOf(c: Context<Bindings>): string {
-  return new URL(c.req.url).origin;
+  return (c.env.SITE_URL || new URL(c.req.url).origin).replace(/\/+$/, '');
 }
 
 function shortAddr(a: string): string {
