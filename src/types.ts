@@ -1,0 +1,52 @@
+export interface Collection {
+  id: number;
+  name: string;
+  description: string | null;
+  created_at: string;
+}
+
+export interface CollectionWithStats extends Collection {
+  address_count: number;
+  message_count: number;
+}
+
+export interface Address {
+  id: number;
+  address: string;
+  label: string | null;
+  collection_id: number;
+  created_at: string;
+}
+
+export interface Message {
+  id: number;
+  txid: string;
+  address: string;
+  content: string | null;
+  category: string | null;
+  likes: number;
+  is_mempool: number;
+  created_at: string;
+  raw_hex: string | null;
+}
+
+export interface Env {
+  DB: D1Database;
+  OPENAI_API_BASE?: string;
+  OPENAI_API_KEY?: string;
+  OPENAI_MODEL?: string;
+  MEMPOOL_BASE_URL?: string;
+  CRON_SECRET?: string;
+  ADMIN_KEY?: string;
+  AI_MAX_PER_RUN?: string;
+  AI_DELAY_MS?: string;
+}
+
+export interface RunSummary {
+  scanned_txs: number;
+  inserted: number;
+  classified: number;
+  failed_fetches: number;
+  skipped: number;
+  took_ms: number;
+}

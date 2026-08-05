@@ -1,0 +1,106 @@
+[
+  {
+    "name": "Coldcard Exploit Bulletin Board",
+    "description": "Main attacker consolidation addresses from the July-August 2026 Coldcard firmware RNG exploit. These addresses became a highly active public message board filled with begging, laundry service ads, threats, philosophical notes, haikus, and prompt injections.",
+    "addresses": [
+      {
+        "address": "bc1qq85v2c926eg6pgxhwp6q7lf6cnsz80qs3fcu9r",
+        "label": "Primary holding address (highest message volume)"
+      },
+      {
+        "address": "bc1qx76cae2706qd5q576feh7xq8rfcsjpf2htfhe3",
+        "label": "Major holding address"
+      },
+      {
+        "address": "bc1q8jy96fe5lf8vfugydnte3cguk92gpev7kwtp3q",
+        "label": "Holding address"
+      },
+      {
+        "address": "bc1qnk4zh9qcnap2mycp56qjrgza3cc8ylrh8fecp0",
+        "label": "Early collector / residue"
+      },
+      {
+        "address": "bc1qtfrwa4j6rmj9rsgspv6a0yjumkg39js2numu75",
+        "label": "Holding address"
+      },
+      {
+        "address": "bc1qmd5m5ktv7m5ffujxv4248fxv36myvdx79n8jp6",
+        "label": "Collector residue"
+      }
+    ]
+  },
+  {
+    "name": "High-Value Dormant Wallet Notices",
+    "description": "Early high-balance (mostly 2010-2011 era) addresses that have received systematic OP_RETURN legal-style notices, ownership claims, phishing links, and 'abandoned property' messages.",
+    "addresses": [
+      {
+        "address": "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
+        "label": "Famous Mt. Gox related address (~80k BTC)"
+      },
+      {
+        "address": "1LdRcdxfbSnmCYYNdeYpUnztiYzVfBEQeC",
+        "label": "Large long-dormant address"
+      },
+      {
+        "address": "12ib7dApVFvg82TXKycWBNpN8kFyiAN1dr",
+        "label": "Early high-value dormant address"
+      },
+      {
+        "address": "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv",
+        "label": "Early high-value dormant address"
+      }
+    ]
+  },
+  {
+    "name": "Genesis & Satoshi Tribute",
+    "description": "The Genesis block address. A long-running cultural phenomenon where people send symbolic tributes, memorials, and messages to Satoshi.",
+    "addresses": [
+      {
+        "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+        "label": "Genesis block address (Satoshi)"
+      }
+    ]
+  },
+  {
+    "name": "Russian Intelligence Marking Campaign",
+    "description": "Addresses targeted in the early 2022 OP_RETURN campaign that publicly labeled them as belonging to Russian intelligence agencies (GRU / SVR / FSB). Classic example of geopolitical on-chain marking.",
+    "addresses": [
+      {
+        "address": "1DLA46sXYps3PdS3HpGfdt9MbQpo6FytPm",
+        "label": "Linked to SVR / SolarWinds infrastructure"
+      },
+      {
+        "address": "1L5QKvh2Fc86j947rZt12rX1EFrCGb2uPf",
+        "label": "Linked to SVR / SolarWinds infrastructure"
+      },
+      {
+        "address": "18N9jzCDsV9ekiLW8jJSA1rXDXw1Yx4hDh",
+        "label": "Linked to GRU / DCLeaks activity"
+      }
+    ]
+  },
+  {
+    "name": "Cultural Memorials & Digital Graffiti",
+    "description": "Addresses and vanity addresses associated with permanent cultural tributes, memorials, religious messages, and early digital graffiti on Bitcoin.",
+    "addresses": [
+      {
+        "address": "1BibLEafdYxCvioFhuemkbiY9r6TT5iNBn",
+        "label": "Bible-themed vanity address"
+      },
+      {
+        "address": "1GoDxxMEvikCb7JLAuqGWNeht75E48AgN6",
+        "label": "God loves me vanity address"
+      }
+    ]
+  },
+  {
+    "name": "Historical Hacker Negotiation Boards",
+    "description": "Addresses from past major incidents that have been used for public on-chain negotiation, bounty offers, threats, or responses between victims, projects, and attackers.",
+    "addresses": [
+      {
+        "address": "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
+        "label": "Mt. Gox related (also appears in dormant notices)"
+      }
+    ]
+  }
+]
