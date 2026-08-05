@@ -3,6 +3,21 @@ export interface RawTx {
   hex?: string;
   status?: { confirmed?: boolean; block_time?: number };
   vout?: Array<{ scriptpubkey?: string; scriptpubkey_type?: string }>;
+  fee?: number;
+  weight?: number;
+}
+
+export interface TxFee {
+  feeSats: number | null;
+  feeRate: number | null;
+}
+
+/** Total fee (sats) + fee rate (sat/vB) from a mempool.space tx payload. */
+export function feeFromTx(tx: RawTx): TxFee {
+  const fee = typeof tx.fee === 'number' && Number.isFinite(tx.fee) ? tx.fee : null;
+  const weight = typeof tx.weight === 'number' && tx.weight > 0 ? tx.weight : null;
+  const feeRate = fee != null && weight != null ? fee / (weight / 4) : null;
+  return { feeSats: fee, feeRate: feeRate != null ? Math.round(feeRate * 10) / 10 : null };
 }
 const FALLBACK_BASES = ['https://www.mempool.space', 'https://blockstream.info'];
 
@@ -53,6 +68,20 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   const res = await fetchWithTimeout(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()) as T;
+}
+
+/** Fetch a single transaction by txid (detail endpoint includes fee/weight). */
+export async function fetchTxById(baseUrl: string, txid: string): Promise<RawTx | null> {
+  const bases = [...new Set([baseUrl.replace(/\/+$/, ''), ...FALLBACK_BASES])];
+  for (const base of bases) {
+    try {
+      const tx = await fetchJson<RawTx>(`${base}/api/tx/${txid}`);
+      if (tx && tx.txid) return tx;
+    } catch {
+      // try next base
+    }
+  }
+  return null;
 }
 
 /**

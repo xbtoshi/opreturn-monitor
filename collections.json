@@ -2,6 +2,7 @@
   {
     "name": "Coldcard Exploit Bulletin Board",
     "description": "Main attacker consolidation addresses from the July-August 2026 Coldcard firmware RNG exploit. These addresses became a highly active public message board filled with begging, laundry service ads, threats, philosophical notes, haikus, and prompt injections.",
+    "slug": "coldcard-exploit-bulletin-board",
     "addresses": [
       {
         "address": "bc1qq85v2c926eg6pgxhwp6q7lf6cnsz80qs3fcu9r",
@@ -26,12 +27,21 @@
       {
         "address": "bc1qmd5m5ktv7m5ffujxv4248fxv36myvdx79n8jp6",
         "label": "Collector residue"
+      },
+      {
+        "address": "bc1qsjrf5ze5tmulz7y2x4pc7qaex2a35sanp3rqlx",
+        "label": "Additional monitored holding address (Galaxy)"
+      },
+      {
+        "address": "bc1q0rvn88w08j75k4h48lf9fvhan7unjp7vjf5q6m",
+        "label": "Wave 4 consolidation address"
       }
     ]
   },
   {
     "name": "High-Value Dormant Wallet Notices",
-    "description": "Early high-balance (mostly 2010-2011 era) addresses that have received systematic OP_RETURN legal-style notices, ownership claims, phishing links, and 'abandoned property' messages.",
+    "description": "Early high-balance (mostly 2010-2011 era) addresses that have received systematic OP_RETURN legal-style notices, ownership claims, phishing links, and 'abandoned property' messages (including the 2025 Salomon Brothers-style campaigns).",
+    "slug": "high-value-dormant-wallet-notices",
     "addresses": [
       {
         "address": "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",
@@ -48,12 +58,21 @@
       {
         "address": "12tkqA9xSoowkzoERHMWNKsTey55YEBqkv",
         "label": "Early high-value dormant address"
+      },
+      {
+        "address": "1PeizMg76Cf96nUQrYg8xuoZWLQozU5zGW",
+        "label": "Long-dormant high-balance address"
+      },
+      {
+        "address": "1F34duy2eeMz5mSrvFepVzy7Y1rBsnAyWC",
+        "label": "Long-dormant high-balance address"
       }
     ]
   },
   {
     "name": "Genesis & Satoshi Tribute",
     "description": "The Genesis block address. A long-running cultural phenomenon where people send symbolic tributes, memorials, and messages to Satoshi.",
+    "slug": "genesis-satoshi-tribute",
     "addresses": [
       {
         "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
@@ -64,6 +83,7 @@
   {
     "name": "Russian Intelligence Marking Campaign",
     "description": "Addresses targeted in the early 2022 OP_RETURN campaign that publicly labeled them as belonging to Russian intelligence agencies (GRU / SVR / FSB). Classic example of geopolitical on-chain marking.",
+    "slug": "russian-intelligence-marking-campaign",
     "addresses": [
       {
         "address": "1DLA46sXYps3PdS3HpGfdt9MbQpo6FytPm",
@@ -82,6 +102,7 @@
   {
     "name": "Cultural Memorials & Digital Graffiti",
     "description": "Addresses and vanity addresses associated with permanent cultural tributes, memorials, religious messages, and early digital graffiti on Bitcoin.",
+    "slug": "cultural-memorials-digital-graffiti",
     "addresses": [
       {
         "address": "1BibLEafdYxCvioFhuemkbiY9r6TT5iNBn",
@@ -96,6 +117,7 @@
   {
     "name": "Historical Hacker Negotiation Boards",
     "description": "Addresses from past major incidents that have been used for public on-chain negotiation, bounty offers, threats, or responses between victims, projects, and attackers.",
+    "slug": "historical-hacker-negotiation-boards",
     "addresses": [
       {
         "address": "1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF",

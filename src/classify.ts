@@ -12,6 +12,23 @@ export const CATEGORIES = [
 
 export type Category = (typeof CATEGORIES)[number];
 
+export function categorySlug(name: string): string {
+  return String(name ?? '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/--+/g, '-');
+}
+
+export function categoryFromSlug(slug: string): string | null {
+  const s = String(slug ?? '').toLowerCase();
+  for (const cat of CATEGORIES) {
+    if (categorySlug(cat) === s) return cat;
+  }
+  return null;
+}
+
 const SYSTEM_PROMPT = `You classify short text messages that were permanently embedded in the Bitcoin blockchain
 via OP_RETURN outputs. They are often sent to a famous address as a public bulletin board.
 

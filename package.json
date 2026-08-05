@@ -12,6 +12,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply opreturn-monitor --remote"
   },
   "dependencies": {
+    "@cf-wasm/resvg": "^0.4.0",
     "hono": "^4.6.14"
   },
   "devDependencies": {

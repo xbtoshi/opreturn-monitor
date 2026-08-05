@@ -1,15 +1,17 @@
-# Bitcoin OP_RETURN Message Monitor
+# The Permanent Record — Bitcoin OP_RETURN Monitor
 
-Serverless monitor for OP_RETURN messages sent to selected Bitcoin addresses.
-Built on **Cloudflare Workers + Hono + TypeScript + D1**, with AI classification
-via any OpenAI-compatible endpoint and a small single-page web UI.
+*opreturn.xyz* — Serverless monitor for OP_RETURN messages sent to selected
+Bitcoin addresses. Built on **Cloudflare Workers + Hono + TypeScript + D1**,
+with AI classification via any OpenAI-compatible endpoint and a single-page
+web UI (landing, collections, feed, message detail, and an "Etch" field manual).
 
 - Polls addresses (confirmed + mempool) every 3 minutes via `mempool.space`
   (with `www.mempool.space` and `blockstream.info` fallbacks).
 - Decodes OP_RETURN output scripts to UTF-8 and stores unique messages (dedup by txid).
-- Classifies messages into 7 categories with an OpenAI-compatible API.
+- Classifies messages into 7 categories with an OpenAI-compatible API (batched).
 - Groups addresses into **Collections**; users can **like** messages and sort by
-  **Hottest** or **Newest**.
+  **Hottest** or **Newest**. Likes require a client-mined 16-bit proof-of-work
+  nonce (verified in `src/index.ts`).
 - Seed collections/addresses live in `collections.json`.
 
 ## Project layout
@@ -84,7 +86,7 @@ npm run deploy              # push worker + cron trigger
 | GET | `/` | – | Web UI |
 | GET | `/api/collections` | – | Collections with address/message counts |
 | GET | `/api/messages?collection_id=&sort=hot\|new&limit=&before=` | – | Message feed |
-| POST | `/api/like` | – | `{ "message_id": 1 }` — one vote per visitor |
+| POST | `/api/like` | – | `{ "message_id": 1, "nonce": <mined> }` — requires a 16-bit PoW nonce + one vote per visitor |
 | GET | `/api/health` | – | Health check |
 | POST | `/api/admin/collections` | `X-Admin-Key` | Create collection |
 | POST | `/api/admin/addresses` | `X-Admin-Key` | Add address `{ address, label, collection_id }` |
@@ -100,6 +102,8 @@ npm run deploy              # push worker + cron trigger
   messages are sent in one request; any message the batch response missed is
   retried individually. Failures leave `category` NULL and the next cron run
   retries (capped by `AI_MAX_PER_RUN`).
-- Likes use a voter fingerprint (hashed `CF-Connecting-IP` + User-Agent).
+- Likes require a client-mined proof-of-work nonce (16 leading zero bits of
+  `sha256(message_id:nonce)`, verified server-side in `src/index.ts`), plus a
+  voter fingerprint (hashed `CF-Connecting-IP` + User-Agent) that dedupes votes.
 - Cron runs every 3 minutes (`*/3 * * * *` in `wrangler.toml`). Minimum
   supported interval on the Workers free tier is 1 minute.

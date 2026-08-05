@@ -2,6 +2,7 @@ export interface Collection {
   id: number;
   name: string;
   description: string | null;
+  slug: string | null;
   created_at: string;
 }
 
@@ -28,6 +29,9 @@ export interface Message {
   is_mempool: number;
   created_at: string;
   raw_hex: string | null;
+  fee_sats: number | null;
+  fee_rate: number | null;
+  collection_id: number | null;
 }
 
 export interface Env {

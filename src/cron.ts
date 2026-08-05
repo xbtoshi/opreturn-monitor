@@ -1,6 +1,11 @@
 import { classifyBatch } from './classify';
 import * as db from './db';
-import { extractOpReturnText, fetchAddressTxs, resolveMempoolBase } from './mempool';
+import {
+  extractOpReturnText,
+  feeFromTx,
+  fetchAddressTxs,
+  resolveMempoolBase,
+} from './mempool';
 import { ensureSeeded } from './seed';
 import type { Env, RunSummary } from './types';
 
@@ -48,15 +53,21 @@ export async function runCron(env: Env): Promise<RunSummary> {
         continue;
       }
 
+      const { feeSats, feeRate } = feeFromTx(tx);
       const isNew = await db.insertMessage(env.DB, {
         txid: tx.txid,
         address: addr.address,
         content,
         raw_hex: tx.hex ?? null,
         is_mempool: Boolean(tx.status && tx.status.confirmed === false),
+        fee_sats: feeSats,
+        fee_rate: feeRate,
       });
       if (isNew) inserted++;
-      else skipped++;
+      else {
+        skipped++;
+        if (feeSats != null) await db.backfillFees(env.DB, tx.txid, feeSats, feeRate);
+      }
     }
 
     // Be gentle with mempool.space public API rate limits.
