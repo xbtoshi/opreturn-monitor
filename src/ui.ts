@@ -493,7 +493,10 @@ ${ogMeta}
     if(r.name==='cat'){var cn=catName(r.param);if(cn){state.screen='feed';state.category=cn;state.sort='hot';state.nextBefore=null;return loadFeed(false).then(render);}}
     if(r.name==='a'&&r.param){state.screen='feed';state.address=r.param;state.sort='hot';state.nextBefore=null;return loadFeed(false).then(render);}
     if(r.name==='m'&&r.param){state.screen='detail';state.detailTx=r.param;return ensureDetail().then(render);}
-    state.screen='landing';render();
+    state.screen='landing';
+    // Landing builds the featured message + category chart from state.cache,
+    // which only loadFeed() fills — so a fresh page load would miss them.
+    return (Object.keys(state.cache).length ? Promise.resolve() : loadFeed(false)).then(render);
   }
   function go(screen,param){
     var target='/';
