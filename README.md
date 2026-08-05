@@ -44,7 +44,8 @@ npm run db:migrate:local
 ### Environment variables
 
 `wrangler.toml` holds non-secret vars (`OPENAI_MODEL`, `OPENAI_API_BASE`,
-`MEMPOOL_BASE_URL`, `AI_MAX_PER_RUN`, `AI_DELAY_MS`, `CRON_SECRET`, `ADMIN_KEY`).
+`MEMPOOL_BASE_URL`, `AI_MAX_PER_RUN`, `AI_DELAY_MS`, `AI_BATCH_SIZE`,
+`CRON_SECRET`, `ADMIN_KEY`).
 
 Set secrets in production with `wrangler secret put`:
 
@@ -95,8 +96,10 @@ npm run deploy              # push worker + cron trigger
 
 ## Notes
 
-- AI classification is best-effort: failures leave `category` NULL and the next
-  cron run retries (capped by `AI_MAX_PER_RUN`).
+- AI classification is best-effort: batches of `AI_BATCH_SIZE` (default 10)
+  messages are sent in one request; any message the batch response missed is
+  retried individually. Failures leave `category` NULL and the next cron run
+  retries (capped by `AI_MAX_PER_RUN`).
 - Likes use a voter fingerprint (hashed `CF-Connecting-IP` + User-Agent).
 - Cron runs every 3 minutes (`*/3 * * * *` in `wrangler.toml`). Minimum
   supported interval on the Workers free tier is 1 minute.

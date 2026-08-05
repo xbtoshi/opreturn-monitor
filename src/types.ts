@@ -40,6 +40,7 @@ export interface Env {
   ADMIN_KEY?: string;
   AI_MAX_PER_RUN?: string;
   AI_DELAY_MS?: string;
+  AI_BATCH_SIZE?: string;
 }
 
 export interface RunSummary {

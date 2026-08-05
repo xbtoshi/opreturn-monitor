@@ -1,4 +1,4 @@
-import { classifyMessage } from './classify';
+import { classifyBatch } from './classify';
 import * as db from './db';
 import { extractOpReturnText, fetchAddressTxs, resolveMempoolBase } from './mempool';
 import { ensureSeeded } from './seed';
@@ -6,7 +6,7 @@ import type { Env, RunSummary } from './types';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function intEnv(env: Env, key: 'AI_MAX_PER_RUN' | 'AI_DELAY_MS', fallback: number): number {
+function intEnv(env: Env, key: 'AI_MAX_PER_RUN', fallback: number): number {
   const v = Number(env[key]);
   return Number.isFinite(v) && v > 0 ? v : fallback;
 }
@@ -24,7 +24,6 @@ export async function runCron(env: Env): Promise<RunSummary> {
 
   const baseUrl = await resolveMempoolBase(env.MEMPOOL_BASE_URL || 'https://mempool.space');
   const aiMax = intEnv(env, 'AI_MAX_PER_RUN', 50);
-  const aiDelay = intEnv(env, 'AI_DELAY_MS', 200);
 
   let scannedTxs = 0;
   let inserted = 0;
@@ -64,7 +63,7 @@ export async function runCron(env: Env): Promise<RunSummary> {
     await sleep(150);
   }
 
-  const classified = await classifyNewMessages(env.DB, env, aiMax, aiDelay);
+  const classified = await classifyNewMessages(env.DB, env, aiMax);
 
   return {
     scanned_txs: scannedTxs,
@@ -76,23 +75,19 @@ export async function runCron(env: Env): Promise<RunSummary> {
   };
 }
 
-async function classifyNewMessages(
-  d1: D1Database,
-  env: Env,
-  max: number,
-  delayMs: number
-): Promise<number> {
+async function classifyNewMessages(d1: D1Database, env: Env, max: number): Promise<number> {
   const pending = await db.getUnclassifiedMessages(d1, max);
-  let classified = 0;
+  if (pending.length === 0) return 0;
 
-  for (const msg of pending) {
-    if (!msg.content) continue;
-    const category = await classifyMessage(msg.content, env);
-    if (category) {
-      await db.setCategory(d1, msg.id, category);
-      classified++;
-    }
-    await sleep(delayMs);
+  const results = await classifyBatch(
+    pending.map((m) => ({ id: m.id, content: m.content as string })),
+    env
+  );
+
+  let classified = 0;
+  for (const [id, category] of Object.entries(results)) {
+    await db.setCategory(d1, Number(id), category);
+    classified++;
   }
 
   return classified;

@@ -30,6 +30,7 @@ OPENAI_API_BASE = "https://api.openai.com/v1"
 MEMPOOL_BASE_URL = "https://mempool.space"
 AI_MAX_PER_RUN = "50"
 AI_DELAY_MS = "200"
+AI_BATCH_SIZE = "10"
 # Set these to real values in production, ideally via wrangler secret put.
 CRON_SECRET = ""
 ADMIN_KEY = ""
