@@ -167,6 +167,28 @@ ${ogMeta}
   .landed{border:1px dashed var(--sig);background:var(--sigT);color:var(--sigH);font-family:'Martian Mono',monospace;font-size:12px;padding:12px 16px;margin-bottom:16px;animation:land .4s ease;display:flex;align-items:center;gap:10px}
   .landed .dot{width:6px;height:6px;border-radius:50%;background:var(--sig);animation:pulse 1s infinite}
 
+  /* suggest modal */
+  .suggest-bar{margin:2px 0 20px}
+  .btn-sm{padding:10px 18px;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer;font-weight:600}
+  .btn-sm:hover{background:var(--inv-bg);color:var(--inv-fg)}
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+  .scrim[hidden]{display:none}
+  .modal{background:var(--card);border:1.5px solid var(--line);box-shadow:14px 14px 0 var(--line);width:min(520px,100%);max-height:90vh;overflow:auto}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;background:var(--inv-bg);color:var(--inv-fg);padding:14px 20px;font-family:'Martian Mono',monospace;font-size:12px;letter-spacing:.08em}
+  .modal-x{background:none;border:none;color:var(--inv-fg);cursor:pointer;font-size:15px;line-height:1}
+  .modal-body{padding:22px 22px 4px}
+  .modal-lede{font-size:14px;color:var(--fg2);line-height:1.5;margin-bottom:20px}
+  .fld{display:block;margin-bottom:16px}
+  .fld>span{display:block;font-family:'Martian Mono',monospace;font-size:11px;letter-spacing:.08em;color:var(--fg4);text-transform:uppercase;margin-bottom:6px}
+  .fld input,.fld select,.fld textarea{width:100%;background:var(--bg);border:1px solid var(--line4);color:var(--fg);padding:11px 12px;font-family:'Martian Mono',monospace;font-size:13px;border-radius:0}
+  .fld textarea{resize:vertical;font-family:'Space Grotesk',sans-serif}
+  .fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--sig)}
+  .modal-msg{font-family:'Martian Mono',monospace;font-size:12px;min-height:18px;margin-bottom:4px;color:var(--fg4)}
+  .modal-msg.err{color:var(--sig)}
+  .modal-msg.ok{color:var(--green)}
+  .modal-foot{display:flex;gap:10px;justify-content:flex-end;padding:14px 22px 20px}
+  .modal-foot .btn{padding:11px 20px;font-size:14px}
+
   .msg{background:var(--card);border:1px solid var(--line);display:flex}
   .rail{flex:0 0 auto;width:74px;border-right:1px solid var(--line2);display:flex;flex-direction:column;align-items:center;padding:18px 0;gap:6px}
   .rail .rank{font-family:'Martian Mono',monospace;font-size:12px;color:var(--fg5)}
@@ -264,6 +286,20 @@ ${ogMeta}
   <span id="foot-count">&mdash;</span>
 </footer>
 
+<div class="scrim" id="suggest-modal" hidden>
+  <div class="modal">
+    <div class="modal-head"><span>&#9670; SUGGEST AN ADDRESS</span><button class="modal-x" data-action="suggest-close" aria-label="close">&#10005;</button></div>
+    <div class="modal-body">
+      <p class="modal-lede">Know a Bitcoin address collecting strange OP_RETURN messages? Suggest it. Every submission is reviewed by a human before it's monitored.</p>
+      <label class="fld"><span>Bitcoin address</span><input id="sug-addr" placeholder="bc1… / 1… / 3…" autocomplete="off" spellcheck="false" /></label>
+      <label class="fld"><span>Collection</span><select id="sug-col"></select></label>
+      <label class="fld"><span>Why this address? (optional)</span><textarea id="sug-note" rows="2" maxlength="280" placeholder="What's showing up there?"></textarea></label>
+      <div class="modal-msg" id="sug-msg"></div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-action="suggest-close">Cancel</button><button class="btn btn-primary" id="sug-submit" data-action="suggest-submit">Submit suggestion</button></div>
+  </div>
+</div>
+
 <script>
 
 (function(){
@@ -356,8 +392,9 @@ ${ogMeta}
   function renderChart(){var arr=categoryTally();if(!arr.length)return '';var max=arr[0].n||1;var h='<div class="chart"><div class="kicker" style="margin-bottom:16px">\u25c6 WHAT THEY\u2019RE SAYING \u00b7 BY CATEGORY</div>';arr.forEach(function(r){var hostile=HOSTILE[r.cat];var pct=Math.max(5,Math.round(r.n/max*100));h+='<div class="chart-row"><div class="chart-label">'+esc(r.cat)+'</div><div class="chart-track"><div class="chart-fill'+(hostile?' sig':'')+'" style="width:'+pct+'%"></div></div><div class="chart-num">'+r.n+'</div></div>';});h+='</div>';return h;}
 
   function renderCollections(){
-    var h='<section class="wrap"><div class="kicker">\\u25c6 ARCHIVE INDEX</div><h2 class="title">Collections</h2>';
-    h+='<p class="lede" style="margin-top:12px;font-size:17px">Addresses grouped by the phenomenon behind them. Each collection is a running record of a specific pattern we\\u2019ve watched unfold on-chain.</p>';
+    var h='<section class="wrap"><div class="kicker">\u25c6 ARCHIVE INDEX</div><h2 class="title">Collections</h2>';
+    h+='<p class="lede" style="margin-top:12px;font-size:17px">Addresses grouped by the phenomenon behind them. Each collection is a running record of a specific pattern we\u2019ve watched unfold on-chain.</p>';
+    h+='<div class="suggest-bar" style="margin-top:24px"><button class="btn-sm" data-action="suggest-open" data-col="">+ Suggest an address</button></div>';
     h+='<div class="col-grid" style="margin-top:34px">';
     state.collections.forEach(function(c,i){
       h+='<a class="col-card" href="/c/'+attr(colSlug(c))+'">';
@@ -405,6 +442,7 @@ ${ogMeta}
     h+='<a class="chip'+(state.category==null&&!state.address?' active':'')+'" href="/feed">All categories</a>';
     state.categories.forEach(function(c){h+='<a class="chip'+(state.category===c.category&&!state.address?' active':'')+'" href="/cat/'+encodeURIComponent(c.slug)+'">'+esc(c.category)+'</a>';});
     h+='</div>';}
+    h+='<div class="suggest-bar"><button class="btn-sm" data-action="suggest-open" data-col="'+(state.filter||'')+'">+ Suggest an address'+(state.filter?' for this collection':'')+'</button></div>';
     if(state.landed){h+='<div class="landed"><span class="dot"></span>NEW MESSAGE CONFIRMED IN MEMPOOL \\u00b7 '+esc(state.landed)+'</div>';}
     h+='<div class="feed-list" id="feed-list">';
     if(!state.feed.length){h+='<div class="empty">No messages yet \\u2014 waiting for the next poll.</div>';}
@@ -543,7 +581,14 @@ ${ogMeta}
     if(a==='like'){like(Number(t.getAttribute('data-id')),t);return;}
     if(a==='copy'){copy(t.getAttribute('data-copy'),t);return;}
     if(a==='share'){share(t);return;}
+    if(a==='suggest-open'){openSuggest(t.getAttribute('data-col'));return;}
+    if(a==='suggest-close'){closeSuggest();return;}
+    if(a==='suggest-submit'){submitSuggest();return;}
   });
+
+  var _sm=document.getElementById('suggest-modal');
+  if(_sm)_sm.addEventListener('click',function(e){if(e.target===this)closeSuggest();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSuggest();});
 
   /* synchronous SHA-256 (hex) so 16-bit PoW mines in ~milliseconds instead of thousands of async WebCrypto calls */
   function sha256(a){function e(a,b){return a>>>b|a<<32-b}var b,c,d,h=Math.pow,j=h(2,32),k="",l=[],m=8*a.length,n=sha256.h=sha256.h||[],o=sha256.k=sha256.k||[],p=o.length;for(var q={},r=2;p<64;r++)if(!q[r]){for(b=0;b<313;b+=r)q[b]=r;n[p]=h(r,.5)*j|0,o[p++]=h(r,1/3)*j|0}for(a+="\\u0080";a.length%64-56;)a+="\\u0000";for(b=0;b<a.length;b++){if(c=a.charCodeAt(b),c>>8)return;l[b>>2]|=c<<(3-b)%4*8}for(l[l.length]=m/j|0,l[l.length]=m,d=0;d<l.length;){var s=l.slice(d,d+=16),t=n;for(n=n.slice(0,8),b=0;b<64;b++){var u=s[b-15],v=s[b-2],w=n[0],x=n[4],y=n[7]+(e(x,6)^e(x,11)^e(x,25))+(x&n[5]^~x&n[6])+o[b]+(s[b]=b<16?s[b]:s[b-16]+(e(u,7)^e(u,18)^u>>>3)+s[b-7]+(e(v,17)^e(v,19)^v>>>10)|0),z=(e(w,2)^e(w,13)^e(w,22))+(w&n[1]^w&n[2]^n[1]&n[2]);n=[y+z|0].concat(n),n[4]=n[4]+y|0}for(b=0;b<8;b++)n[b]=n[b]+t[b]|0}for(b=0;b<8;b++)for(c=3;c+1;c--){var A=n[b]>>8*c&255;k+=(A<16?0:"")+A.toString(16)}return k}
@@ -582,7 +627,36 @@ ${ogMeta}
     }).catch(function(){state.mining[id]=false;render();});
   }
   function copy(txt,btn){try{navigator.clipboard.writeText(txt);var old=btn.textContent;btn.textContent='copied \\u2713';setTimeout(function(){render();},1100);}catch(e){}}
-  function share(btn){try{navigator.clipboard.writeText(location.href);btn.textContent='\\u2713 Link copied';setTimeout(function(){btn.textContent='Share this \\u2197';},1600);}catch(e){}}
+  function share(btn){try{navigator.clipboard.writeText(location.href);btn.textContent='\u2713 Link copied';setTimeout(function(){btn.textContent='Share this \u2197';},1600);}catch(e){}}
+
+  /* ---- suggest an address (public queue → admin review) ---- */
+  var ADDR_RE=/^(bc1[a-z0-9]{6,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,39})$/;
+  function setSugMsg(t,cls){var el=document.getElementById('sug-msg');if(el){el.textContent=t;el.className='modal-msg'+(cls?' '+cls:'');}}
+  function openSuggest(colId){
+    var sel=document.getElementById('sug-col');
+    sel.innerHTML=state.collections.map(function(c){return '<option value="'+c.id+'"'+(String(c.id)===String(colId)?' selected':'')+'>'+esc(c.name)+'</option>';}).join('');
+    document.getElementById('sug-addr').value='';document.getElementById('sug-note').value='';setSugMsg('','');
+    var b=document.getElementById('sug-submit');b.disabled=false;b.textContent='Submit suggestion';
+    document.getElementById('suggest-modal').hidden=false;
+    setTimeout(function(){var a=document.getElementById('sug-addr');if(a)a.focus();},30);
+  }
+  function closeSuggest(){var m=document.getElementById('suggest-modal');if(m)m.hidden=true;}
+  function submitSuggest(){
+    var addr=document.getElementById('sug-addr').value.trim();
+    var colId=Number(document.getElementById('sug-col').value)||null;
+    var note=document.getElementById('sug-note').value.trim();
+    if(!ADDR_RE.test(addr)){setSugMsg('That doesn\u2019t look like a Bitcoin address.','err');return;}
+    var b=document.getElementById('sug-submit');b.disabled=true;
+    setSugMsg('\u26cf mining proof-of-work\u2026','');
+    mineAsync(addr,function(n){setSugMsg('\u26cf mining proof-of-work\u2026 '+n.toLocaleString()+' hashes','');}).then(function(pow){
+      return fetchJSON('/api/suggest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address:addr,collection_id:colId,note:note,nonce:pow.nonce,pow:pow.hash})});
+    }).then(function(res){
+      b.disabled=false;
+      if(res.status===200&&res.d&&res.d.ok){setSugMsg('\u2713 Submitted for review. Thank you.','ok');b.textContent='Submitted';setTimeout(closeSuggest,1500);}
+      else if(res.status===409){setSugMsg('This address is already '+((res.d&&res.d.error==='already monitored')?'monitored.':'in the review queue.'),'err');}
+      else{setSugMsg((res.d&&res.d.error)||'Something went wrong \u2014 try again.','err');}
+    }).catch(function(){b.disabled=false;setSugMsg('Network error \u2014 try again.','err');});
+  }
 
   /* ---- boot ---- */
   loadCollections().then(function(){

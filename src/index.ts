@@ -142,6 +142,44 @@ app.post('/api/like', async (c) => {
   return c.json({ ok: true, likes: updated?.likes ?? 0 });
 });
 
+// Public address suggestions. Untrusted input is validated + proof-of-worked,
+// then queued as `pending` for admin review — never written into `addresses`
+// directly (that table drives the on-chain scanner).
+const BTC_ADDR = /^(bc1[a-z0-9]{6,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,39})$/;
+
+app.post('/api/suggest', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as
+    | { address?: unknown; collection_id?: unknown; note?: unknown; nonce?: unknown }
+    | null;
+  const address = typeof body?.address === 'string' ? body.address.trim() : '';
+  if (!BTC_ADDR.test(address)) return jsonError('invalid address', 400);
+
+  const nonce = body?.nonce;
+  if (typeof nonce !== 'number' && typeof nonce !== 'string') {
+    return jsonError('proof-of-work required', 400);
+  }
+  const powHash = await sha256(`${address}:${nonce}`);
+  if (!hasLeadingZeroBits(powHash, POW_BITS)) return jsonError('invalid proof-of-work', 400);
+
+  const rawCol = Number(body?.collection_id);
+  const collectionId = Number.isInteger(rawCol) && rawCol > 0 ? rawCol : null;
+  const note = typeof body?.note === 'string' ? body.note.slice(0, 280) : null;
+
+  const ip =
+    c.req.header('cf-connecting-ip') ||
+    c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+    'unknown';
+  const ua = c.req.header('user-agent') || 'unknown';
+  const voterHash = await sha256(`${ip}|${ua}`);
+
+  const res = await db.createSuggestion(c.env.DB, address, collectionId, note, voterHash);
+  if (!res.ok) {
+    const dup = res.error === 'already monitored' || res.error === 'already suggested';
+    return jsonError(res.error ?? 'could not submit', dup ? 409 : 400);
+  }
+  return c.json({ ok: true });
+});
+
 // ---------------------------------------------------------------------------
 // Admin routes (protected by X-Admin-Key header)
 // ---------------------------------------------------------------------------
@@ -261,6 +299,24 @@ app.post('/api/admin/ai-test', adminGuard, async (c) => {
 app.post('/api/admin/seed-likes', adminGuard, async (c) => {
   const seeded = await db.seedInitialLikes(c.env.DB);
   return c.json({ ok: true, seeded });
+});
+
+app.get('/api/admin/suggestions', adminGuard, async (c) => {
+  const status = c.req.query('status') || 'pending';
+  return c.json(await db.listSuggestions(c.env.DB, status));
+});
+
+app.post('/api/admin/suggestions/:id/approve', adminGuard, async (c) => {
+  const id = Number(c.req.param('id'));
+  const res = await db.approveSuggestion(c.env.DB, id);
+  if (!res.ok) return jsonError(res.error ?? 'approve failed', 400);
+  return c.json({ ok: true });
+});
+
+app.post('/api/admin/suggestions/:id/reject', adminGuard, async (c) => {
+  const id = Number(c.req.param('id'));
+  const ok = await db.setSuggestionStatus(c.env.DB, id, 'rejected');
+  return c.json({ ok });
 });
 
 // ---------------------------------------------------------------------------

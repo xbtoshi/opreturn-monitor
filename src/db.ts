@@ -371,3 +371,80 @@ export async function deleteAddress(db: D1Database, id: number): Promise<boolean
   const res = await db.prepare('DELETE FROM addresses WHERE id = ?').bind(id).run();
   return res.meta.changes > 0;
 }
+
+// ---------------------------------------------------------------------------
+// Address suggestions (public queue → admin review). See migration 0005.
+// ---------------------------------------------------------------------------
+
+export interface AddressSuggestion {
+  id: number;
+  address: string;
+  collection_id: number | null;
+  collection_name: string | null;
+  note: string | null;
+  status: string;
+  created_at: string;
+}
+
+/** Queue a public suggestion. Rejects addresses already monitored or already pending. */
+export async function createSuggestion(
+  db: D1Database,
+  address: string,
+  collectionId: number | null,
+  note: string | null,
+  voterHash: string | null
+): Promise<{ ok: boolean; error?: string }> {
+  const existing = await db.prepare('SELECT 1 AS f FROM addresses WHERE address = ?').bind(address).first();
+  if (existing) return { ok: false, error: 'already monitored' };
+  const res = await db
+    .prepare(
+      "INSERT INTO address_suggestions (address, collection_id, note, voter_hash) " +
+        "SELECT ?, ?, ?, ? WHERE NOT EXISTS " +
+        "(SELECT 1 FROM address_suggestions WHERE address = ? AND status = 'pending')"
+    )
+    .bind(address, collectionId, note, voterHash, address)
+    .run();
+  if (!res.meta.changes) return { ok: false, error: 'already suggested' };
+  return { ok: true };
+}
+
+export async function listSuggestions(db: D1Database, status = 'pending'): Promise<AddressSuggestion[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT s.id, s.address, s.collection_id, s.note, s.status, s.created_at, c.name AS collection_name
+         FROM address_suggestions s
+         LEFT JOIN collections c ON c.id = s.collection_id
+        WHERE s.status = ?
+        ORDER BY s.id DESC`
+    )
+    .bind(status)
+    .all<Record<string, unknown>>();
+  return results.map((r) => ({
+    id: num(r, 'id'),
+    address: str(r, 'address'),
+    collection_id: r.collection_id == null ? null : num(r, 'collection_id'),
+    collection_name: nullableStr(r, 'collection_name'),
+    note: nullableStr(r, 'note'),
+    status: str(r, 'status'),
+    created_at: str(r, 'created_at'),
+  }));
+}
+
+export async function setSuggestionStatus(db: D1Database, id: number, status: string): Promise<boolean> {
+  const res = await db.prepare('UPDATE address_suggestions SET status = ? WHERE id = ?').bind(status, id).run();
+  return res.meta.changes > 0;
+}
+
+/** Approve a pending suggestion: promote it into `addresses`, then mark approved. */
+export async function approveSuggestion(db: D1Database, id: number): Promise<{ ok: boolean; error?: string }> {
+  const row = await db
+    .prepare("SELECT address, collection_id FROM address_suggestions WHERE id = ? AND status = 'pending'")
+    .bind(id)
+    .first<{ address: string; collection_id: number | null }>();
+  if (!row) return { ok: false, error: 'suggestion not found' };
+  if (row.collection_id == null) return { ok: false, error: 'assign a collection before approving' };
+  const add = await createAddress(db, row.address, null, row.collection_id);
+  if (!add.ok) return { ok: false, error: add.error ?? 'could not add address' };
+  await setSuggestionStatus(db, id, 'approved');
+  return { ok: true };
+}
