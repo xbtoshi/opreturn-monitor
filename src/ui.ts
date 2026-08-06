@@ -478,6 +478,9 @@ ${ogMeta}
     h+=cell('Size',(function(){try{return new TextEncoder().encode(m.content||'').length+' bytes';}catch(e){return (m.content||'').length+' chars';}})());
     h+=cell('Time',timeAgo(msgTime(m)));
     h+=(m.category?'<div class="cell"><div class="k">Category</div><div class="v single"><a href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a></div></div>':cell('Category','unclassified'));
+    // Total fee cell carries an async fiat span (filled from mempool historical-price)
+    h+='<div class="cell"><div class="k">Total fee</div><div class="v">'+(m.fee_sats!=null?(m.fee_sats.toLocaleString()+' sats <span id="feeusd" style="color:var(--fg4)"></span>'):'\\u2014')+'</div></div>';
+    h+=cell('Block',m.block_time!=null?new Date(m.block_time*1000).toISOString().slice(0,10):'in mempool');
     h+='</div></div>';
     h+='<div class="actions"><button class="act act-like'+(liked?' liked':'')+'" data-action="like" data-id="'+m.id+'">\\u2665 <span data-lc="'+m.id+'">'+m.likes+'</span> likes</button>';
     h+='<button class="act" data-action="copy" data-copy="'+attr(m.address)+'">Copy address \\u29c9</button>';
@@ -485,6 +488,15 @@ ${ogMeta}
     h+='<button class="act act-share" data-action="share">Share this \\u2197</button></div>';
     h+='</div><p class="caption">Etched into the Bitcoin blockchain. It cannot be deleted, edited, or taken down.</p></section>';
     app.innerHTML=h;
+    if(m.fee_sats!=null)fillFeeUsd(m);
+  }
+  function fillFeeUsd(m){
+    var ts=m.block_time||Math.floor(Date.now()/1000);
+    fetch('https://mempool.space/api/v1/historical-price?timestamp='+ts+'&currency=USD').then(function(r){return r.json();}).then(function(d){
+      var p=d&&d.prices&&d.prices[0]&&d.prices[0].USD;if(!p)return;
+      var usd=m.fee_sats/1e8*p;var el=document.getElementById('feeusd');
+      if(el)el.textContent='\\u00b7 \\u2248 $'+(usd<0.01?usd.toFixed(4):usd.toFixed(2));
+    }).catch(function(){});
   }
   function cell(k,v){return '<div class="cell"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'</div></div>';}
   function mid(s,n){s=String(s||'');if(s.length<=n)return s;var h=Math.max(6,Math.floor((n-3)/2));return s.slice(0,h)+'\\u2026'+s.slice(-h);}
