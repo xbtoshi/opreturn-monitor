@@ -98,7 +98,7 @@ export async function fetchTxById(baseUrl: string, txid: string): Promise<RawTx 
 export async function fetchAddressTxs(
   baseUrl: string,
   address: string
-): Promise<{ txs: RawTx[]; ok: boolean }> {
+): Promise<{ txs: RawTx[]; ok: boolean; complete: boolean }> {
   const bases = [...new Set([baseUrl.replace(/\/+$/, ''), ...FALLBACK_BASES])];
 
   for (const base of bases) {
@@ -112,11 +112,13 @@ export async function fetchAddressTxs(
       if (r.status === 'fulfilled' && r.value) txs.push(...r.value);
     }
     if (txs.length > 0 || results.every((r) => r.status === 'fulfilled')) {
-      return { txs, ok: true };
+      // complete: both endpoints answered, so the mempool view is trustworthy
+      // (safe to treat missing txids as replaced/evicted).
+      return { txs, ok: true, complete: results.every((r) => r.status === 'fulfilled') };
     }
   }
 
-  return { txs: [], ok: false };
+  return { txs: [], ok: false, complete: false };
 }
 
 interface HistoricalPrice {

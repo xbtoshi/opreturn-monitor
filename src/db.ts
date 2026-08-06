@@ -113,21 +113,30 @@ export async function getMessages(
     where += where ? ' AND m.category = ?' : 'WHERE m.category = ?';
     params.push(opts.category);
   }
+  // The before-cursor is applied OUTSIDE the window subquery so each
+  // (address, content) group keeps one stable representative (its newest tx)
+  // across pages instead of resurfacing on every page.
+  const outer: string[] = ['rn = 1'];
   if (opts.before) {
-    where += where ? ' AND m.id < ?' : 'WHERE m.id < ?';
+    outer.push('id < ?');
     params.push(opts.before);
   }
 
-  const order = opts.sort === 'hot' ? 'm.likes DESC, m.id DESC' : 'm.id DESC';
+  const order = opts.sort === 'hot' ? 'likes DESC, id DESC' : 'id DESC';
   params.push(opts.limit);
 
   const { results } = await db
     .prepare(
-      `SELECT m.id, m.txid, m.address, m.content, m.category, m.likes, m.is_mempool, m.created_at,
-              m.block_time, m.fee_sats, m.fee_rate, a.collection_id
-         FROM messages m
-         JOIN addresses a ON a.address = m.address
-         ${where}
+      `SELECT * FROM (
+         SELECT m.id, m.txid, m.address, m.content, m.category, m.likes, m.is_mempool, m.created_at,
+                m.block_time, m.fee_sats, m.fee_rate, a.collection_id,
+                COUNT(*) OVER (PARTITION BY m.address, COALESCE(m.content, m.txid)) AS dup_count,
+                ROW_NUMBER() OVER (PARTITION BY m.address, COALESCE(m.content, m.txid) ORDER BY m.id DESC) AS rn
+           FROM messages m
+           JOIN addresses a ON a.address = m.address
+           ${where}
+       )
+        WHERE ${outer.join(' AND ')}
         ORDER BY ${order} LIMIT ?`
     )
     .bind(...params)
@@ -147,6 +156,7 @@ export async function getMessages(
     fee_sats: r.fee_sats == null ? null : num(r, 'fee_sats'),
     fee_rate: r.fee_rate == null ? null : num(r, 'fee_rate'),
     collection_id: r.collection_id == null ? null : num(r, 'collection_id'),
+    dup_count: num(r, 'dup_count'),
   }));
 
   const next_before = messages.length >= opts.limit ? messages[messages.length - 1].id : null;
@@ -231,6 +241,51 @@ export async function backfillBlockTime(
     .prepare('UPDATE messages SET block_time = ? WHERE txid = ? AND block_time IS NULL')
     .bind(blockTime, txid)
     .run();
+}
+
+/** Flip a mempool row to confirmed once its tx has a block. */
+export async function confirmMessage(
+  db: D1Database,
+  txid: string,
+  blockTime: number | null
+): Promise<void> {
+  await db
+    .prepare(
+      'UPDATE messages SET is_mempool = 0, block_time = COALESCE(block_time, ?) WHERE txid = ? AND is_mempool = 1'
+    )
+    .bind(blockTime, txid)
+    .run();
+}
+
+/** Repair rows stuck as mempool even though a confirmation time was recorded. */
+export async function repairConfirmedFlags(db: D1Database): Promise<number> {
+  const res = await db
+    .prepare('UPDATE messages SET is_mempool = 0 WHERE is_mempool = 1 AND block_time IS NOT NULL')
+    .run();
+  return res.meta.changes;
+}
+
+/**
+ * Delete unconfirmed rows for an address whose tx is no longer in the live
+ * mempool (RBF-replaced or evicted). Rows with a recorded block_time are
+ * never touched — they confirmed, even if the flag is stale.
+ */
+export async function deleteStaleMempool(
+  db: D1Database,
+  address: string,
+  liveMempoolTxids: string[]
+): Promise<number> {
+  if (liveMempoolTxids.length > 90) return 0; // stay under D1's bind-param limit
+  const notIn = liveMempoolTxids.length
+    ? ` AND txid NOT IN (${liveMempoolTxids.map(() => '?').join(',')})`
+    : '';
+  const res = await db
+    .prepare(
+      `DELETE FROM messages WHERE address = ? AND is_mempool = 1 AND block_time IS NULL${notIn}`
+    )
+    .bind(address, ...liveMempoolTxids)
+    .run();
+  return res.meta.changes;
 }
 
 /** Fill in fee columns for messages that predate the fee feature (no-op once set). */

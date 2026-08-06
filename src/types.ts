@@ -34,6 +34,8 @@ export interface Message {
   fee_sats: number | null;
   fee_rate: number | null;
   collection_id: number | null;
+  /** How many txs on this address carry this exact content (feed queries only). */
+  dup_count?: number;
 }
 
 export interface Env {

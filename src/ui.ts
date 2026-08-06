@@ -427,6 +427,7 @@ ${ogMeta}
     h+=(m.category?'<a class="cat'+(hostile?' sig':'')+'" href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a>':'<span class="cat'+(hostile?' sig':'')+'">Unclassified</span>');
     h+='<span class="st '+(m.is_mempool?'mem':'conf')+'">'+(m.is_mempool?'\\u25f7 IN MEMPOOL':'\\u2713 CONFIRMED')+'</span>';
     h+='<span class="fee">'+esc(feeText(m))+'</span>';
+    if(m.dup_count>1)h+='<span class="fee" title="Same message broadcast in '+m.dup_count+' separate transactions">\\u00d7'+m.dup_count+' txs</span>';
     h+='<span class="time">'+esc(timeAgo(msgTime(m)))+'</span></div>';
     h+='<button class="content-btn" data-action="open-msg" data-txid="'+attr(m.txid)+'"><p class="content">'+esc(m.content)+'</p>'+((m.content||'').length>280?'<div class="readmore">\\u2026 read full message \\u2192</div>':'')+'</button>';
     h+='<div class="foot">';
