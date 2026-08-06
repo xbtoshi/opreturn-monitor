@@ -526,13 +526,14 @@ ${ogMeta}
   }
   function route(){
     var r=currentRoute();
+    var sort=new URLSearchParams(location.search).get('sort')==='new'?'new':'hot';
     state.filter=null;state.address=null;state.category=null;
     if(r.name==='collections'){state.screen='collections';return render();}
     if(r.name==='guide'){state.screen='guide';return render();}
-    if(r.name==='feed'){state.screen='feed';state.sort='hot';state.nextBefore=null;return loadFeed(false).then(render);}
-    if(r.name==='c'){var col=colById(Number(r.param))||colBySlug(r.param);if(col){state.screen='feed';state.filter=col.id;state.sort='hot';state.nextBefore=null;return loadFeed(false).then(render);}}
-    if(r.name==='cat'){var cn=catName(r.param);if(cn){state.screen='feed';state.category=cn;state.sort='hot';state.nextBefore=null;return loadFeed(false).then(render);}}
-    if(r.name==='a'&&r.param){state.screen='feed';state.address=r.param;state.sort='hot';state.nextBefore=null;return loadFeed(false).then(render);}
+    if(r.name==='feed'){state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
+    if(r.name==='c'){var col=colById(Number(r.param))||colBySlug(r.param);if(col){state.screen='feed';state.filter=col.id;state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}}
+    if(r.name==='cat'){var cn=catName(r.param);if(cn){state.screen='feed';state.category=cn;state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}}
+    if(r.name==='a'&&r.param){state.screen='feed';state.address=r.param;state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
     if(r.name==='m'&&r.param){state.screen='detail';state.detailTx=r.param;return ensureDetail().then(render);}
     state.screen='landing';
     // Landing builds the featured message + category chart from state.cache,
@@ -579,7 +580,7 @@ ${ogMeta}
     if(a==='open-collection')return go('colfeed',t.getAttribute('data-id'));
     if(a==='filter')return go('colfeed',t.getAttribute('data-id'));
     if(a==='filter-all')return go('feed');
-    if(a==='sort'){state.sort=t.getAttribute('data-sort');state.nextBefore=null;loadFeed(false).then(render);return;}
+    if(a==='sort'){var s=t.getAttribute('data-sort');history.replaceState({},'',location.pathname+(s==='new'?'?sort=new':''));route();return;}
     if(a==='more'){loadFeed(true).then(render);return;}
     if(a==='open-msg')return go('detail',t.getAttribute('data-txid'));
     if(a==='like'){like(Number(t.getAttribute('data-id')),t);return;}
