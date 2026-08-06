@@ -479,7 +479,7 @@ ${ogMeta}
     h+=cell('Time',timeAgo(msgTime(m)));
     h+=(m.category?'<div class="cell"><div class="k">Category</div><div class="v single"><a href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a></div></div>':cell('Category','unclassified'));
     // Total fee cell carries an async fiat span (filled from mempool historical-price)
-    h+='<div class="cell"><div class="k">Total fee</div><div class="v">'+(m.fee_sats!=null?('<span style="white-space:nowrap" title="'+m.fee_sats.toLocaleString()+' sats">'+fmtSats(m.fee_sats)+' sats</span> <span id="feeusd" style="color:var(--fg4);white-space:nowrap"></span>'):'\\u2014')+'</div></div>';
+    h+='<div class="cell"><div class="k">Total fee</div><div class="v">'+(m.fee_sats!=null?('<span style="white-space:nowrap" title="'+m.fee_sats.toLocaleString()+' sats">'+fmtSats(m.fee_sats)+' sats</span> <span id="feeusd" style="color:var(--fg4);white-space:nowrap;font-size:11px"></span>'):'\\u2014')+'</div></div>';
     h+=cell('Block',m.is_mempool?'in mempool':(m.block_time!=null?new Date(m.block_time*1000).toISOString().slice(0,10):'\\u2014'));
     h+='</div></div>';
     h+='<div class="actions"><button class="act act-like'+(liked?' liked':'')+'" data-action="like" data-id="'+m.id+'">\\u2665 <span data-lc="'+m.id+'">'+m.likes+'</span> likes</button>';
@@ -497,10 +497,10 @@ ${ogMeta}
   }
   function fillFeeUsd(m){
     var ts=m.block_time||Math.floor(Date.now()/1000);
-    fetch('https://mempool.space/api/v1/historical-price?timestamp='+ts+'&currency=USD').then(function(r){return r.json();}).then(function(d){
-      var p=d&&d.prices&&d.prices[0]&&d.prices[0].USD;if(!p)return;
+    fetch('/api/price?ts='+ts).then(function(r){return r.json();}).then(function(d){
+      var p=d&&d.usd;if(!p)return;
       var usd=m.fee_sats/1e8*p;var el=document.getElementById('feeusd');
-      if(el)el.textContent='\\u00b7 \\u2248 $'+(usd<0.01?usd.toFixed(4):usd.toFixed(2));
+      if(el)el.textContent='\\u2248 $'+(usd<0.01?usd.toFixed(4):usd.toFixed(2));
     }).catch(function(){});
   }
   function cell(k,v){return '<div class="cell"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'</div></div>';}

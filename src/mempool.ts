@@ -119,6 +119,32 @@ export async function fetchAddressTxs(
   return { txs: [], ok: false };
 }
 
+interface HistoricalPrice {
+  prices?: Array<{ USD?: number }>;
+}
+
+/**
+ * USD price at (or nearest to) the given unix timestamp. Blockstream has no
+ * price endpoint, so this only tries mempool.space hosts. Null if all fail.
+ */
+export async function fetchHistoricalPriceUsd(baseUrl: string, ts: number): Promise<number | null> {
+  const bases = [
+    ...new Set([baseUrl.replace(/\/+$/, ''), 'https://mempool.space', 'https://www.mempool.space']),
+  ];
+  for (const base of bases) {
+    try {
+      const data = await fetchJson<HistoricalPrice>(
+        `${base}/api/v1/historical-price?timestamp=${ts}&currency=USD`
+      );
+      const usd = data?.prices?.[0]?.USD;
+      if (typeof usd === 'number' && Number.isFinite(usd) && usd > 0) return usd;
+    } catch {
+      // try next base
+    }
+  }
+  return null;
+}
+
 /**
  * Decode a raw scriptPubKey hex string that starts with OP_RETURN (0x6a)
  * and return the pushed data as a UTF-8 string. Returns null if the script

@@ -4,6 +4,7 @@ import { categoryFromSlug, categorySlug } from './classify';
 import { classifyOnePass } from './cron';
 import { runCron } from './cron';
 import * as db from './db';
+import { fetchHistoricalPriceUsd } from './mempool';
 import {
   addressCardSvg,
   categoryCardSvg,
@@ -63,6 +64,16 @@ function hasLeadingZeroBits(hex: string, bits: number): boolean {
 app.get('/', (c) => c.html(renderIndex()));
 
 app.get('/api/health', (c) => c.json({ ok: true, time: new Date().toISOString() }));
+
+app.get('/api/price', async (c) => {
+  const now = Math.floor(Date.now() / 1000);
+  const raw = Number(c.req.query('ts'));
+  const ts = Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), now) : now;
+  const usd = await fetchHistoricalPriceUsd(c.env.MEMPOOL_BASE_URL || 'https://mempool.space', ts);
+  // Past-day prices never change; today's price can drift.
+  const maxAge = usd == null ? 60 : now - ts > 86400 ? 86400 : 600;
+  return c.json({ usd }, 200, { 'cache-control': `public, max-age=${maxAge}` });
+});
 
 app.get('/api/collections', async (c) => {
   return c.json(await db.listCollections(c.env.DB));
