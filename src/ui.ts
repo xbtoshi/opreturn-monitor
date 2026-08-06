@@ -222,6 +222,9 @@ ${ogMeta}
   .artifact .bar{display:flex;justify-content:space-between;align-items:center;padding:14px 22px;border-bottom:1px solid var(--line);background:var(--inv-bg);color:var(--inv-fg);font-family:'Martian Mono',monospace;font-size:11px;letter-spacing:.08em}
   .artifact .bar .st.mem{color:var(--amber)}
   .artifact .bar .st.conf{color:var(--green)}
+  .artifact .bar .bar-right{display:flex;align-items:center;gap:16px}
+  .artifact .bar .bar-x{background:none;border:none;color:var(--inv-fg);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;opacity:.7}
+  .artifact .bar .bar-x:hover{opacity:1;color:var(--sig)}
   .artifact .pad{padding:clamp(26px,5vw,52px) clamp(22px,4vw,44px)}
   .artifact blockquote{font-size:clamp(26px,5vw,46px);line-height:1.2;font-weight:600;letter-spacing:-.022em;margin:22px 0 30px;word-break:break-word}
   .metagrid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line2);border:1px solid var(--line2);font-family:'Martian Mono',monospace}
@@ -303,6 +306,7 @@ ${ogMeta}
 (function(){
   var state={screen:'landing',filter:null,address:null,category:null,sort:'hot',liked:{},mining:{},collections:[],categories:[],feed:[],nextBefore:null,detailTx:null,from:null,cache:{}};
   var POW_BITS=16;
+  var _inApp=0;
   try{state.liked=JSON.parse(localStorage.getItem('opreturn_liked')||'{}');}catch(e){}
 
   var app=document.getElementById('app');
@@ -454,8 +458,8 @@ ${ogMeta}
   function renderDetail(){
     var m=state.cache[state.detailTx];if(!m){go('feed');return;}
     var liked=!!state.liked[m.id];var hostile=HOSTILE[m.category];
-    var h='<section class="wrap wrap-card"><button class="back" data-action="back">\\u2190 back to feed</button>';
-    h+='<div class="artifact"><div class="bar"><span>\\u25c6 OP_RETURN \\u00b7 IMMUTABLE RECORD</span><span class="st '+(m.is_mempool?'mem':'conf')+'">'+(m.is_mempool?'\\u25f7 IN MEMPOOL':'\\u2713 CONFIRMED')+'</span></div>';
+    var h='<section class="wrap wrap-card"><button class="back" data-action="back">\\u2190 back</button>';
+    h+='<div class="artifact"><div class="bar"><span>\\u25c6 OP_RETURN \\u00b7 IMMUTABLE RECORD</span><span class="bar-right"><span class="st '+(m.is_mempool?'mem':'conf')+'">'+(m.is_mempool?'\\u25f7 IN MEMPOOL':'\\u2713 CONFIRMED')+'</span><button class="bar-x" data-action="back" aria-label="close" title="close">\\u2715</button></span></div>';
     h+='<div class="pad"><span class="cat'+(hostile?' sig':'')+'">'+esc(m.category||'Unclassified')+'</span>';
     h+='<blockquote>\\u201c'+esc(m.content)+'\\u201d</blockquote>';
     h+='<div class="metagrid">';
@@ -547,7 +551,10 @@ ${ogMeta}
     navigate(target);
   }
   function navigate(path){
-    if(location.pathname===path)route();else{history.pushState({},'',path);route();}
+    if(location.pathname===path)route();else{history.pushState({},'',path);_inApp++;route();}
+  }
+  function goBack(){
+    if(_inApp>0){_inApp--;history.back();}else{go('feed');}
   }
   function ensureDetail(){
     var tx=state.detailTx;
@@ -568,7 +575,7 @@ ${ogMeta}
     if(a==='feed')return go('feed');
     if(a==='collections')return go('collections');
     if(a==='guide')return go('guide');
-    if(a==='back')return go('feed');
+    if(a==='back')return goBack();
     if(a==='open-collection')return go('colfeed',t.getAttribute('data-id'));
     if(a==='filter')return go('colfeed',t.getAttribute('data-id'));
     if(a==='filter-all')return go('feed');
