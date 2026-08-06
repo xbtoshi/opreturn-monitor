@@ -479,8 +479,8 @@ ${ogMeta}
     h+=cell('Time',timeAgo(msgTime(m)));
     h+=(m.category?'<div class="cell"><div class="k">Category</div><div class="v single"><a href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a></div></div>':cell('Category','unclassified'));
     // Total fee cell carries an async fiat span (filled from mempool historical-price)
-    h+='<div class="cell"><div class="k">Total fee</div><div class="v">'+(m.fee_sats!=null?('<span style="white-space:nowrap">'+m.fee_sats.toLocaleString()+' sats</span> <span id="feeusd" style="color:var(--fg4);white-space:nowrap"></span>'):'\\u2014')+'</div></div>';
-    h+=cell('Block',m.block_time!=null?new Date(m.block_time*1000).toISOString().slice(0,10):'in mempool');
+    h+='<div class="cell"><div class="k">Total fee</div><div class="v">'+(m.fee_sats!=null?('<span style="white-space:nowrap" title="'+m.fee_sats.toLocaleString()+' sats">'+fmtSats(m.fee_sats)+' sats</span> <span id="feeusd" style="color:var(--fg4);white-space:nowrap"></span>'):'\\u2014')+'</div></div>';
+    h+=cell('Block',m.is_mempool?'in mempool':(m.block_time!=null?new Date(m.block_time*1000).toISOString().slice(0,10):'\\u2014'));
     h+='</div></div>';
     h+='<div class="actions"><button class="act act-like'+(liked?' liked':'')+'" data-action="like" data-id="'+m.id+'">\\u2665 <span data-lc="'+m.id+'">'+m.likes+'</span> likes</button>';
     h+='<button class="act" data-action="copy" data-copy="'+attr(m.address)+'">Copy address \\u29c9</button>';
@@ -489,6 +489,11 @@ ${ogMeta}
     h+='</div><p class="caption">Etched into the Bitcoin blockchain. It cannot be deleted, edited, or taken down.</p></section>';
     app.innerHTML=h;
     if(m.fee_sats!=null)fillFeeUsd(m);
+  }
+  function fmtSats(n){
+    if(n>=1e6)return (n/1e6).toFixed(2).replace(/\\.?0+$/,'')+'M';
+    if(n>=1e4)return (n/1e3).toFixed(1).replace(/\\.0$/,'')+'K';
+    return n.toLocaleString();
   }
   function fillFeeUsd(m){
     var ts=m.block_time||Math.floor(Date.now()/1000);
