@@ -164,8 +164,6 @@ ${ogMeta}
   .chip{flex:0 0 auto;background:transparent;color:var(--fg3);border:1px solid var(--line4);padding:8px 14px;font-size:13px;white-space:nowrap;cursor:pointer}
   .chip.active{background:var(--inv-bg);color:var(--inv-fg);border-color:var(--inv-bg)}
   .feed-list{display:flex;flex-direction:column;gap:16px}
-  .landed{border:1px dashed var(--sig);background:var(--sigT);color:var(--sigH);font-family:'Martian Mono',monospace;font-size:12px;padding:12px 16px;margin-bottom:16px;animation:land .4s ease;display:flex;align-items:center;gap:10px}
-  .landed .dot{width:6px;height:6px;border-radius:50%;background:var(--sig);animation:pulse 1s infinite}
 
   /* suggest modal */
   .suggest-bar{margin:2px 0 20px}
@@ -303,7 +301,7 @@ ${ogMeta}
 <script>
 
 (function(){
-  var state={screen:'landing',filter:null,address:null,category:null,sort:'hot',liked:{},mining:{},collections:[],categories:[],feed:[],nextBefore:null,detailTx:null,from:null,cache:{},landed:null};
+  var state={screen:'landing',filter:null,address:null,category:null,sort:'hot',liked:{},mining:{},collections:[],categories:[],feed:[],nextBefore:null,detailTx:null,from:null,cache:{}};
   var POW_BITS=16;
   try{state.liked=JSON.parse(localStorage.getItem('opreturn_liked')||'{}');}catch(e){}
 
@@ -443,7 +441,6 @@ ${ogMeta}
     state.categories.forEach(function(c){h+='<a class="chip'+(state.category===c.category&&!state.address?' active':'')+'" href="/cat/'+encodeURIComponent(c.slug)+'">'+esc(c.category)+'</a>';});
     h+='</div>';}
     h+='<div class="suggest-bar"><button class="btn-sm" data-action="suggest-open" data-col="'+(state.filter||'')+'">+ Suggest an address'+(state.filter?' for this collection':'')+'</button></div>';
-    if(state.landed){h+='<div class="landed"><span class="dot"></span>NEW MESSAGE CONFIRMED IN MEMPOOL \\u00b7 '+esc(state.landed)+'</div>';}
     h+='<div class="feed-list" id="feed-list">';
     if(!state.feed.length){h+='<div class="empty">No messages yet \\u2014 waiting for the next poll.</div>';}
     else{state.feed.forEach(function(m,i){h+=msgHTML(m,state.sort==='hot'?i:null);});}
@@ -665,14 +662,6 @@ ${ogMeta}
     route();
     window.addEventListener('popstate',route);
   });
-
-  /* live feel */
-  setInterval(function(){
-    var pool=['bc1q7x\\u20264f2a','1Marked\\u20269Zz','bc1qdorm\\u202611yr','1A1zP1\\u20262009'];
-    state.landed=pool[Math.floor(Math.random()*pool.length)];
-    if(state.screen==='feed')render();
-    setTimeout(function(){state.landed=null;if(state.screen==='feed')render();},4200);
-  },13000);
 })();
 </script>
 </body>
