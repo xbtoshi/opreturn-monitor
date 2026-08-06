@@ -344,6 +344,29 @@ export async function svgToPng(svg: string): Promise<Uint8Array> {
   return resvg.render().asPng();
 }
 
+// ---------------------------------------------------------------------------
+// Brand favicon / app icon: a return (↵) etched into an ink block — OP_RETURN's
+// literal meaning. Served through routes (this Worker has no static-asset
+// binding), the same way the OG cards are. The SVG is the crisp primary; the
+// PNGs are rasterized on demand for legacy tabs and iOS home screens.
+// ---------------------------------------------------------------------------
+export function faviconSvg(): string {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">` +
+    `<rect width="64" height="64" fill="${INK}"/>` +
+    `<g fill="none" stroke="${SIG}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">` +
+    `<path d="M46 15 V34 H24"/><path d="M24 34 L33 25"/><path d="M24 34 L33 43"/></g></svg>`
+  );
+}
+
+export async function iconPng(size: number): Promise<Uint8Array> {
+  const resvg = await Resvg.async(faviconSvg(), {
+    fitTo: { mode: 'width', value: size },
+    background: INK,
+  });
+  return resvg.render().asPng();
+}
+
 export function pngResponse(png: Uint8Array): Response {
   return new Response(png, {
     status: 200,

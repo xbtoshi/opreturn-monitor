@@ -9,6 +9,8 @@ import {
   categoryCardSvg,
   collectionCardSvg,
   defaultCardSvg,
+  faviconSvg,
+  iconPng,
   messageCardSvg,
   pngResponse,
   svgToPng,
@@ -443,6 +445,18 @@ app.get('/cat/:slug', async (c) => {
     image: `${origin}/og/category/${slug}.png`,
   });
 });
+
+// Brand favicon / app icon, served through routes (no static-asset binding).
+app.get('/favicon.svg', (c) => {
+  c.header('content-type', 'image/svg+xml');
+  c.header('cache-control', 'public, max-age=86400');
+  return c.body(faviconSvg());
+});
+app.get('/favicon.png', async () => pngResponse(await iconPng(32)));
+app.get('/favicon.ico', async () => pngResponse(await iconPng(32)));
+app.get('/apple-touch-icon.png', async () => pngResponse(await iconPng(180)));
+app.get('/apple-touch-icon-precomposed.png', async () => pngResponse(await iconPng(180)));
+app.get('/icon-512.png', async () => pngResponse(await iconPng(512)));
 
 // OG card images (rasterized on demand). Param captures the full segment
 // including ".png" (Hono would otherwise swallow it into the param name).

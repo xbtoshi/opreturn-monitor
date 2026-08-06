@@ -53,6 +53,9 @@ export function renderIndex(meta?: PageMeta): string {
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#e9e5d8" />
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#16150f" />
 <title>${esc(ogTitle)}</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/favicon.png" sizes="32x32" type="image/png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 ${ogMeta}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -206,7 +209,8 @@ ${ogMeta}
   .fee{font-family:'Martian Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--fg4)}
   .msg .time{font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4);margin-left:auto}
   .msg .content-btn{text-align:left;background:none;border:none;padding:0;cursor:pointer;width:100%}
-  .msg .content{font-size:clamp(18px,2.4vw,23px);line-height:1.32;font-weight:500;letter-spacing:-.01em;color:var(--fg);word-break:break-word;white-space:pre-wrap;font-family:inherit}
+  .msg .content{font-size:clamp(18px,2.4vw,23px);line-height:1.32;font-weight:500;letter-spacing:-.01em;color:var(--fg);word-break:break-word;overflow-wrap:break-word;white-space:pre-wrap;font-family:inherit;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+  .msg .readmore{font-family:'Martian Mono',monospace;font-size:11px;font-weight:600;color:var(--sig);margin-top:10px}
   .msg .foot{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-top:16px;padding-top:13px;border-top:1px solid var(--line3);font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
   .msg .foot .copy{background:none;border:none;font-family:inherit;font-size:11px;color:var(--fg3);cursor:pointer;padding:0}
   .msg .foot .copy:hover{color:var(--sig)}
@@ -226,7 +230,9 @@ ${ogMeta}
   .artifact .bar .bar-x{background:none;border:none;color:var(--inv-fg);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;opacity:.7}
   .artifact .bar .bar-x:hover{opacity:1;color:var(--sig)}
   .artifact .pad{padding:clamp(26px,5vw,52px) clamp(22px,4vw,44px)}
-  .artifact blockquote{font-size:clamp(26px,5vw,46px);line-height:1.2;font-weight:600;letter-spacing:-.022em;margin:22px 0 30px;word-break:break-word}
+  .artifact blockquote{font-size:clamp(26px,5vw,46px);line-height:1.2;font-weight:600;letter-spacing:-.022em;margin:22px 0 30px;word-break:break-word;overflow-wrap:break-word}
+  .artifact blockquote.med{font-size:clamp(22px,3vw,30px);line-height:1.32;font-weight:500;letter-spacing:-.01em}
+  .artifact blockquote.long{font-size:clamp(16px,1.8vw,19px);line-height:1.62;font-weight:400;letter-spacing:0}
   .metagrid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line2);border:1px solid var(--line2);font-family:'Martian Mono',monospace}
   .metagrid .cell{background:var(--card);padding:14px 16px;min-width:0}
   .metagrid .cell.full{grid-column:1 / -1}
@@ -422,7 +428,7 @@ ${ogMeta}
     h+='<span class="st '+(m.is_mempool?'mem':'conf')+'">'+(m.is_mempool?'\\u25f7 IN MEMPOOL':'\\u2713 CONFIRMED')+'</span>';
     h+='<span class="fee">'+esc(feeText(m))+'</span>';
     h+='<span class="time">'+esc(timeAgo(msgTime(m)))+'</span></div>';
-    h+='<button class="content-btn" data-action="open-msg" data-txid="'+attr(m.txid)+'"><p class="content">'+esc(m.content)+'</p></button>';
+    h+='<button class="content-btn" data-action="open-msg" data-txid="'+attr(m.txid)+'"><p class="content">'+esc(m.content)+'</p>'+((m.content||'').length>280?'<div class="readmore">\\u2026 read full message \\u2192</div>':'')+'</button>';
     h+='<div class="foot">';
     if(m.collection_id){h+='<span>\u21b3 <a href="/c/'+attr(colSlug(colById(m.collection_id)))+'">'+esc(colName(m.collection_id))+'</a></span>';}
     h+='<a href="/a/'+attr(m.address)+'">'+esc(shortAddr(m.address))+'</a>';
@@ -461,7 +467,8 @@ ${ogMeta}
     var h='<section class="wrap wrap-card"><button class="back" data-action="back">\\u2190 back</button>';
     h+='<div class="artifact"><div class="bar"><span>\\u25c6 OP_RETURN \\u00b7 IMMUTABLE RECORD</span><span class="bar-right"><span class="st '+(m.is_mempool?'mem':'conf')+'">'+(m.is_mempool?'\\u25f7 IN MEMPOOL':'\\u2713 CONFIRMED')+'</span><button class="bar-x" data-action="back" aria-label="close" title="close">\\u2715</button></span></div>';
     h+='<div class="pad"><span class="cat'+(hostile?' sig':'')+'">'+esc(m.category||'Unclassified')+'</span>';
-    h+='<blockquote>\\u201c'+esc(m.content)+'\\u201d</blockquote>';
+    var qlen=(m.content||'').length;var qcls=qlen>600?' long':(qlen>240?' med':'');
+    h+='<blockquote class="'+qcls.trim()+'">\\u201c'+esc(m.content)+'\\u201d</blockquote>';
     h+='<div class="metagrid">';
     if(m.collection_id){h+='<div class="cell full"><div class="k">Collection</div><div class="v single"><a href="/c/'+attr(colSlug(colById(m.collection_id)))+'">'+esc(colName(m.collection_id))+'</a></div></div>';}
     h+=cellCopy('Address',m.address);
