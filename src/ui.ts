@@ -468,6 +468,7 @@ ${ogMeta}
     h+=cellCopy('Transaction',m.txid);
     h+=cell('Status',m.is_mempool?'pending':'confirmed');
     h+=cell('Fee',feeText(m)||'\\u2014');
+    h+=cell('Size',(function(){try{return new TextEncoder().encode(m.content||'').length+' bytes';}catch(e){return (m.content||'').length+' chars';}})());
     h+=cell('Time',timeAgo(msgTime(m)));
     h+=(m.category?'<div class="cell"><div class="k">Category</div><div class="v single"><a href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a></div></div>':cell('Category','unclassified'));
     h+='</div></div>';
@@ -484,7 +485,7 @@ ${ogMeta}
   function gstep(n,t,b){return '<div class="gstep"><div class="gnum">'+n+'</div><div><h3>'+t+'</h3><p>'+b+'</p></div></div>';}
   function renderGuide(){
     var code=[
-      "# Bitcoin Core \\u2014 attach up to 80 bytes of data",
+      "# Bitcoin Core \\u2014 attach arbitrary data (80+ bytes now relay by default)",
       "DATA=$(printf 'gm, permanent record' | xxd -p -c 999)",
       "bitcoin-cli -named createrawtransaction \\\\",
       "  inputs='[{\\"txid\\":\\"<your-utxo>\\",\\"vout\\":0}]' \\\\",
@@ -496,9 +497,9 @@ ${ogMeta}
     h+='<p class="lede" style="margin-top:12px;font-size:17px">An <span class="mono" style="font-size:.85em">OP_RETURN</span> output lets you attach a small piece of arbitrary data to a Bitcoin transaction. Miners record it in the blockchain like any other transaction \\u2014 which means once it confirms, it is public and permanent.</p>';
     h+='<div class="callout"><div><div class="b">\\u26a0 BEFORE YOU DO THIS</div><p style="margin-top:6px">There is no undo. Anything you write is public forever, tied to your transaction, and costs a real fee. Never include anything private, illegal, or that identifies you unless you intend to.</p></div></div>';
     h+='<div class="guide-steps">';
-    h+=gstep('01','Understand the tradeoff','OP_RETURN carries up to 80 bytes of data in a provably-unspendable output. It is cheap but not free \\u2014 you pay a normal mining fee \\u2014 and it is immutable once mined.');
+    h+=gstep('01','Understand the tradeoff','OP_RETURN attaches data to a provably-unspendable output. The old 80-byte cap was a relay policy, not a consensus rule \\u2014 Bitcoin Core v30 (2025) dropped that default, so larger payloads now relay and confirm, and a message can span several OP_RETURN outputs. It is cheap but not free \\u2014 you pay a fee that scales with size \\u2014 and it is immutable once mined.');
     h+=gstep('02','Use a wallet that supports it','Sparrow Wallet (Tools \\u2192 add an OP_RETURN output), Bitcoin Core via <span class="mono" style="font-size:.9em">bitcoin-cli</span>, or Electrum\\u2019s console. Custodial and exchange wallets will not let you.');
-    h+=gstep('03','Write your message','Plain UTF-8 text, 80 bytes or fewer \\u2014 roughly 80 Latin characters, and fewer if you use emoji or Cyrillic. Then encode it to hex.');
+    h+=gstep('03','Write your message','Plain UTF-8 text. There is no longer a hard 80-byte limit, but bigger data costs a higher fee and some nodes still run tighter relay limits \\u2014 keep it short for reliability, or split it across outputs. Then encode it to hex.');
     h+=gstep('04','Build the transaction','Add one OP_RETURN output carrying your data (0 sats) plus a change output back to yourself, and set a fee rate from mempool.space.'+'<div class="code">'+esc(code)+'</div>');
     h+=gstep('05','Broadcast and wait','Sign, broadcast, and watch it hit the mempool. Once a block confirms it, it lives on-chain forever. Send it to an address we monitor and it shows up in the feed here.');
     h+='</div>';

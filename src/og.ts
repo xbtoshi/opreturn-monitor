@@ -40,10 +40,20 @@ function fontBytes(): Uint8Array {
 
 function esc(s: string): string {
   return String(s ?? '')
+    // Strip characters that are illegal in XML 1.0 (control chars other than
+    // tab/newline/CR, plus lone surrogates and non-characters). A long pasted
+    // article often carries these, and they make resvg's XML parser reject the
+    // whole SVG — which is what broke long-message OG cards.
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uD800-\uDFFF\uFFFE\uFFFF]/g, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/** Collapse all whitespace (incl. newlines/tabs) to single spaces. */
+function oneLine(s: string): string {
+  return String(s ?? '').replace(/\s+/g, ' ').trim();
 }
 
 /** Approximate rendered width of a mono string, in px. */
@@ -241,7 +251,7 @@ export function messageCardSvg(msg: Message, colName: string): string {
     `<circle cx="${(sx + 5).toFixed(0)}" cy="133" r="5" fill="${mem ? AMBER : GREEN}"/>` +
     `<text x="${(sx + 18).toFixed(0)}" y="139" font-family="${MONO}" font-size="15" font-weight="600" letter-spacing="1" fill="${mem ? AMBER : GREEN}">${st}</text>`;
 
-  const q = fit(msg.content || '', { start: 46, min: 24, lf: 1.34, maxLines: 6, width: RX - 118, height: 322 });
+  const q = fit(oneLine(msg.content || ''), { start: 46, min: 24, lf: 1.34, maxLines: 6, width: RX - 118, height: 322 });
   const b = centeredBlock(q.lines, q.font, q.lh, 118, 178, 512, INK, 500);
   svg += `<rect x="${ML}" y="${b.top.toFixed(0)}" width="5" height="${b.blockH.toFixed(0)}" fill="${SIG}"/>` + b.svg;
 
