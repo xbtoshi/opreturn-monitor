@@ -746,7 +746,15 @@ ${ogMeta}
       var sigIdx=text.indexOf('-----BEGIN PGP SIGNATURE-----');
       var headIdx=text.indexOf('-----BEGIN PGP SIGNED MESSAGE-----');
       var body=text.slice(headIdx,sigIdx!==-1?sigIdx:text.length);
-      body=body.replace(/-----BEGIN PGP SIGNED MESSAGE-----[\r\n]+(Hash:[^\r\n]+[\r\n]+)?/,'').trim();
+      var sMarker='-----BEGIN PGP SIGNED MESSAGE-----';
+      var mPos=body.indexOf(sMarker);
+      if(mPos!==-1){
+        body=body.slice(mPos+sMarker.length).trim();
+        if(body.indexOf('Hash:')===0){
+          var nl=body.indexOf(String.fromCharCode(10));
+          if(nl!==-1)body=body.slice(nl+1).trim();
+        }
+      }
       var bMatch=body.match(/QklFMQ[A-Za-z0-9+/=]+/);
       if(bMatch){
         res.type='bie1';
@@ -1265,6 +1273,7 @@ ${ogMeta}
       if(res.status===200&&res.d&&res.d.ok){setSugMsg('\u2713 Submitted for review. Thank you.','ok');b.textContent='Submitted';setTimeout(closeSuggest,1500);}
       else if(res.status===409){setSugMsg('This address is already '+((res.d&&res.d.error==='already monitored')?'monitored.':'in the review queue.'),'err');}
       else{setSugMsg((res.d&&res.d.error)||'Something went wrong \u2014 try again.','err');}
+    }).catch(function(){b.disabled=false;setSugMsg('Network error \u2014 try again.','err');});
   }
 
   /* ---- client-side Electrum BIE1 ECIES decryption ---- */
@@ -1338,7 +1347,7 @@ ${ogMeta}
   async function decryptBIE1WebCrypto(b64,privKeyHex){
     var subtle=window.crypto&&window.crypto.subtle;
     if(!subtle)throw new Error('WebCrypto API not supported in this environment');
-    var raw=atob(b64.trim().replace(/\s+/g,''));
+    var raw=atob(b64.trim().replace(/\\s+/g,''));
     var buf=new Uint8Array(raw.length);
     for(var i=0;i<raw.length;i++)buf[i]=raw.charCodeAt(i);
     if(buf.length<85)throw new Error('Ciphertext payload is too short (< 85 bytes)');
