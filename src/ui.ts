@@ -222,7 +222,7 @@ ${ogMeta}
   .head-ctl{display:flex;gap:10px;flex-wrap:wrap}
   .room{background:var(--card);border:1px solid var(--line);display:flex;flex-direction:column;min-height:60vh}
   .room-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
-  .room-head .who{display:flex;flex-wrap:wrap;gap:6px;flex:1}
+  .room-head .who{display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;flex:1}
   .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line4);padding:4px 9px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg2);text-decoration:none}
   .pill:hover{border-color:var(--sig);color:var(--sig)}
   .pill .dot{width:8px;height:8px;border-radius:50%;background:var(--sig)}
