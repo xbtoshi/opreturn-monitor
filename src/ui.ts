@@ -344,7 +344,7 @@ ${ogMeta}
     if(state.filter)q+='&collection_id='+state.filter;
     if(state.address)q+='&address='+encodeURIComponent(state.address);
     if(state.category)q+='&category='+encodeURIComponent(catSlug(state.category));
-    if(append&&state.nextBefore)q+='&before='+state.nextBefore;
+    if(append&&state.nextBefore)q+='&before='+encodeURIComponent(state.nextBefore);
     return fetchJSON(q).then(function(r){
       var msgs=(r.d&&r.d.messages)||[];cacheMsgs(msgs);
       state.feed=append?state.feed.concat(msgs):msgs;

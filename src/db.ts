@@ -91,13 +91,27 @@ export interface GetMessagesOpts {
   category?: string;
   sort: 'hot' | 'new';
   limit: number;
-  before?: number;
+  /** Opaque keyset cursor from a previous page's next_before ("likes:ts:id"). */
+  before?: string;
+}
+
+/** Effective chain time: confirmation time, else the moment we first saw it in the mempool. */
+const TS_EXPR = "COALESCE(m.block_time, CAST(strftime('%s', m.created_at) AS INTEGER))";
+
+function encodeCursor(m: { likes: number; ts: number; id: number }): string {
+  return `${m.likes}:${m.ts}:${m.id}`;
+}
+
+function decodeCursor(raw: string): { likes: number; ts: number; id: number } | null {
+  const parts = raw.split(':').map(Number);
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return null;
+  return { likes: parts[0], ts: parts[1], id: parts[2] };
 }
 
 export async function getMessages(
   db: D1Database,
   opts: GetMessagesOpts
-): Promise<{ messages: Message[]; next_before: number | null }> {
+): Promise<{ messages: Message[]; next_before: string | null }> {
   const params: unknown[] = [];
   let where = '';
 
@@ -116,13 +130,26 @@ export async function getMessages(
   // The before-cursor is applied OUTSIDE the window subquery so each
   // (address, content) group keeps one stable representative (its newest tx)
   // across pages instead of resurfacing on every page.
+  //
+  // Ordering is by chain time (ts), not insertion id: backfilling a new
+  // collection inserts historical txs out of chronological order, and the UI
+  // displays block time, so sorting by id put cards visibly out of sequence.
+  // Pagination is a keyset over the same (likes, ts, id) tuple the ORDER BY
+  // uses, so pages never skip or repeat rows.
   const outer: string[] = ['rn = 1'];
-  if (opts.before) {
-    outer.push('id < ?');
-    params.push(opts.before);
+  const cur = opts.before ? decodeCursor(opts.before) : null;
+  if (cur) {
+    const timeKey = '(ts < ? OR (ts = ? AND id < ?))';
+    if (opts.sort === 'hot') {
+      outer.push(`(likes < ? OR (likes = ? AND ${timeKey}))`);
+      params.push(cur.likes, cur.likes, cur.ts, cur.ts, cur.id);
+    } else {
+      outer.push(timeKey);
+      params.push(cur.ts, cur.ts, cur.id);
+    }
   }
 
-  const order = opts.sort === 'hot' ? 'likes DESC, id DESC' : 'id DESC';
+  const order = opts.sort === 'hot' ? 'likes DESC, ts DESC, id DESC' : 'ts DESC, id DESC';
   params.push(opts.limit);
 
   const { results } = await db
@@ -130,8 +157,10 @@ export async function getMessages(
       `SELECT * FROM (
          SELECT m.id, m.txid, m.address, m.content, m.category, m.likes, m.is_mempool, m.created_at,
                 m.block_time, m.fee_sats, m.fee_rate, a.collection_id,
+                ${TS_EXPR} AS ts,
                 COUNT(*) OVER (PARTITION BY m.address, COALESCE(m.content, m.txid)) AS dup_count,
-                ROW_NUMBER() OVER (PARTITION BY m.address, COALESCE(m.content, m.txid) ORDER BY m.id DESC) AS rn
+                ROW_NUMBER() OVER (PARTITION BY m.address, COALESCE(m.content, m.txid)
+                                   ORDER BY ${TS_EXPR} DESC, m.id DESC) AS rn
            FROM messages m
            JOIN addresses a ON a.address = m.address
            ${where}
@@ -159,7 +188,11 @@ export async function getMessages(
     dup_count: num(r, 'dup_count'),
   }));
 
-  const next_before = messages.length >= opts.limit ? messages[messages.length - 1].id : null;
+  let next_before: string | null = null;
+  if (messages.length >= opts.limit) {
+    const last = results[results.length - 1];
+    next_before = encodeCursor({ likes: num(last, 'likes'), ts: num(last, 'ts'), id: num(last, 'id') });
+  }
   return { messages, next_before };
 }
 

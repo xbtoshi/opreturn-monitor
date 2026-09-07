@@ -87,8 +87,7 @@ app.get('/api/messages', async (c) => {
   const category = rawCategory ? categoryFromSlug(rawCategory) ?? undefined : undefined;
   const sort = c.req.query('sort') === 'hot' ? ('hot' as const) : ('new' as const);
   const limit = Math.min(Math.max(Number(c.req.query('limit')) || 50, 1), 100);
-  const rawBefore = c.req.query('before');
-  const before = rawBefore ? Number(rawBefore) : undefined;
+  const before = c.req.query('before') || undefined;
 
   const data = await db.getMessages(c.env.DB, {
     collectionId,
