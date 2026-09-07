@@ -542,15 +542,39 @@ app.get('/api/openapi.json', (c) => {
 // Agent Auth & Discovery (RFC 9728, RFC 8414, Auth.md)
 // ---------------------------------------------------------------------------
 
-app.get('/auth.md', (c) => {
-  const origin = originOf(c);
-  return new Response(generateAuthMd(origin), {
-    headers: {
-      'content-type': 'text/markdown; charset=utf-8',
-      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
-      'access-control-allow-origin': '*',
-    },
-  });
+app.use('*', async (c, next) => {
+  const p = c.req.path;
+  if (p.startsWith('/.well-known/oauth-protected-resource')) {
+    const origin = originOf(c);
+    return new Response(JSON.stringify(generateOAuthProtectedResourceJson(origin), null, 2), {
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
+        'access-control-allow-origin': '*',
+      },
+    });
+  }
+  if (p.startsWith('/.well-known/oauth-authorization-server') || p.startsWith('/.well-known/openid-configuration')) {
+    const origin = originOf(c);
+    return new Response(JSON.stringify(generateOAuthServerJson(origin), null, 2), {
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
+        'access-control-allow-origin': '*',
+      },
+    });
+  }
+  if (p === '/auth.md' || p.startsWith('/auth.md')) {
+    const origin = originOf(c);
+    return new Response(generateAuthMd(origin), {
+      headers: {
+        'content-type': 'text/markdown; charset=utf-8',
+        'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
+        'access-control-allow-origin': '*',
+      },
+    });
+  }
+  await next();
 });
 
 const handleOAuthProtected = (c: Context<Bindings>) => {
@@ -558,32 +582,27 @@ const handleOAuthProtected = (c: Context<Bindings>) => {
   return new Response(JSON.stringify(generateOAuthProtectedResourceJson(origin), null, 2), {
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+      'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
       'access-control-allow-origin': '*',
     },
   });
 };
 
 app.get('/.well-known/oauth-protected-resource', handleOAuthProtected);
-app.get('/.well-known/oauth-protected-resource:suffix', handleOAuthProtected);
-app.get('/.well-known/oauth-protected-resource%60', handleOAuthProtected);
 
 const handleOAuthServer = (c: Context<Bindings>) => {
   const origin = originOf(c);
   return new Response(JSON.stringify(generateOAuthServerJson(origin), null, 2), {
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+      'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
       'access-control-allow-origin': '*',
     },
   });
 };
 
 app.get('/.well-known/oauth-authorization-server', handleOAuthServer);
-app.get('/.well-known/oauth-authorization-server:suffix', handleOAuthServer);
-app.get('/.well-known/oauth-authorization-server%60', handleOAuthServer);
 app.get('/.well-known/openid-configuration', handleOAuthServer);
-app.get('/.well-known/openid-configuration:suffix', handleOAuthServer);
 
 app.get('/.well-known/jwks.json', () => {
   return new Response(JSON.stringify({ keys: [] }, null, 2), {
