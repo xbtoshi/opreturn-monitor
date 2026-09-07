@@ -231,11 +231,11 @@ ${ogMeta}
   .room-log{padding:18px 18px 24px;display:flex;flex-direction:column;gap:4px}
   .room-log .btn-more{margin:0 auto 14px}
   .day{align-self:center;font-family:'Martian Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--fg4);border:1px solid var(--line2);padding:4px 10px;margin:14px 0 10px;background:var(--bg)}
-  .turn{display:flex;gap:10px;max-width:82%;align-items:flex-end;align-self:flex-start}
+  .turn{display:flex;gap:10px;max-width:82%;align-items:flex-start;align-self:flex-start}
   .turn.party{align-self:flex-end;flex-direction:row-reverse}
   .turn.gap{margin-top:14px}
   .avatar{flex:0 0 auto;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Martian Mono',monospace;font-size:9px;font-weight:700;color:#fff;text-decoration:none;visibility:hidden}
-  .turn.first .avatar{visibility:visible}
+  .turn.first .avatar{visibility:visible;margin-top:22px}
   .turn .stack{display:flex;flex-direction:column;min-width:0;align-items:flex-start}
   .turn.party .stack{align-items:flex-end}
   .who-line{font-family:'Martian Mono',monospace;font-size:11px;font-weight:600;color:var(--fg3);margin:0 4px 4px;display:flex;gap:8px;flex-wrap:wrap}
@@ -515,7 +515,9 @@ ${ogMeta}
   function tsOf(m){if(m.block_time!=null)return m.block_time;var t=new Date(String(m.created_at||'').replace(' ','T')+'Z').getTime();return isNaN(t)?0:Math.floor(t/1000);}
   function clock(ts){return new Date(ts*1000).toISOString().slice(11,16)+' UTC';}
   function partyOf(addr){var ps=state.chat.participants||[];for(var i=0;i<ps.length;i++){if(ps[i].address===addr)return ps[i];}return null;}
-  function partyName(p,addr){return p&&p.label?p.label:shortAddr(addr);}
+  /* Labels in collections.json can be long ('Hacker holding address (~3,998 BTC; ...)'); chat shows the part before the parenthesis. */
+  function shortLabel(l){return String(l||'').split(' (')[0];}
+  function partyName(p,addr){return p&&p.label?shortLabel(p.label):shortAddr(addr);}
   function viewToggle(active){
     if(state.category||(!state.filter&&!state.address))return '';
     return '<div class="seg"><button data-action="view" data-view="feed" class="'+(active==='feed'?'active':'')+'">\u2261 Feed</button><button data-action="view" data-view="chat" class="'+(active==='chat'?'active':'')+'">\ud83d\udcac Chat</button></div>';
@@ -552,7 +554,7 @@ ${ogMeta}
     h+='<div class="head-ctl">'+viewToggle('chat')+'</div></div>';
     var parts=state.chat.participants||[];var multi=parts.length>1;
     h+='<div class="room"><div class="room-head"><span>'+parts.length+' monitored '+(parts.length===1?'party':'parties')+'</span><div class="who">';
-    parts.forEach(function(p){h+='<a class="pill" href="/a/'+attr(p.address)+'/chat" title="'+attr(p.address)+'"><span class="dot"></span>'+esc(p.label||shortAddr(p.address))+'</a>';});
+    parts.forEach(function(p){h+='<a class="pill" href="/a/'+attr(p.address)+'/chat" title="'+attr((p.label?p.label+' \u00b7 ':'')+p.address)+'"><span class="dot"></span>'+esc(partyName(p,p.address))+'</a>';});
     h+='</div><button class="share-room" data-action="share-room">Share room \u2197</button></div>';
     h+='<div class="room-log" id="room-log">';
     if(state.chat.nextBefore)h+='<button class="btn-more" data-action="chat-earlier">\u2191 Load earlier</button>';
