@@ -27,8 +27,10 @@ import {
   buildMessageSchema,
   buildWebSiteGraph,
   generateAgentCardJson,
+  generateAgentSkillsIndexJson,
   generateApiCatalogJson,
   generateAuthMd,
+  generateSkillMd,
   generateLlmsFullTxt,
   generateLlmsTxt,
   generateMcpServerCardJson,
@@ -672,6 +674,32 @@ app.get('/.well-known/mcp/server-card.json', (c) => {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+      'access-control-allow-origin': '*',
+    },
+  });
+});
+
+const handleAgentSkills = (c: Context<Bindings>) => {
+  const origin = originOf(c);
+  return new Response(JSON.stringify(generateAgentSkillsIndexJson(origin), null, 2), {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
+      'access-control-allow-origin': '*',
+    },
+  });
+};
+
+app.get('/.well-known/agent-skills/index.json', handleAgentSkills);
+app.get('/.well-known/skills/index.json', handleAgentSkills);
+
+app.get('/.well-known/agent-skills/:skill/SKILL.md', (c) => {
+  const origin = originOf(c);
+  const skill = c.req.param('skill');
+  return new Response(generateSkillMd(skill, origin), {
+    headers: {
+      'content-type': 'text/markdown; charset=utf-8',
+      'cache-control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
       'access-control-allow-origin': '*',
     },
   });

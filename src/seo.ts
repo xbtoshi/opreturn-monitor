@@ -851,6 +851,74 @@ export function generateMcpServerCardJson(siteUrl: string): Record<string, unkno
 }
 
 // ---------------------------------------------------------------------------
+// 6b. Agent Skills Discovery Standard (agentskills.io)
+// ---------------------------------------------------------------------------
+
+export function generateAgentSkillsIndexJson(siteUrl: string): Record<string, unknown> {
+  return {
+    $schema: 'https://schemas.agentskills.io/discovery/0.2.0/schema.json',
+    skills: [
+      {
+        name: 'bitcoin-opreturn-monitor',
+        type: 'skill-md',
+        description: 'Query, search, and verify immutable Bitcoin OP_RETURN on-chain transmissions and monitored addresses.',
+        url: `${siteUrl}/.well-known/agent-skills/bitcoin-opreturn-monitor/SKILL.md`,
+      },
+      {
+        name: 'etch-opreturn-guide',
+        type: 'skill-md',
+        description: 'Step-by-step instructions for constructing, signing, and broadcasting OP_RETURN outputs to the Bitcoin blockchain.',
+        url: `${siteUrl}/.well-known/agent-skills/etch-opreturn-guide/SKILL.md`,
+      },
+      {
+        name: 'auth-md-registration',
+        type: 'skill-md',
+        description: 'Autonomous AI agent authentication, discovery, and registration protocol support.',
+        url: `${siteUrl}/.well-known/agent-skills/auth-md-registration/SKILL.md`,
+      },
+    ],
+  };
+}
+
+export function generateSkillMd(skillName: string, siteUrl: string): string {
+  if (skillName === 'bitcoin-opreturn-monitor') {
+    return `# Skill: Bitcoin OP_RETURN Monitor
+
+## What This Skill Does
+Allows autonomous AI agents to query, search, and monitor live, permanent messages etched into the Bitcoin blockchain via OP_RETURN outputs.
+
+## Requirements
+- Query messages via \`GET ${siteUrl}/api/messages\` (supports \`sort=hot\` or \`sort=new\`, \`collection_id\`, \`category\`, \`limit\`).
+- Fetch specific message detail via \`GET ${siteUrl}/api/message/:txid\`.
+- Fetch curated monitored collections via \`GET ${siteUrl}/api/collections\`.
+- Use Model Context Protocol (MCP) tool \`search_messages\` or \`get_message_detail\`.
+`;
+  }
+  if (skillName === 'etch-opreturn-guide') {
+    return `# Skill: Etch OP_RETURN On Bitcoin
+
+## What This Skill Does
+Guides autonomous agents and operators through building, signing, and broadcasting Bitcoin transactions carrying immutable data outputs.
+
+## Requirements
+- Format data payload as UTF-8 hex string.
+- Create provably unspendable OP_RETURN output using \`bitcoin-cli\` or wallet console.
+- Attach required fee rate and broadcast to Bitcoin mempool.
+`;
+  }
+  return `# Skill: Auth.md Agent Registration
+
+## What This Skill Does
+Enables autonomous agent registration, discovery, and credential claiming per the Auth.md open protocol.
+
+## Requirements
+- Read discovery metadata at \`${siteUrl}/auth.md\` and \`${siteUrl}/.well-known/oauth-protected-resource\`.
+- Register anonymously via \`POST ${siteUrl}/oauth/register\`.
+- Claim operator correspondence via \`POST ${siteUrl}/oauth/claim\`.
+`;
+}
+
+// ---------------------------------------------------------------------------
 // 7. Schema.org JSON-LD Structured Data Builders
 // ---------------------------------------------------------------------------
 
