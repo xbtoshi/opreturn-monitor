@@ -338,6 +338,14 @@ const SELECT_MESSAGE = `
     LEFT JOIN addresses a ON a.address = m.address
    WHERE `;
 
+export async function countMessagesForAddress(db: D1Database, address: string): Promise<number> {
+  const row = await db
+    .prepare('SELECT COUNT(*) AS n FROM messages WHERE address = ?')
+    .bind(address)
+    .first<{ n: number }>();
+  return row ? Number(row.n) : 0;
+}
+
 export async function getMessage(db: D1Database, id: number): Promise<Message | null> {
   const row = await db.prepare(SELECT_MESSAGE + 'm.id = ?').bind(id).first<Record<string, unknown>>();
   return row ? mapMessage(row) : null;

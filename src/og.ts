@@ -90,7 +90,7 @@ function wrapText(text: string, maxChars: number): string[] {
   return lines.length ? lines : [''];
 }
 
-function midEllipsis(s: string, max: number): string {
+export function midEllipsis(s: string, max: number): string {
   s = String(s ?? '');
   if (s.length <= max) return s;
   const keep = Math.max(6, Math.floor((max - 1) / 2));
@@ -302,6 +302,91 @@ export function addressCardSvg(address: string): string {
   const b = centeredBlock(t.lines, t.font, t.lh, 115, 210, 500, INK, 500);
   svg += `<rect x="${ML}" y="${b.top.toFixed(0)}" width="5" height="${b.blockH.toFixed(0)}" fill="${SIG}"/>` + b.svg;
   svg += footerText('EVERY MESSAGE SENT HERE', 'view on-chain \u00b7 opreturn.xyz', SIG);
+  return svg + '</svg>';
+}
+
+export interface ChatCardBubble {
+  /** Display name: party label, or a shortened sender address. */
+  name: string;
+  text: string;
+  /** Labelled address of the room: drawn right-aligned in the signature colour. */
+  party: boolean;
+}
+
+export interface ChatCardData {
+  title: string;
+  bubbles: ChatCardBubble[];
+  messageCount: number;
+  partyCount: number;
+}
+
+const BUBBLE_FONT = 22;
+const BUBBLE_LH = BUBBLE_FONT * 1.3;
+const BUBBLE_PAD = 12;
+const BUBBLE_MAX_W = 780;
+const NAME_H = 22;
+const BUBBLE_GAP = 8;
+
+/** Share card for a chat room: title plus the last few turns drawn as bubbles. */
+export function chatCardSvg(data: ChatCardData): string {
+  let svg = svgHeader() + paperDefs() + paper() + headerBar() + footerRule();
+
+  // The embedded font has no ◆ glyph; draw it like the header does.
+  svg += diamond(ML + 7, 119, 7, SIG);
+  svg += `<text x="${ML + 24}" y="124" font-family="${MONO}" font-size="16" letter-spacing="2" fill="${MUTED}">CHAT ROOM · OLDEST TO NEWEST</text>`;
+  const t = fit(oneLine(data.title), { start: 34, min: 34, lf: 1, maxLines: 1, width: RX - ML, height: 40 });
+  svg += stackedBlock(t.lines, t.font, t.lh, ML, 138, INK, 600).svg;
+
+  // Bubble band: from under the title to just above the footer rule.
+  const bandTop = 192;
+  const bandBottom = 524;
+  const laid = data.bubbles.map((b) => {
+    const f = fit(oneLine(b.text), {
+      start: BUBBLE_FONT,
+      min: BUBBLE_FONT,
+      lf: 1.3,
+      maxLines: 2,
+      width: BUBBLE_MAX_W - BUBBLE_PAD * 2,
+      height: 999,
+    });
+    const lines = f.lines.length ? f.lines : ['…'];
+    const longest = Math.max(...lines.map((l) => l.length));
+    const w = Math.min(BUBBLE_MAX_W, Math.max(120, longest * BUBBLE_FONT * ADV + BUBBLE_PAD * 2 + 6));
+    const h = lines.length * BUBBLE_LH + BUBBLE_PAD * 2;
+    return { ...b, lines, w, h, total: NAME_H + h };
+  });
+
+  // Drop the oldest bubbles if they would run into the footer.
+  let used = laid.reduce((a, b) => a + b.total + BUBBLE_GAP, -BUBBLE_GAP);
+  while (laid.length > 1 && used > bandBottom - bandTop) {
+    laid.shift();
+    used = laid.reduce((a, b) => a + b.total + BUBBLE_GAP, -BUBBLE_GAP);
+  }
+
+  let y = bandTop;
+  if (laid.length === 0) {
+    svg += `<text x="${ML}" y="${bandTop + 40}" font-family="${MONO}" font-size="22" fill="${MUTED}">No messages yet — waiting for the next poll.</text>`;
+  }
+  for (const b of laid) {
+    const x = b.party ? RX - b.w : ML;
+    const nameColor = b.party ? SIG : FAINT;
+    svg += `<text x="${b.party ? RX : ML}" y="${(y + 15).toFixed(0)}" text-anchor="${b.party ? 'end' : 'start'}" font-family="${MONO}" font-size="15" font-weight="600" fill="${nameColor}">${esc(b.name)}</text>`;
+    const ry = y + NAME_H;
+    const fill = b.party ? '#f7e6df' : '#faf8f2';
+    const stroke = b.party ? SIG : '#c9c2b0';
+    svg += `<rect x="${x.toFixed(0)}" y="${ry.toFixed(0)}" width="${b.w.toFixed(0)}" height="${b.h.toFixed(0)}" rx="14" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>`;
+    const tspans = b.lines
+      .map((l, i) => `<tspan x="${(x + BUBBLE_PAD).toFixed(0)}" y="${(ry + BUBBLE_PAD + BUBBLE_FONT * 0.82 + i * BUBBLE_LH).toFixed(1)}">${esc(l)}</tspan>`)
+      .join('');
+    svg += `<text font-family="${MONO}" font-size="${BUBBLE_FONT}" fill="${INK}">${tspans}</text>`;
+    y = ry + b.h + BUBBLE_GAP;
+  }
+
+  svg += footerText(
+    `${data.messageCount} MESSAGES · ${data.partyCount} ${data.partyCount === 1 ? 'PARTY' : 'PARTIES'}`,
+    'the whole on-chain conversation · opreturn.xyz',
+    SIG
+  );
   return svg + '</svg>';
 }
 

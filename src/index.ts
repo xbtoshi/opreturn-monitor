@@ -8,7 +8,9 @@ import { fetchHistoricalPriceUsd } from './mempool';
 import {
   addressCardSvg,
   categoryCardSvg,
+  chatCardSvg,
   collectionCardSvg,
+  midEllipsis,
   defaultCardSvg,
   faviconSvg,
   iconPng,
@@ -17,7 +19,8 @@ import {
   svgToPng,
 } from './og';
 import { ensureSeeded, slugify } from './seed';
-import type { CollectionWithStats, Env } from './types';
+import type { ChatCardData } from './og';
+import type { ChatMessage, CollectionWithStats, Env } from './types';
 import { renderIndex, type PageMeta } from './ui';
 
 type Bindings = { Bindings: Env };
@@ -449,7 +452,7 @@ app.get('/c/:slug/chat', async (c) => {
     title: `${col.name} \u2014 chat room`,
     description: `The whole on-chain conversation, oldest to newest: ${col.message_count} OP_RETURN messages between ${col.address_count} monitored addresses and everyone writing to them.`,
     url: `${origin}/c/${slug}/chat`,
-    image: `${origin}/og/collection/${slug}.png`,
+    image: `${origin}/og/chat/collection/${slug}.png`,
   });
 });
 
@@ -471,7 +474,7 @@ app.get('/a/:address/chat', (c) => {
     title: `Chat room \u2014 ${address}`,
     description: `The whole on-chain conversation around ${address}, oldest to newest.`,
     url: `${origin}/a/${address}/chat`,
-    image: `${origin}/og/address/${encodeURIComponent(address)}.png`,
+    image: `${origin}/og/chat/address/${encodeURIComponent(address)}.png`,
   });
 });
 
@@ -522,6 +525,58 @@ app.get('/og/collection/:slug', async (c) => {
   const col = await db.getCollectionBySlug(c.env.DB, slug);
   if (!col) return jsonError('not found', 404);
   return pngResponse(await svgToPng(collectionCardSvg(col)));
+});
+
+/** Labels in collections.json can be long; cards show the part before any parenthesis. */
+function shortLabel(label: string | null, fallback: string): string {
+  return label ? label.split(' (')[0] : fallback;
+}
+
+/**
+ * Pick the bubbles for a chat share card: the last two turns by labelled
+ * parties plus the newest reply from anyone else, in chain order. Rooms with
+ * no party turns fall back to the newest three messages.
+ */
+async function chatCardData(
+  d1: D1Database,
+  opts: { collectionId?: number; address?: string },
+  title: string,
+  messageCount: number
+): Promise<ChatCardData> {
+  const chat = await db.getChat(d1, { ...opts, limit: 60 });
+  const byAddr = new Map(chat.participants.map((p) => [p.address, p.label]));
+  const isParty = (m: ChatMessage) => !!m.sender && byAddr.has(m.sender);
+  const party = chat.messages.filter(isParty).slice(-2);
+  const other = chat.messages.filter((m) => !isParty(m)).slice(-1);
+  const picked = party.length ? [...party, ...other] : chat.messages.slice(-3);
+  // getChat returns chain order; ids are insertion order, so sort by position, not id.
+  const pos = new Map(chat.messages.map((m, i) => [m.id, i]));
+  picked.sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0));
+  return {
+    title,
+    bubbles: picked.map((m) => ({
+      name: isParty(m) ? shortLabel(byAddr.get(m.sender!) ?? null, m.sender!) : m.sender ? midEllipsis(m.sender, 20) : 'unknown sender',
+      text: m.content || '',
+      party: isParty(m),
+    })),
+    messageCount,
+    partyCount: chat.participants.length,
+  };
+}
+
+app.get('/og/chat/collection/:slug', async (c) => {
+  const slug = c.req.param('slug')!.replace(/\.png$/, '');
+  const col = await db.getCollectionBySlug(c.env.DB, slug);
+  if (!col) return jsonError('not found', 404);
+  const data = await chatCardData(c.env.DB, { collectionId: col.id }, col.name, col.message_count);
+  return pngResponse(await svgToPng(chatCardSvg(data)));
+});
+
+app.get('/og/chat/address/:address', async (c) => {
+  const address = c.req.param('address')!.replace(/\.png$/, '');
+  const count = await db.countMessagesForAddress(c.env.DB, address);
+  const data = await chatCardData(c.env.DB, { address }, midEllipsis(address, 30), count);
+  return pngResponse(await svgToPng(chatCardSvg(data)));
 });
 
 app.get('/og/category/:slug', async (c) => {
