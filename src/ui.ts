@@ -126,7 +126,7 @@ ${ogMeta}
   .featured{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--inv-bg);color:var(--inv-fg)}
   .featured .inner{max-width:1180px;margin:0 auto;padding:clamp(24px,4vw,44px) clamp(16px,4vw,44px)}
   .featured .k{font-family:'Martian Mono',monospace;font-size:11px;letter-spacing:.14em;color:var(--inv-fg3);margin-bottom:22px}
-  .featured blockquote{font-size:clamp(24px,4.5vw,48px);line-height:1.18;font-weight:500;letter-spacing:-.02em;max-width:20ch}
+  .featured blockquote{font-size:clamp(24px,4.5vw,48px);line-height:1.18;font-weight:500;letter-spacing:-.02em;max-width:20ch;overflow-wrap:anywhere}
   .featured .meta{display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin-top:28px;font-family:'Martian Mono',monospace;font-size:12px;color:var(--inv-fg2)}
   .featured .meta .strong{color:var(--inv-fg)}
   .featured .meta .sig{color:var(--sig)}
@@ -305,7 +305,8 @@ ${ogMeta}
   .act-share:hover{background:var(--sigH);border-color:var(--sigH);color:var(--on-sig)}
   .caption{text-align:center;font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4);margin-top:22px}
   .guide-steps{display:flex;flex-direction:column;border:1px solid var(--line);background:var(--card);margin-top:32px}
-  .gstep{display:grid;grid-template-columns:auto 1fr;gap:20px;padding:24px 24px;border-bottom:1px solid var(--line2)}
+  /* minmax(0,1fr): a bare 1fr column refuses to shrink below the code block's min-content width on phones. */
+  .gstep{display:grid;grid-template-columns:auto minmax(0,1fr);gap:20px;padding:24px 24px;border-bottom:1px solid var(--line2)}
   .gstep:last-child{border-bottom:none}
   .gnum{font-family:'Martian Mono',monospace;font-size:13px;font-weight:600;color:var(--on-sig);background:var(--sig);width:34px;height:34px;display:flex;align-items:center;justify-content:center}
   .gstep h3{font-size:19px;font-weight:600;letter-spacing:-.01em;margin-bottom:8px}
