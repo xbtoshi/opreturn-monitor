@@ -550,9 +550,12 @@ ${ogMeta}
     var parts=location.pathname.split('/').filter(Boolean);
     return {name:parts[0]||'landing',param:decodeURIComponent(parts.slice(1).join('/'))||null};
   }
+  /* /feed defaults to newest; collection / category / address views default to hottest */
+  function defaultSort(r){return r.name==='feed'?'new':'hot';}
   function route(){
     var r=currentRoute();
-    var sort=new URLSearchParams(location.search).get('sort')==='new'?'new':'hot';
+    var sp=new URLSearchParams(location.search).get('sort');
+    var sort=sp==='new'||sp==='hot'?sp:defaultSort(r);
     state.filter=null;state.address=null;state.category=null;
     if(r.name==='collections'){state.screen='collections';return render();}
     if(r.name==='guide'){state.screen='guide';return render();}
@@ -606,7 +609,7 @@ ${ogMeta}
     if(a==='open-collection')return go('colfeed',t.getAttribute('data-id'));
     if(a==='filter')return go('colfeed',t.getAttribute('data-id'));
     if(a==='filter-all')return go('feed');
-    if(a==='sort'){var s=t.getAttribute('data-sort');history.replaceState({},'',location.pathname+(s==='new'?'?sort=new':''));route();return;}
+    if(a==='sort'){var s=t.getAttribute('data-sort');history.replaceState({},'',location.pathname+(s===defaultSort(currentRoute())?'':'?sort='+s));route();return;}
     if(a==='more'){loadFeed(true).then(render);return;}
     if(a==='open-msg')return go('detail',t.getAttribute('data-txid'));
     if(a==='like'){like(Number(t.getAttribute('data-id')),t);return;}
