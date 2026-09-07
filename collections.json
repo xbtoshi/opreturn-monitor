@@ -1,5 +1,28 @@
 [
   {
+    "name": "Liquid Network Peg-Out Bulletin Board",
+    "description": "Addresses from the September 2026 Liquid Network incident, in which self-described whitehats used an L-BTC inflation bug and a valid SideSwap peg-out authorization to withdraw ~3,996 BTC (about 95% of federation reserves) in block 965,783. The hackers, Blockstream security and the usual crowd of lawyers, launderers and wallet ads are all talking through OP_RETURN.",
+    "slug": "liquid-network-peg-out-bulletin-board",
+    "addresses": [
+      {
+        "address": "bc1ql4mfu6aundtkksxklfajs2h3t9nzcd6gyqjlte",
+        "label": "Hacker holding address (~3,998 BTC; 'we are whitehats. contact us on chain')"
+      },
+      {
+        "address": "bc1qdlld6antmv4xug242ed83q7k4rqw50cwfns38szx4qu2f4jwaxxsuhwxxr",
+        "label": "Liquid federation peg-out address (drained; hackers reply to it on chain)"
+      },
+      {
+        "address": "bc1qgslsydz56d0ed6827hdemfmk5w2f6ldyc6wt7p",
+        "label": "Peg-out intermediary (received the 3,996 BTC in tx 8db751...a7b140, forwarded same block)"
+      },
+      {
+        "address": "bc1qn8mgsmxx42j3fflqfkh0cqhdd6mj4h9q2mfqym",
+        "label": "Blockstream security responder (PGP-signed / ECIES-encrypted messages to the hackers)"
+      }
+    ]
+  },
+  {
     "name": "Coldcard Exploit Bulletin Board",
     "description": "Main attacker consolidation addresses from the July-August 2026 Coldcard firmware RNG exploit. These became the most active public OP_RETURN message boards, filled with begging, laundry ads, threats, haikus, philosophical notes and prompt injections.",
     "slug": "coldcard-exploit-bulletin-board",
