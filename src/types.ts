@@ -36,6 +36,19 @@ export interface Message {
   collection_id: number | null;
   /** How many txs on this address carry this exact content (feed queries only). */
   dup_count?: number;
+  /** Address behind the tx's first input, i.e. who wrote it. NULL until backfilled. */
+  sender?: string | null;
+}
+
+/** One bubble in the chat view: a feed message plus who wrote it. */
+export interface ChatMessage extends Message {
+  sender: string | null;
+  dup_count: number;
+}
+
+export interface ChatParticipant {
+  address: string;
+  label: string | null;
 }
 
 export interface Env {
@@ -58,5 +71,7 @@ export interface RunSummary {
   classified: number;
   failed_fetches: number;
   skipped: number;
+  /** Older rows whose sender column was filled in this run. */
+  senders_backfilled: number;
   took_ms: number;
 }

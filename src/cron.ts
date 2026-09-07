@@ -5,12 +5,17 @@ import {
   extractOpReturnText,
   feeFromTx,
   fetchAddressTxs,
+  fetchTxById,
   resolveMempoolBase,
+  senderFromTx,
 } from './mempool';
 import { ensureSeeded } from './seed';
 import type { Env, RunSummary } from './types';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Older rows (outside the 50-tx address window) whose sender we fetch per run. */
+const SENDER_BACKFILL_PER_RUN = 10;
 
 function intEnv(env: Env, key: 'AI_MAX_PER_RUN', fallback: number): number {
   const v = Number(env[key]);
@@ -63,6 +68,7 @@ export async function runCron(env: Env): Promise<RunSummary> {
 
       const { feeSats, feeRate } = feeFromTx(tx);
       const blockTime = blockTimeFromTx(tx);
+      const sender = senderFromTx(tx);
       const isNew = await db.insertMessage(env.DB, {
         txid: tx.txid,
         address: addr.address,
@@ -72,12 +78,14 @@ export async function runCron(env: Env): Promise<RunSummary> {
         fee_sats: feeSats,
         fee_rate: feeRate,
         block_time: blockTime,
+        sender,
       });
       if (isNew) inserted++;
       else {
         skipped++;
         if (feeSats != null) await db.backfillFees(env.DB, tx.txid, feeSats, feeRate);
         if (blockTime != null) await db.backfillBlockTime(env.DB, tx.txid, blockTime);
+        if (sender != null) await db.backfillSender(env.DB, tx.txid, sender);
         if (!isMempool) await db.confirmMessage(env.DB, tx.txid, blockTime);
       }
     }
@@ -91,6 +99,7 @@ export async function runCron(env: Env): Promise<RunSummary> {
   }
 
   const classified = await classifyNewMessages(env.DB, env, aiMax);
+  const sendersBackfilled = await backfillSenders(env.DB, baseUrl);
 
   return {
     scanned_txs: scannedTxs,
@@ -98,8 +107,31 @@ export async function runCron(env: Env): Promise<RunSummary> {
     classified,
     failed_fetches: failedFetches,
     skipped,
+    senders_backfilled: sendersBackfilled,
     took_ms: Date.now() - started,
   };
+}
+
+/**
+ * Rows that predate the sender column and are no longer in an address's
+ * recent-50 window never get re-seen by the poll loop above, so fetch a few
+ * of them by txid each run until none remain. Txs whose payload lacks a
+ * prevout address (coinbase, exotic inputs) stay NULL and are retried; there
+ * are few enough of those that the cap keeps it harmless.
+ */
+async function backfillSenders(d1: D1Database, baseUrl: string): Promise<number> {
+  const txids = await db.listMessagesMissingSender(d1, SENDER_BACKFILL_PER_RUN);
+  let filled = 0;
+  for (const txid of txids) {
+    const tx = await fetchTxById(baseUrl, txid);
+    const sender = tx ? senderFromTx(tx) : null;
+    if (sender) {
+      await db.backfillSender(d1, txid, sender);
+      filled++;
+    }
+    await sleep(150);
+  }
+  return filled;
 }
 
 async function classifyNewMessages(d1: D1Database, env: Env, max: number): Promise<number> {

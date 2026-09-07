@@ -1,4 +1,4 @@
-import type { Address, CollectionWithStats, Message } from './types';
+import type { Address, ChatMessage, ChatParticipant, CollectionWithStats, Message } from './types';
 
 function num(row: Record<string, unknown>, key: string): number {
   const v = row[key];
@@ -196,6 +196,113 @@ export async function getMessages(
   return { messages, next_before };
 }
 
+export interface GetChatOpts {
+  collectionId?: number;
+  address?: string;
+  limit: number;
+  /** "ts:id" of the oldest bubble already shown; returns rows strictly older. */
+  before?: string;
+}
+
+function decodeChatCursor(raw: string): { ts: number; id: number } | null {
+  const parts = raw.split(':').map(Number);
+  if (parts.length !== 2 || parts.some((n) => !Number.isFinite(n))) return null;
+  return { ts: parts[0], id: parts[1] };
+}
+
+/**
+ * Conversation view: the newest `limit` messages of a collection (or one
+ * address) returned oldest-first, each attributed to its sender.
+ *
+ * Dedupe differs from the feed on purpose. Spam from unknown senders is
+ * collapsed per (sender, content) so a bot repeating an ad 6 times is one
+ * bubble with dup_count=6 — but grouping by sender (not by monitored address)
+ * means a bubble is never shown under the wrong name. Messages written by a
+ * monitored party (a labelled address) are never collapsed: a hacker saying
+ * "yes" twice is two real turns in a conversation.
+ */
+export async function getChat(
+  db: D1Database,
+  opts: GetChatOpts
+): Promise<{ participants: ChatParticipant[]; messages: ChatMessage[]; next_before: string | null }> {
+  const params: unknown[] = [];
+  let where = '';
+  if (opts.collectionId) {
+    where = 'WHERE a.collection_id = ?';
+    params.push(opts.collectionId);
+  }
+  if (opts.address) {
+    where += where ? ' AND m.address = ?' : 'WHERE m.address = ?';
+    params.push(opts.address);
+  }
+
+  const outer: string[] = ['(rn = 1 OR is_party = 1)'];
+  const cur = opts.before ? decodeChatCursor(opts.before) : null;
+  if (cur) {
+    outer.push('(ts < ? OR (ts = ? AND id < ?))');
+    params.push(cur.ts, cur.ts, cur.id);
+  }
+  params.push(opts.limit);
+
+  const participantsQ = opts.address
+    ? db.prepare('SELECT address, label FROM addresses WHERE address = ?').bind(opts.address)
+    : db
+        .prepare('SELECT address, label FROM addresses WHERE collection_id = ? ORDER BY id ASC')
+        .bind(opts.collectionId ?? 0);
+
+  const [partRes, msgRes] = await Promise.all([
+    participantsQ.all<{ address: string; label: string | null }>(),
+    db
+      .prepare(
+        `SELECT * FROM (
+           SELECT m.id, m.txid, m.address, m.sender, m.content, m.category, m.likes, m.is_mempool,
+                  m.created_at, m.block_time, m.fee_sats, m.fee_rate, a.collection_id,
+                  ${TS_EXPR} AS ts,
+                  EXISTS (SELECT 1 FROM addresses p WHERE p.address = m.sender) AS is_party,
+                  COUNT(*) OVER (PARTITION BY COALESCE(m.sender, ''), COALESCE(m.content, m.txid)) AS dup_count,
+                  ROW_NUMBER() OVER (PARTITION BY COALESCE(m.sender, ''), COALESCE(m.content, m.txid)
+                                     ORDER BY ${TS_EXPR} DESC, m.id DESC) AS rn
+             FROM messages m
+             JOIN addresses a ON a.address = m.address
+             ${where}
+         )
+          WHERE ${outer.join(' AND ')}
+          ORDER BY ts DESC, id DESC LIMIT ?`
+      )
+      .bind(...params)
+      .all<Record<string, unknown>>(),
+  ]);
+
+  const rows = msgRes.results;
+  const messages: ChatMessage[] = rows
+    .map((r) => ({
+      id: num(r, 'id'),
+      txid: str(r, 'txid'),
+      address: str(r, 'address'),
+      sender: nullableStr(r, 'sender'),
+      content: nullableStr(r, 'content'),
+      category: nullableStr(r, 'category'),
+      likes: num(r, 'likes'),
+      is_mempool: num(r, 'is_mempool'),
+      created_at: str(r, 'created_at'),
+      block_time: r.block_time == null ? null : num(r, 'block_time'),
+      raw_hex: null,
+      fee_sats: r.fee_sats == null ? null : num(r, 'fee_sats'),
+      fee_rate: r.fee_rate == null ? null : num(r, 'fee_rate'),
+      collection_id: r.collection_id == null ? null : num(r, 'collection_id'),
+      // A party's repeated turns are kept as separate bubbles, so don't badge them.
+      dup_count: num(r, 'is_party') ? 1 : num(r, 'dup_count'),
+    }))
+    .reverse();
+
+  let next_before: string | null = null;
+  if (rows.length >= opts.limit) {
+    const oldest = rows[rows.length - 1];
+    next_before = `${num(oldest, 'ts')}:${num(oldest, 'id')}`;
+  }
+  return { participants: partRes.results, messages, next_before };
+}
+
 function mapMessage(row: Record<string, unknown>): Message {
   return {
     id: num(row, 'id'),
@@ -239,6 +346,7 @@ export interface NewMessage {
   fee_sats: number | null;
   fee_rate: number | null;
   block_time: number | null;
+  sender: string | null;
 }
 
 /**
@@ -248,7 +356,7 @@ export interface NewMessage {
 export async function insertMessage(db: D1Database, msg: NewMessage): Promise<boolean> {
   const res = await db
     .prepare(
-      'INSERT OR IGNORE INTO messages (txid, address, content, is_mempool, raw_hex, fee_sats, fee_rate, block_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT OR IGNORE INTO messages (txid, address, content, is_mempool, raw_hex, fee_sats, fee_rate, block_time, sender) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
     .bind(
       msg.txid,
@@ -258,10 +366,28 @@ export async function insertMessage(db: D1Database, msg: NewMessage): Promise<bo
       msg.raw_hex,
       msg.fee_sats,
       msg.fee_rate,
-      msg.block_time
+      msg.block_time,
+      msg.sender
     )
     .run();
   return res.meta.changes > 0;
+}
+
+/** Fill in who wrote a message for rows that predate the sender column. */
+export async function backfillSender(db: D1Database, txid: string, sender: string): Promise<void> {
+  await db
+    .prepare('UPDATE messages SET sender = ? WHERE txid = ? AND sender IS NULL')
+    .bind(sender, txid)
+    .run();
+}
+
+/** Up to `limit` txids still missing a sender, newest first so live rooms fill in first. */
+export async function listMessagesMissingSender(db: D1Database, limit: number): Promise<string[]> {
+  const { results } = await db
+    .prepare('SELECT txid FROM messages WHERE sender IS NULL ORDER BY id DESC LIMIT ?')
+    .bind(limit)
+    .all<{ txid: string }>();
+  return results.map((r) => r.txid);
 }
 
 /** Fill in the on-chain time for messages that predate the block_time feature. */

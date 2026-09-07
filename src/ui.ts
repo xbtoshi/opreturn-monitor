@@ -218,6 +218,38 @@ ${ogMeta}
   .btn-more{display:block;margin:22px auto 0;border:1px solid var(--line);background:var(--card);color:var(--fg);padding:12px 26px;cursor:pointer;font-family:'Martian Mono',monospace;font-size:12px}
   .btn-more:hover{background:var(--inv-bg);color:var(--inv-fg)}
   .empty{color:var(--fg4);text-align:center;padding:60px 0;font-family:'Martian Mono',monospace;font-size:13px}
+  /* ---- chat room ---- */
+  .head-ctl{display:flex;gap:10px;flex-wrap:wrap}
+  .room{background:var(--card);border:1px solid var(--line);display:flex;flex-direction:column;min-height:60vh}
+  .room-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
+  .room-head .who{display:flex;flex-wrap:wrap;gap:6px}
+  .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line4);padding:4px 9px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg2);text-decoration:none}
+  .pill:hover{border-color:var(--sig);color:var(--sig)}
+  .pill .dot{width:8px;height:8px;border-radius:50%;background:var(--sig)}
+  .share-room{margin-left:auto;background:none;border:1px solid var(--line);color:var(--fg);padding:6px 12px;font-family:inherit;font-size:11px;cursor:pointer}
+  .share-room:hover{background:var(--inv-bg);color:var(--inv-fg)}
+  .room-log{padding:18px 18px 24px;display:flex;flex-direction:column;gap:4px}
+  .room-log .btn-more{margin:0 auto 14px}
+  .day{align-self:center;font-family:'Martian Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--fg4);border:1px solid var(--line2);padding:4px 10px;margin:14px 0 10px;background:var(--bg)}
+  .turn{display:flex;gap:10px;max-width:82%;align-items:flex-end;align-self:flex-start}
+  .turn.party{align-self:flex-end;flex-direction:row-reverse}
+  .turn.gap{margin-top:14px}
+  .avatar{flex:0 0 auto;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Martian Mono',monospace;font-size:9px;font-weight:700;color:#fff;text-decoration:none;visibility:hidden}
+  .turn.first .avatar{visibility:visible}
+  .turn .stack{display:flex;flex-direction:column;min-width:0;align-items:flex-start}
+  .turn.party .stack{align-items:flex-end}
+  .who-line{font-family:'Martian Mono',monospace;font-size:11px;font-weight:600;color:var(--fg3);margin:0 4px 4px;display:flex;gap:8px;flex-wrap:wrap}
+  .who-line .to{font-weight:400;color:var(--fg4)}
+  .turn.party .who-line{color:var(--sig)}
+  .bubble{text-align:left;background:var(--bg);border:1px solid var(--line2);padding:11px 14px;border-radius:14px 14px 14px 4px;font-family:inherit;font-size:16px;line-height:1.38;color:var(--fg);white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;cursor:pointer;max-width:100%}
+  .turn.party .bubble{background:var(--sigT);border-color:var(--sig);border-radius:14px 14px 4px 14px}
+  .bubble:hover{border-color:var(--fg)}
+  .bubble.mem{opacity:.65;border-style:dashed}
+  .bubble .readmore{display:block;font-family:'Martian Mono',monospace;font-size:11px;font-weight:600;color:var(--sig);margin-top:8px}
+  .bubble-meta{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:5px 4px 0;font-family:'Martian Mono',monospace;font-size:10px;color:var(--fg4)}
+  .turn.party .bubble-meta{justify-content:flex-end}
+  .bubble-meta .cat{padding:1px 6px;font-size:9px}
+  @media(max-width:600px){.turn{max-width:94%}.bubble{font-size:15px}.room-log{padding:12px 10px 18px}}
 
   /* detail */
   .back{background:none;border:none;font-family:'Martian Mono',monospace;font-size:12px;color:var(--fg3);cursor:pointer;margin-bottom:20px;padding:0}
@@ -310,7 +342,7 @@ ${ogMeta}
 <script>
 
 (function(){
-  var state={screen:'landing',filter:null,address:null,category:null,sort:'hot',liked:{},mining:{},collections:[],categories:[],feed:[],nextBefore:null,detailTx:null,from:null,cache:{}};
+  var state={screen:'landing',filter:null,address:null,category:null,sort:'hot',liked:{},mining:{},collections:[],categories:[],feed:[],nextBefore:null,detailTx:null,from:null,cache:{},chat:{messages:[],participants:[],nextBefore:null},chatScroll:null};
   var POW_BITS=16;
   var _inApp=0;
   try{state.liked=JSON.parse(localStorage.getItem('opreturn_liked')||'{}');}catch(e){}
@@ -349,6 +381,19 @@ ${ogMeta}
       var msgs=(r.d&&r.d.messages)||[];cacheMsgs(msgs);
       state.feed=append?state.feed.concat(msgs):msgs;
       state.nextBefore=r.d?r.d.next_before:null;
+    });
+  }
+
+  function loadChat(prepend){
+    var q='/api/chat?limit=200';
+    if(state.filter)q+='&collection_id='+state.filter;
+    if(state.address)q+='&address='+encodeURIComponent(state.address);
+    if(prepend&&state.chat.nextBefore)q+='&before='+encodeURIComponent(state.chat.nextBefore);
+    return fetchJSON(q).then(function(r){
+      var d=r.d||{};var msgs=d.messages||[];cacheMsgs(msgs);
+      state.chat.messages=prepend?msgs.concat(state.chat.messages):msgs;
+      state.chat.participants=d.participants||state.chat.participants||[];
+      state.chat.nextBefore=d.next_before||null;
     });
   }
 
@@ -443,7 +488,7 @@ ${ogMeta}
     var title=state.address?state.address:(state.filter?colName(state.filter):(state.category?state.category:'All transmissions'));
     var kick=state.address?'\u25c6 ADDRESS RECORD':(state.filter?('\u25c6 '+catCode(colIndex(state.filter)+1)):(state.category?('\u25c6 '+catSlug(state.category).toUpperCase().replace(/-/g,' ')):'\u25c6 EVERY MONITORED ADDRESS'));
     var h='<section class="wrap wrap-narrow"><div class="feed-head"><div><div class="kicker" style="margin-bottom:6px">'+kick+'</div><h2 class="title" style="font-size:clamp(26px,4vw,40px);word-break:break-all">'+esc(title)+'</h2></div>';
-    h+='<div class="seg"><button data-action="sort" data-sort="hot" class="'+(state.sort==='hot'?'active':'')+'">\ud83d\udd25 Hottest</button><button data-action="sort" data-sort="new" class="'+(state.sort==='new'?'active':'')+'">\u25f7 Newest</button></div></div>';
+    h+='<div class="head-ctl">'+viewToggle('feed')+'<div class="seg"><button data-action="sort" data-sort="hot" class="'+(state.sort==='hot'?'active':'')+'">\ud83d\udd25 Hottest</button><button data-action="sort" data-sort="new" class="'+(state.sort==='new'?'active':'')+'">\u25f7 Newest</button></div></div></div>';
     h+='<div class="chips"><a class="chip'+(state.filter==null&&!state.address&&!state.category?' active':'')+'" href="/feed">All transmissions</a>';
     state.collections.forEach(function(c){h+='<a class="chip'+(state.filter===c.id&&!state.address&&!state.category?' active':'')+'" href="/c/'+attr(colSlug(c))+'">'+esc(c.name)+'</a>';});
     h+='</div>';
@@ -461,6 +506,72 @@ ${ogMeta}
     app.innerHTML=h;
   }
   function colIndex(id){for(var i=0;i<state.collections.length;i++){if(state.collections[i].id===id)return i;}return 0;}
+
+  /* ---- chat room: the whole conversation of a collection / address, oldest first ---- */
+  var AVCOL=['#d9481f','#b5851f','#5b7a4a','#3d6e8f','#7a4f9e','#a03c5c','#2f8a7d','#6b5b3e'];
+  function hashStr(s){var h=7;s=String(s||'');for(var i=0;i<s.length;i++){h=((h*31)+s.charCodeAt(i))>>>0;}return h;}
+  function avatarColor(a){return AVCOL[hashStr(a)%AVCOL.length];}
+  function initials(a){a=String(a||'');return a.length>=4?a.slice(-4).toUpperCase():'?';}
+  function tsOf(m){if(m.block_time!=null)return m.block_time;var t=new Date(String(m.created_at||'').replace(' ','T')+'Z').getTime();return isNaN(t)?0:Math.floor(t/1000);}
+  function clock(ts){return new Date(ts*1000).toISOString().slice(11,16)+' UTC';}
+  function partyOf(addr){var ps=state.chat.participants||[];for(var i=0;i<ps.length;i++){if(ps[i].address===addr)return ps[i];}return null;}
+  function partyName(p,addr){return p&&p.label?p.label:shortAddr(addr);}
+  function viewToggle(active){
+    if(state.category||(!state.filter&&!state.address))return '';
+    return '<div class="seg"><button data-action="view" data-view="feed" class="'+(active==='feed'?'active':'')+'">\u2261 Feed</button><button data-action="view" data-view="chat" class="'+(active==='chat'?'active':'')+'">\ud83d\udcac Chat</button></div>';
+  }
+  function chatPath(){return state.address?'/a/'+encodeURIComponent(state.address)+'/chat':'/c/'+colSlug(colById(state.filter))+'/chat';}
+  function feedPath(){return state.address?'/a/'+encodeURIComponent(state.address):'/c/'+colSlug(colById(state.filter));}
+  function bubbleHTML(m,first,multi){
+    var sender=m.sender||'';var party=sender?partyOf(sender):null;
+    var name=sender?partyName(party,sender):'unknown sender';
+    var color=party?'var(--sig)':avatarColor(sender||m.txid);
+    var href=party?'/a/'+attr(sender)+'/chat':(sender?'https://mempool.space/address/'+attr(sender):'https://mempool.space/tx/'+attr(m.txid));
+    var ext=party?'':' target="_blank" rel="noopener"';
+    var text=m.content||'';var long=text.length>520;if(long)text=text.slice(0,480)+'\u2026';
+    var h='<div class="turn'+(party?' party':'')+(first?' first gap':'')+'">';
+    h+='<a class="avatar" style="background:'+color+'" href="'+href+'"'+ext+' title="'+attr(sender||'sender unknown')+'">'+esc(initials(sender))+'</a>';
+    h+='<div class="stack">';
+    if(first){h+='<div class="who-line"><span>'+esc(name)+'</span>';
+      if(multi&&m.address!==sender){h+='<span class="to">\u2192 '+esc(partyName(partyOf(m.address),m.address))+'</span>';}
+      h+='</div>';}
+    h+='<button class="bubble'+(m.is_mempool?' mem':'')+'" data-action="open-msg" data-txid="'+attr(m.txid)+'">'+esc(text)+(long?'<span class="readmore">read full message \u2192</span>':'')+'</button>';
+    h+='<div class="bubble-meta">';
+    if(m.category)h+='<span class="cat'+(HOSTILE[m.category]?' sig':'')+'">'+esc(m.category)+'</span>';
+    if(m.is_mempool)h+='<span class="st mem">\u25f7 in mempool</span>';
+    if(m.dup_count>1)h+='<span title="Same message broadcast in '+m.dup_count+' separate transactions">\u00d7'+m.dup_count+' txs</span>';
+    h+='<span>'+esc(clock(tsOf(m)))+'</span>';
+    if(m.likes)h+='<span>\u2665 '+m.likes+'</span>';
+    h+='</div></div></div>';
+    return h;
+  }
+  function renderChat(){
+    var col=state.filter?colById(state.filter):null;
+    var title=state.address?state.address:(col?col.name:'Chat room');
+    var h='<section class="wrap wrap-narrow"><div class="feed-head"><div><div class="kicker" style="margin-bottom:6px">\u25c6 CHAT ROOM \u00b7 OLDEST TO NEWEST</div><h2 class="title" style="font-size:clamp(26px,4vw,40px);word-break:break-all">'+esc(title)+'</h2></div>';
+    h+='<div class="head-ctl">'+viewToggle('chat')+'</div></div>';
+    var parts=state.chat.participants||[];var multi=parts.length>1;
+    h+='<div class="room"><div class="room-head"><span>'+parts.length+' monitored '+(parts.length===1?'party':'parties')+'</span><div class="who">';
+    parts.forEach(function(p){h+='<a class="pill" href="/a/'+attr(p.address)+'/chat" title="'+attr(p.address)+'"><span class="dot"></span>'+esc(p.label||shortAddr(p.address))+'</a>';});
+    h+='</div><button class="share-room" data-action="share-room">Share room \u2197</button></div>';
+    h+='<div class="room-log" id="room-log">';
+    if(state.chat.nextBefore)h+='<button class="btn-more" data-action="chat-earlier">\u2191 Load earlier</button>';
+    var msgs=state.chat.messages;
+    if(!msgs.length)h+='<div class="empty">No messages yet \u2014 waiting for the next poll.</div>';
+    var lastDay='',lastSender=null,lastTs=0;
+    msgs.forEach(function(m){
+      var ts=tsOf(m);var day=new Date(ts*1000).toISOString().slice(0,10);
+      if(day!==lastDay){h+='<div class="day">'+day+'</div>';lastDay=day;lastSender=null;}
+      var sender=m.sender||'';var first=sender!==lastSender||ts-lastTs>600;
+      h+=bubbleHTML(m,first,multi);
+      lastSender=sender;lastTs=ts;
+    });
+    h+='</div></div><p class="caption">Every bubble is an OP_RETURN output etched into Bitcoin. Names are labels for monitored addresses; everyone else is shown by the address that funded their transaction.</p></section>';
+    app.innerHTML=h;
+    var sc=state.chatScroll;state.chatScroll=null;
+    if(sc&&sc.keep!=null){window.scrollTo(0,document.body.scrollHeight-sc.keep);}
+    else{window.scrollTo(0,document.body.scrollHeight);}
+  }
 
   function renderDetail(){
     var m=state.cache[state.detailTx];if(!m){go('feed');return;}
@@ -486,6 +597,7 @@ ${ogMeta}
     h+='<div class="actions"><button class="act act-like'+(liked?' liked':'')+'" data-action="like" data-id="'+m.id+'">\\u2665 <span data-lc="'+m.id+'">'+m.likes+'</span> likes</button>';
     h+='<button class="act" data-action="copy" data-copy="'+attr(m.address)+'">Copy address \\u29c9</button>';
     h+='<a class="act" href="https://mempool.space/tx/'+attr(m.txid)+'" target="_blank" rel="noopener">View on mempool \\u2197</a>';
+    if(m.collection_id){h+='<a class="act" href="/c/'+attr(colSlug(colById(m.collection_id)))+'/chat">Full conversation \ud83d\udcac</a>';}
     h+='<button class="act act-share" data-action="share">Share this \\u2197</button></div>';
     h+='</div><p class="caption">Etched into the Bitcoin blockchain. It cannot be deleted, edited, or taken down.</p></section>';
     app.innerHTML=h;
@@ -541,6 +653,7 @@ ${ogMeta}
     else if(state.screen==='feed')renderFeed();
     else if(state.screen==='guide')renderGuide();
     else if(state.screen==='detail')renderDetail();
+    else if(state.screen==='chat')renderChat();
     setFootAndTicker();
   }
 
@@ -548,7 +661,10 @@ ${ogMeta}
           /c/<slug> , /a/<address> , /m/<txid> ---- */
   function currentRoute(){
     var parts=location.pathname.split('/').filter(Boolean);
-    return {name:parts[0]||'landing',param:decodeURIComponent(parts.slice(1).join('/'))||null};
+    // /c/<slug>/chat and /a/<address>/chat are the chat-room views of the same record
+    var chat=parts.length>2&&parts[parts.length-1]==='chat';
+    if(chat)parts=parts.slice(0,-1);
+    return {name:parts[0]||'landing',param:decodeURIComponent(parts.slice(1).join('/'))||null,chat:chat};
   }
   /* /feed defaults to newest; collection / category / address views default to hottest */
   function defaultSort(r){return r.name==='feed'?'new':'hot';}
@@ -560,9 +676,9 @@ ${ogMeta}
     if(r.name==='collections'){state.screen='collections';return render();}
     if(r.name==='guide'){state.screen='guide';return render();}
     if(r.name==='feed'){state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
-    if(r.name==='c'){var col=colById(Number(r.param))||colBySlug(r.param);if(col){state.screen='feed';state.filter=col.id;state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}}
+    if(r.name==='c'){var col=colById(Number(r.param))||colBySlug(r.param);if(col){state.filter=col.id;if(r.chat){state.screen='chat';return loadChat(false).then(render);}state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}}
     if(r.name==='cat'){var cn=catName(r.param);if(cn){state.screen='feed';state.category=cn;state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}}
-    if(r.name==='a'&&r.param){state.screen='feed';state.address=r.param;state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
+    if(r.name==='a'&&r.param){state.address=r.param;if(r.chat){state.screen='chat';return loadChat(false).then(render);}state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
     if(r.name==='m'&&r.param){state.screen='detail';state.detailTx=r.param;return ensureDetail().then(render);}
     state.screen='landing';
     // Landing builds the featured message + category chart from state.cache,
@@ -611,6 +727,9 @@ ${ogMeta}
     if(a==='filter-all')return go('feed');
     if(a==='sort'){var s=t.getAttribute('data-sort');history.replaceState({},'',location.pathname+(s===defaultSort(currentRoute())?'':'?sort='+s));route();return;}
     if(a==='more'){loadFeed(true).then(render);return;}
+    if(a==='view'){navigate(t.getAttribute('data-view')==='chat'?chatPath():feedPath());return;}
+    if(a==='chat-earlier'){state.chatScroll={keep:document.body.scrollHeight-window.scrollY};loadChat(true).then(render);return;}
+    if(a==='share-room'){shareRoom(t);return;}
     if(a==='open-msg')return go('detail',t.getAttribute('data-txid'));
     if(a==='like'){like(Number(t.getAttribute('data-id')),t);return;}
     if(a==='copy'){copy(t.getAttribute('data-copy'),t);return;}
@@ -661,6 +780,7 @@ ${ogMeta}
     }).catch(function(){state.mining[id]=false;render();});
   }
   function copy(txt,btn){try{navigator.clipboard.writeText(txt);var old=btn.textContent;btn.textContent='copied \\u2713';setTimeout(function(){render();},1100);}catch(e){}}
+  function shareRoom(btn){try{navigator.clipboard.writeText(location.href);btn.textContent='\u2713 Link copied';setTimeout(function(){btn.textContent='Share room \u2197';},1600);}catch(e){}}
   function share(btn){try{navigator.clipboard.writeText(location.href);btn.textContent='\u2713 Link copied';setTimeout(function(){btn.textContent='Share this \u2197';},1600);}catch(e){}}
 
   /* ---- suggest an address (public queue → admin review) ---- */

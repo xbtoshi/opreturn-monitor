@@ -3,6 +3,7 @@ export interface RawTx {
   hex?: string;
   status?: { confirmed?: boolean; block_time?: number };
   vout?: Array<{ scriptpubkey?: string; scriptpubkey_type?: string }>;
+  vin?: Array<{ prevout?: { scriptpubkey_address?: string } | null }>;
   fee?: number;
   weight?: number;
 }
@@ -16,6 +17,17 @@ export interface TxFee {
 export function blockTimeFromTx(tx: RawTx): number | null {
   const t = tx.status?.block_time;
   return typeof t === 'number' && Number.isFinite(t) && t > 0 ? t : null;
+}
+
+/**
+ * Who wrote the message: the address funding the first input. Both the
+ * address-txs and tx-detail endpoints include vin[].prevout, so this works for
+ * live polling and for backfilling older rows. Null for coinbase / non-standard
+ * inputs, or when the payload omits prevouts.
+ */
+export function senderFromTx(tx: RawTx): string | null {
+  const a = tx.vin?.[0]?.prevout?.scriptpubkey_address;
+  return typeof a === 'string' && a.length > 0 ? a : null;
 }
 
 /** Total fee (sats) + fee rate (sat/vB) from a mempool.space tx payload. */

@@ -100,6 +100,16 @@ app.get('/api/messages', async (c) => {
   return c.json(data);
 });
 
+app.get('/api/chat', async (c) => {
+  const rawCollection = c.req.query('collection_id');
+  const collectionId = rawCollection ? Number(rawCollection) : undefined;
+  const address = c.req.query('address') || undefined;
+  if (!collectionId && !address) return c.json({ error: 'collection_id or address required' }, 400);
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 200, 1), 200);
+  const before = c.req.query('before') || undefined;
+  return c.json(await db.getChat(c.env.DB, { collectionId, address, limit, before }));
+});
+
 app.get('/api/categories', async (c) => {
   const stats = await db.listCategories(c.env.DB);
   return c.json(
@@ -428,6 +438,21 @@ app.get('/c/:slug', async (c) => {
   });
 });
 
+app.get('/c/:slug/chat', async (c) => {
+  const slug = c.req.param('slug');
+  const col = await db.getCollectionBySlug(c.env.DB, slug);
+  const origin = originOf(c);
+  if (!col) {
+    return page(c, { title: 'Collection not found', url: `${origin}/c/${slug}/chat`, image: `${origin}/og/default.png` });
+  }
+  return page(c, {
+    title: `${col.name} \u2014 chat room`,
+    description: `The whole on-chain conversation, oldest to newest: ${col.message_count} OP_RETURN messages between ${col.address_count} monitored addresses and everyone writing to them.`,
+    url: `${origin}/c/${slug}/chat`,
+    image: `${origin}/og/collection/${slug}.png`,
+  });
+});
+
 app.get('/a/:address', (c) => {
   const address = c.req.param('address');
   const origin = originOf(c);
@@ -435,6 +460,17 @@ app.get('/a/:address', (c) => {
     title: `Address record \u2014 ${address}`,
     description: `Every archived OP_RETURN message sent to ${address}.`,
     url: `${origin}/a/${address}`,
+    image: `${origin}/og/address/${encodeURIComponent(address)}.png`,
+  });
+});
+
+app.get('/a/:address/chat', (c) => {
+  const address = c.req.param('address');
+  const origin = originOf(c);
+  return page(c, {
+    title: `Chat room \u2014 ${address}`,
+    description: `The whole on-chain conversation around ${address}, oldest to newest.`,
+    url: `${origin}/a/${address}/chat`,
     image: `${origin}/og/address/${encodeURIComponent(address)}.png`,
   });
 });
