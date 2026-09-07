@@ -553,7 +553,7 @@ app.get('/auth.md', (c) => {
   });
 });
 
-app.get('/.well-known/oauth-protected-resource', (c) => {
+const handleOAuthProtected = (c: Context<Bindings>) => {
   const origin = originOf(c);
   return new Response(JSON.stringify(generateOAuthProtectedResourceJson(origin), null, 2), {
     headers: {
@@ -562,7 +562,11 @@ app.get('/.well-known/oauth-protected-resource', (c) => {
       'access-control-allow-origin': '*',
     },
   });
-});
+};
+
+app.get('/.well-known/oauth-protected-resource', handleOAuthProtected);
+app.get('/.well-known/oauth-protected-resource:suffix', handleOAuthProtected);
+app.get('/.well-known/oauth-protected-resource%60', handleOAuthProtected);
 
 const handleOAuthServer = (c: Context<Bindings>) => {
   const origin = originOf(c);
@@ -576,7 +580,10 @@ const handleOAuthServer = (c: Context<Bindings>) => {
 };
 
 app.get('/.well-known/oauth-authorization-server', handleOAuthServer);
+app.get('/.well-known/oauth-authorization-server:suffix', handleOAuthServer);
+app.get('/.well-known/oauth-authorization-server%60', handleOAuthServer);
 app.get('/.well-known/openid-configuration', handleOAuthServer);
+app.get('/.well-known/openid-configuration:suffix', handleOAuthServer);
 
 app.get('/.well-known/jwks.json', () => {
   return new Response(JSON.stringify({ keys: [] }, null, 2), {

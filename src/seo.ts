@@ -533,57 +533,119 @@ export function generateOpenApiJson(siteUrl: string): Record<string, unknown> {
 // ---------------------------------------------------------------------------
 
 export function generateAuthMd(siteUrl: string): string {
-  return `# auth.md — The Permanent Record Agent Registration & Discovery
+  return `# auth.md
 
-> Machine-readable agent registration, authorization, and discovery specification for The Permanent Record (opreturn.xyz).
+> Machine-readable agent registration, discovery, and authorization specification for The Permanent Record (opreturn.xyz).
+> Public immutable Bitcoin blockchain index. Unauthenticated anonymous access is supported.
 
-## 1. Agent Audience & Access Model
+## Agent registration
 
 The Permanent Record indexes public, immutable Bitcoin blockchain data.
 - **Agent Audience**: Autonomous AI agents, LLM tool executors, indexers, and automated scrapers.
-- **Read Access**: Completely anonymous and unauthenticated. AI agents can query all public APIs (\`/api/messages\`, \`/api/collections\`, \`/api/chat\`, \`/mcp\`) without registration or API keys.
+- **Read Access**: Completely anonymous and unauthenticated. AI agents can query all public APIs (/api/messages, /api/collections, /api/chat, /mcp) without registration or API keys.
 - **Rate Limits**: Governed by Cloudflare edge protection with high-availability SWR caching. Standard User-Agent identifiers receive maximum throughput.
-- **Write Actions**: Rate-limited and anti-spam protected using a client-mined 16-bit Proof-of-Work nonce (\`sha256(id:nonce)\` having 16 leading zero bits). No KYC or centralized account required.
+- **Write Actions**: Rate-limited and anti-spam protected using a client-mined 16-bit Proof-of-Work nonce (sha256(id:nonce) having 16 leading zero bits). No KYC or centralized account required.
 
-## 2. Agent Registration & Provisioning Endpoints
+Both roles live on one host. The resource server is ${siteUrl} and the authorization server is ${siteUrl}.
 
-When automated onboarding or token acquisition is required by client agent frameworks:
-- **Registration Endpoint**: \`${siteUrl}/oauth/register\`
-- **Token Endpoint**: \`${siteUrl}/oauth/token\`
-- **Revocation Endpoint**: \`${siteUrl}/oauth/revoke\`
-- **Claim / Liveness URI**: \`${siteUrl}/api/health\`
+## Discovery
 
-## 3. Supported Authentication & Identity Methods
+Read these two documents in this order:
 
-### A. Anonymous Access (Recommended for Read Operations)
-- **Identity Type**: \`anonymous\`
-- **Credential Type**: None required (\`none\`)
-- **Claim URI**: \`${siteUrl}/api/health\`
-- **Scopes**: \`read:messages\`, \`read:collections\`
+- Fetch ${siteUrl}/.well-known/oauth-protected-resource and read resource, resource_name, authorization_servers, scopes_supported, bearer_methods_supported, and agent_auth.
+- Fetch ${siteUrl}/.well-known/oauth-authorization-server and read the agent_auth block: skill, register_uri, claim_uri, revocation_uri, identity_types_supported, anonymous.credential_types_supported, and identity_assertion.assertion_types_supported.
 
-### B. ID-JAG Identity Assertion
-- **Identity Type**: \`identity_assertion\`
-- **Assertion Type**: \`urn:ietf:params:oauth:token-type:id-jag\`
-- **Credential Type**: \`bearer_token\`
-- **Revocation URI**: \`${siteUrl}/oauth/revoke\`
+There is no WWW-Authenticate challenge. Every resource is public and answers anonymous requests directly. OAuth metadata is published so agents can register or claim identities without guessing.
 
-### C. Verified Email Assertion
-- **Identity Type**: \`identity_assertion\`
-- **Assertion Type**: \`verified_email\`
-- **Credential Type**: \`bearer_token\`
-- **Claim URI**: \`${siteUrl}/oauth/claim\`
+## Scopes
 
-## 4. OAuth 2.0 & Discovery Metadata
+- read:messages — Read immutable Bitcoin OP_RETURN messages, mempool feeds, and broadcasts.
+- read:collections — Read curated Bitcoin address collections and multi-party chat feeds.
 
-- **OAuth Protected Resource Metadata (PRM, RFC 9728)**: \`${siteUrl}/.well-known/oauth-protected-resource\`
-- **OAuth Authorization Server Metadata (RFC 8414)**: \`${siteUrl}/.well-known/oauth-authorization-server\`
-- **OpenID Connect Configuration**: \`${siteUrl}/.well-known/openid-configuration\`
-- **JSON Web Key Set (JWKS)**: \`${siteUrl}/.well-known/jwks.json\`
-- **API Catalog (RFC 9727)**: \`${siteUrl}/.well-known/api-catalog\`
+## Endpoints
 
-## 5. Credential Usage
+- Registration Endpoint: ${siteUrl}/oauth/register
+- Token Endpoint: ${siteUrl}/oauth/token
+- Claim URI: ${siteUrl}/oauth/claim
+- Revocation URI: ${siteUrl}/oauth/revoke
 
-For unauthenticated operations, simply execute standard HTTP \`GET\` requests. For token-authenticated sessions, pass the bearer token via the standard \`Authorization\` header:
+## Supported identity types
+
+### 1. Anonymous Access (Recommended)
+- Identity Type: anonymous
+- Credential Types Supported: bearer_token, api_key
+- Registration URI: ${siteUrl}/oauth/register
+- Claim URI: ${siteUrl}/oauth/claim
+- Scopes: read:messages, read:collections
+
+### 2. ID-JAG Identity Assertion
+- Identity Type: identity_assertion
+- Assertion Types Supported: urn:ietf:params:oauth:token-type:id-jag
+- Credential Types Supported: bearer_token, api_key
+- Registration URI: ${siteUrl}/oauth/register
+- Revocation URI: ${siteUrl}/oauth/revoke
+
+### 3. Verified Email Assertion
+- Identity Type: identity_assertion
+- Assertion Types Supported: verified_email
+- Credential Types Supported: bearer_token, api_key
+- Registration URI: ${siteUrl}/oauth/register
+- Claim URI: ${siteUrl}/oauth/claim
+
+## Standalone registration flow
+
+Agents can register anonymously or assert identity via standard HTTP requests:
+
+\`\`\`http
+POST /oauth/register HTTP/1.1
+Host: opreturn.xyz
+Content-Type: application/json
+
+{
+  "client_name": "Autonomous Agent",
+  "grant_types": ["anonymous"],
+  "identity_type": "anonymous"
+}
+\`\`\`
+
+Response:
+\`\`\`json
+{
+  "client_id": "anonymous-agent",
+  "access_token": "opreturn_anonymous_read_token",
+  "token_type": "Bearer",
+  "expires_in": 86400,
+  "scope": "read:messages read:collections"
+}
+\`\`\`
+
+To claim ownership of an identifier or verify operator correspondence:
+\`\`\`http
+POST /oauth/claim HTTP/1.1
+Host: opreturn.xyz
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "claim_type": "verified_email",
+  "email": "agent@example.com"
+}
+\`\`\`
+
+To revoke issued agent credentials:
+\`\`\`http
+POST /oauth/revoke HTTP/1.1
+Host: opreturn.xyz
+Content-Type: application/json
+
+{
+  "token": "<token>"
+}
+\`\`\`
+
+## Credential usage
+
+For unauthenticated operations, simply execute standard HTTP GET requests. For authenticated sessions, pass the bearer token via the standard Authorization header:
 
 \`\`\`http
 GET /api/messages HTTP/1.1
@@ -597,9 +659,33 @@ Accept: application/json
 export function generateOAuthProtectedResourceJson(siteUrl: string): Record<string, unknown> {
   return {
     resource: siteUrl,
+    resource_name: 'The Permanent Record',
     authorization_servers: [siteUrl],
     scopes_supported: ['read:messages', 'read:collections'],
     bearer_methods_supported: ['header'],
+    resource_documentation: `${siteUrl}/auth.md`,
+    agent_auth: {
+      skill: `${siteUrl}/auth.md`,
+      documentation_uri: `${siteUrl}/auth.md`,
+      register_uri: `${siteUrl}/oauth/register`,
+      claim_uri: `${siteUrl}/oauth/claim`,
+      revocation_uri: `${siteUrl}/oauth/revoke`,
+      identity_types_supported: ['anonymous', 'identity_assertion'],
+      anonymous: {
+        credential_types_supported: ['bearer_token', 'api_key'],
+        claim_uri: `${siteUrl}/oauth/claim`,
+      },
+      identity_assertion: {
+        assertion_types_supported: [
+          'urn:ietf:params:oauth:token-type:id-jag',
+          'verified_email',
+        ],
+        credential_types_supported: ['bearer_token', 'api_key'],
+        claim_uri: `${siteUrl}/oauth/claim`,
+        revocation_uri: `${siteUrl}/oauth/revoke`,
+      },
+      supported_identity_types: ['anonymous', 'identity_assertion'],
+    },
   };
 }
 
@@ -611,19 +697,24 @@ export function generateOAuthServerJson(siteUrl: string): Record<string, unknown
     jwks_uri: `${siteUrl}/.well-known/jwks.json`,
     registration_endpoint: `${siteUrl}/oauth/register`,
     revocation_endpoint: `${siteUrl}/oauth/revoke`,
+    claim_endpoint: `${siteUrl}/oauth/claim`,
     scopes_supported: ['read:messages', 'read:collections'],
     response_types_supported: ['token', 'code'],
     grant_types_supported: ['client_credentials', 'anonymous', 'authorization_code'],
     token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
     events_supported: ['urn:ietf:params:oauth:event:token-revoked'],
-    service_documentation: `${siteUrl}/llms.txt`,
+    service_documentation: `${siteUrl}/auth.md`,
+    protected_resources: [siteUrl],
     agent_auth: {
       skill: `${siteUrl}/auth.md`,
+      documentation_uri: `${siteUrl}/auth.md`,
       register_uri: `${siteUrl}/oauth/register`,
+      claim_uri: `${siteUrl}/oauth/claim`,
+      revocation_uri: `${siteUrl}/oauth/revoke`,
       identity_types_supported: ['anonymous', 'identity_assertion'],
       anonymous: {
-        credential_types_supported: ['none'],
-        claim_uri: `${siteUrl}/api/health`,
+        credential_types_supported: ['bearer_token', 'api_key'],
+        claim_uri: `${siteUrl}/oauth/claim`,
       },
       identity_assertion: {
         assertion_types_supported: [
@@ -634,6 +725,7 @@ export function generateOAuthServerJson(siteUrl: string): Record<string, unknown
         claim_uri: `${siteUrl}/oauth/claim`,
         revocation_uri: `${siteUrl}/oauth/revoke`,
       },
+      supported_identity_types: ['anonymous', 'identity_assertion'],
     },
   };
 }
