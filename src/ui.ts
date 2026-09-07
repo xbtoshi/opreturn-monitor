@@ -249,7 +249,26 @@ ${ogMeta}
   .bubble-meta{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:5px 4px 0;font-family:'Martian Mono',monospace;font-size:10px;color:var(--fg4)}
   .turn.party .bubble-meta{justify-content:flex-end}
   .bubble-meta .cat{padding:1px 6px;font-size:9px}
-  @media(max-width:600px){.turn{max-width:94%}.bubble{font-size:15px}.room-log{padding:12px 10px 18px}}
+  @media(max-width:600px){
+    /* Phone: the header's four nav buttons (512px) overflowed a 390px viewport and made every page scroll sideways. */
+    header{padding:10px 12px;gap:8px}
+    .brand .tag{display:none}
+    nav{gap:0}
+    .navbtn{padding:8px 9px;font-size:13px}
+    /* Chat room */
+    .room{min-height:0}
+    .room-head{flex-direction:column;align-items:stretch;gap:8px;padding:12px}
+    .room-head .who{flex:none}
+    .pill{white-space:nowrap;padding:4px 8px;font-size:9px}
+    .share-room{margin:4px 0 0;width:100%;padding:9px 12px}
+    .room-log{padding:12px 10px 18px}
+    .turn{max-width:100%;gap:6px}
+    .avatar{width:26px;height:26px;font-size:8px}
+    .turn.first .avatar{margin-top:20px}
+    .bubble{font-size:15px;padding:9px 12px}
+    .who-line{font-size:10px}
+    .bubble-meta{font-size:9px;gap:8px}
+  }
 
   /* detail */
   .back{background:none;border:none;font-family:'Martian Mono',monospace;font-size:12px;color:var(--fg3);cursor:pointer;margin-bottom:20px;padding:0}
@@ -492,7 +511,7 @@ ${ogMeta}
   function renderFeed(){
     var title=state.address?state.address:(state.filter?colName(state.filter):(state.category?state.category:'All transmissions'));
     var kick=state.address?'\u25c6 ADDRESS RECORD':(state.filter?('\u25c6 '+catCode(colIndex(state.filter)+1)):(state.category?('\u25c6 '+catSlug(state.category).toUpperCase().replace(/-/g,' ')):'\u25c6 EVERY MONITORED ADDRESS'));
-    var h='<section class="wrap wrap-narrow"><div class="feed-head"><div><div class="kicker" style="margin-bottom:6px">'+kick+'</div><h2 class="title" style="font-size:clamp(26px,4vw,40px);word-break:break-all">'+esc(title)+'</h2></div>';
+    var h='<section class="wrap wrap-narrow"><div class="feed-head"><div><div class="kicker" style="margin-bottom:6px">'+kick+'</div><h2 class="title" style="font-size:clamp(26px,4vw,40px);overflow-wrap:anywhere">'+esc(title)+'</h2></div>';
     h+='<div class="head-ctl">'+viewToggle('feed')+'<div class="seg"><button data-action="sort" data-sort="hot" class="'+(state.sort==='hot'?'active':'')+'">\ud83d\udd25 Hottest</button><button data-action="sort" data-sort="new" class="'+(state.sort==='new'?'active':'')+'">\u25f7 Newest</button></div></div></div>';
     h+='<div class="chips"><a class="chip'+(state.filter==null&&!state.address&&!state.category?' active':'')+'" href="/feed">All transmissions</a>';
     state.collections.forEach(function(c){h+='<a class="chip'+(state.filter===c.id&&!state.address&&!state.category?' active':'')+'" href="/c/'+attr(colSlug(c))+'">'+esc(c.name)+'</a>';});
@@ -555,7 +574,7 @@ ${ogMeta}
   function renderChat(){
     var col=state.filter?colById(state.filter):null;
     var title=state.address?state.address:(col?col.name:'Chat room');
-    var h='<section class="wrap wrap-narrow"><div class="feed-head"><div><div class="kicker" style="margin-bottom:6px">\u25c6 CHAT ROOM \u00b7 OLDEST TO NEWEST</div><h2 class="title" style="font-size:clamp(26px,4vw,40px);word-break:break-all">'+esc(title)+'</h2></div>';
+    var h='<section class="wrap wrap-narrow"><div class="feed-head"><div><div class="kicker" style="margin-bottom:6px">\u25c6 CHAT ROOM \u00b7 OLDEST TO NEWEST</div><h2 class="title" style="font-size:clamp(26px,4vw,40px);overflow-wrap:anywhere">'+esc(title)+'</h2></div>';
     h+='<div class="head-ctl">'+viewToggle('chat')+'</div></div>';
     var parts=state.chat.participants||[];var multi=parts.length>1;
     h+='<div class="room"><div class="room-head"><span>'+parts.length+' monitored '+(parts.length===1?'party':'parties')+'</span><div class="who">';
