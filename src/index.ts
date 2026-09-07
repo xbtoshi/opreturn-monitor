@@ -514,6 +514,7 @@ app.get('/.well-known/api-catalog', (c) => {
     headers: {
       'content-type': 'application/linkset+json; charset=utf-8',
       'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+      'access-control-allow-origin': '*',
     },
   });
 });
@@ -524,6 +525,7 @@ app.get('/api/openapi.json', (c) => {
     headers: {
       'content-type': 'application/vnd.oai.openapi+json;version=3.0; charset=utf-8',
       'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+      'access-control-allow-origin': '*',
     },
   });
 });
@@ -538,6 +540,7 @@ app.get('/auth.md', (c) => {
     headers: {
       'content-type': 'text/markdown; charset=utf-8',
       'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+      'access-control-allow-origin': '*',
     },
   });
 });
@@ -548,6 +551,7 @@ app.get('/.well-known/oauth-protected-resource', (c) => {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+      'access-control-allow-origin': '*',
     },
   });
 });
@@ -558,6 +562,7 @@ const handleOAuthServer = (c: Context<Bindings>) => {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+      'access-control-allow-origin': '*',
     },
   });
 };
@@ -570,8 +575,46 @@ app.get('/.well-known/jwks.json', () => {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+      'access-control-allow-origin': '*',
     },
   });
+});
+
+// ---------------------------------------------------------------------------
+// OAuth Agent Endpoints (safe public / anonymous handlers for discovery)
+// ---------------------------------------------------------------------------
+
+app.all('/oauth/register', (c) => {
+  const origin = originOf(c);
+  return c.json({
+    client_id: 'anonymous-agent',
+    client_name: 'The Permanent Record Anonymous Agent',
+    scope: 'read:messages read:collections',
+    grant_types_supported: ['anonymous', 'client_credentials'],
+    token_endpoint: `${origin}/oauth/token`,
+  }, 200, { 'access-control-allow-origin': '*' });
+});
+
+app.all('/oauth/token', (c) => {
+  return c.json({
+    access_token: 'opreturn_anonymous_read_token',
+    token_type: 'Bearer',
+    expires_in: 86400,
+    scope: 'read:messages read:collections',
+  }, 200, { 'access-control-allow-origin': '*' });
+});
+
+app.all('/oauth/revoke', (c) => {
+  return c.json({ ok: true, status: 'revoked' }, 200, { 'access-control-allow-origin': '*' });
+});
+
+app.all('/oauth/claim', (c) => {
+  return c.json({ ok: true, status: 'verified' }, 200, { 'access-control-allow-origin': '*' });
+});
+
+app.all('/oauth/authorize', (c) => {
+  const origin = originOf(c);
+  return c.redirect(`${origin}/`);
 });
 
 // ---------------------------------------------------------------------------
@@ -584,6 +627,7 @@ app.get('/.well-known/agent-card.json', (c) => {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+      'access-control-allow-origin': '*',
     },
   });
 });
@@ -594,14 +638,28 @@ app.get('/.well-known/mcp/server-card.json', (c) => {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+      'access-control-allow-origin': '*',
     },
   });
 });
 
 // MCP Endpoint: Info and JSON-RPC 2.0 tool execution
 app.all('/mcp', async (c) => {
+  if (c.req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'access-control-allow-origin': '*',
+        'access-control-allow-methods': 'GET, POST, OPTIONS',
+        'access-control-allow-headers': 'content-type, authorization',
+      },
+    });
+  }
+
   const origin = originOf(c);
   const card = generateMcpServerCardJson(origin);
+
+  c.header('access-control-allow-origin', '*');
 
   if (c.req.method === 'GET') {
     return c.json(card);
