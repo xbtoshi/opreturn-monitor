@@ -215,13 +215,14 @@ ${ogMeta}
   .modal-foot .btn{padding:11px 20px;font-size:14px}
 
   .msg{background:var(--card);border:1px solid var(--line);display:flex}
-  .rail{flex:0 0 auto;width:74px;border-right:1px solid var(--line2);display:flex;flex-direction:column;align-items:center;padding:18px 0;gap:6px}
-  .rail .rank{font-family:'Martian Mono',monospace;font-size:12px;color:var(--fg5)}
-  .likebtn{background:transparent;border:1px solid var(--line4);color:var(--fg5);width:34px;height:34px;border-radius:50%;font-size:15px;cursor:pointer;transition:transform .12s}
-  .likebtn:hover{transform:scale(1.12)}
-  .likebtn.liked{background:var(--sigT);border-color:var(--sig);color:var(--sig)}
+  .rail{flex:0 0 auto;width:66px;border-right:1px solid var(--line2);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 0;gap:4px}
+  .rail .rank{font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg5);margin-bottom:2px}
+  .likebtn{background:transparent;border:1px solid var(--line4);color:var(--fg5);width:30px;height:30px;border-radius:50%;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s, color .12s, border-color .12s}
+  .likebtn:hover{transform:scale(1.15);border-color:var(--fg);color:var(--fg)}
+  .likebtn.up:hover, .likebtn.up.liked{background:rgba(34,197,94,.14);border-color:#16a34a;color:#16a34a}
+  .likebtn.down:hover, .likebtn.down.liked{background:rgba(239,68,68,.14);border-color:#dc2626;color:#dc2626}
   .likebtn.mining{border-color:var(--sig);color:var(--sig);animation:flick .8s infinite;cursor:progress}
-  .rail .lc{font-family:'Martian Mono',monospace;font-size:15px;font-weight:600;color:var(--fg3)}
+  .rail .lc{font-family:'Martian Mono',monospace;font-size:14px;font-weight:600;color:var(--fg3)}
   .rail .lc.liked{color:var(--sig)}
   .msg .body{flex:1;min-width:0;padding:18px 22px 16px}
   .msg .head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px}
@@ -244,55 +245,73 @@ ${ogMeta}
   .empty{color:var(--fg4);text-align:center;padding:60px 0;font-family:'Martian Mono',monospace;font-size:13px}
   /* ---- chat room ---- */
   .head-ctl{display:flex;gap:10px;flex-wrap:wrap}
-  .room{background:var(--card);border:1px solid var(--line);display:flex;flex-direction:column;min-height:60vh}
-  .room-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
+  .room{background:var(--card);border:1px solid var(--line);display:flex;flex-direction:column;height:calc(100vh - 230px);min-height:480px;max-height:760px;position:relative;box-shadow:0 12px 36px rgba(0,0,0,.06)}
+  .room-head{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line);font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4);background:var(--card);z-index:5}
   .room-head .who{display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;flex:1}
-  /* Not .pill: the landing page owns that name (with a 28px bottom margin). */
   .party-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line4);padding:4px 9px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg2);text-decoration:none;margin:0}
   .party-pill:hover{border-color:var(--sig);color:var(--sig)}
   .party-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--sig)}
   .share-room{margin-left:auto;background:none;border:1px solid var(--line);color:var(--fg);padding:6px 12px;font-family:inherit;font-size:11px;cursor:pointer}
   .share-room:hover{background:var(--inv-bg);color:var(--inv-fg)}
-  .room-log{padding:18px 18px 24px;display:flex;flex-direction:column;gap:4px}
+  .room-log{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll-behavior:smooth;padding:18px 18px 24px;display:flex;flex-direction:column;gap:4px}
+  .room-log::-webkit-scrollbar{width:6px}
+  .room-log::-webkit-scrollbar-track{background:transparent}
+  .room-log::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+  .room-log::-webkit-scrollbar-thumb:hover{background:var(--fg4)}
   .room-log .btn-more{margin:0 auto 14px}
+  .room-foot{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:10px 18px;border-top:1px solid var(--line2);background:var(--bg);font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4);gap:12px}
+  .room-status{display:inline-flex;align-items:center;gap:7px}
+  .room-status-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;animation:pulse 2s infinite}
+  .room-etch-btn{color:var(--sig);font-weight:600;text-decoration:none}
+  .room-etch-btn:hover{text-decoration:underline;color:var(--sigH)}
   .day{align-self:center;font-family:'Martian Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--fg4);border:1px solid var(--line2);padding:4px 10px;margin:14px 0 10px;background:var(--bg)}
-  .turn{display:flex;gap:10px;max-width:82%;align-items:flex-start;align-self:flex-start}
+  .turn{display:flex;gap:10px;max-width:84%;align-items:flex-start;align-self:flex-start;position:relative}
   .turn.party{align-self:flex-end;flex-direction:row-reverse}
   .turn.gap{margin-top:14px}
   .avatar{flex:0 0 auto;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Martian Mono',monospace;font-size:9px;font-weight:700;color:#fff;text-decoration:none;visibility:hidden}
   .turn.first .avatar{visibility:visible;margin-top:22px}
-  .turn .stack{display:flex;flex-direction:column;min-width:0;align-items:flex-start}
+  .turn .stack{display:flex;flex-direction:column;min-width:0;align-items:flex-start;position:relative}
   .turn.party .stack{align-items:flex-end}
   .who-line{font-family:'Martian Mono',monospace;font-size:11px;font-weight:600;color:var(--fg3);margin:0 4px 4px;display:flex;gap:8px;flex-wrap:wrap}
   .who-line .to{font-weight:400;color:var(--fg4)}
   .turn.party .who-line{color:var(--sig)}
+  .bubble-wrap{position:relative;max-width:100%}
   .bubble{text-align:left;background:var(--bg);border:1px solid var(--line2);padding:11px 14px;border-radius:14px 14px 14px 4px;font-family:inherit;font-size:16px;line-height:1.38;color:var(--fg);white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;cursor:pointer;max-width:100%}
   .turn.party .bubble{background:var(--sigT);border-color:var(--sig);border-radius:14px 14px 4px 14px}
   .bubble:hover{border-color:var(--fg)}
   .bubble.mem{opacity:.65;border-style:dashed}
   .bubble .readmore{display:block;font-family:'Martian Mono',monospace;font-size:11px;font-weight:600;color:var(--sig);margin-top:8px}
+  .msg-actions{position:absolute;top:-13px;right:8px;display:inline-flex;align-items:center;gap:1px;background:var(--card);border:1px solid var(--line);box-shadow:0 3px 12px rgba(0,0,0,.15);border-radius:18px;padding:2px 5px;opacity:0;pointer-events:none;transform:translateY(3px) scale(.92);transition:opacity .15s ease, transform .15s ease;z-index:20}
+  .turn.party .msg-actions{right:auto;left:8px}
+  .turn:hover .msg-actions, .bubble-wrap:hover .msg-actions{opacity:1;pointer-events:auto;transform:translateY(0) scale(1)}
+  .vote-act{background:none;border:none;cursor:pointer;padding:3px 5px;font-size:10px;line-height:1;color:var(--fg3);display:inline-flex;align-items:center;justify-content:center;border-radius:4px;transition:color .12s, background .12s, transform .1s}
+  .vote-act:hover{transform:scale(1.2)}
+  .vote-act.up:hover, .vote-act.up.voted{color:#16a34a;background:rgba(22,163,74,.12)}
+  .vote-act.down:hover, .vote-act.down.voted{color:#dc2626;background:rgba(220,38,38,.12)}
+  .vote-act.mining{color:var(--sig);animation:flick .8s infinite;cursor:progress}
+  .vote-count{font-family:'Martian Mono',monospace;font-size:10px;font-weight:600;color:var(--fg2);padding:0 3px;min-width:14px;text-align:center}
   .bubble-meta{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:5px 4px 0;font-family:'Martian Mono',monospace;font-size:10px;color:var(--fg4)}
   .turn.party .bubble-meta{justify-content:flex-end}
   .bubble-meta .cat{padding:1px 6px;font-size:9px}
   @media(max-width:600px){
-    /* Phone: the header's four nav buttons (512px) overflowed a 390px viewport and made every page scroll sideways. */
     header{padding:10px 12px;gap:8px}
     .brand .tag{display:none}
     nav{gap:0}
     .navbtn{padding:8px 9px;font-size:13px}
-    /* Chat room */
-    .room{min-height:0}
-    .room-head{flex-direction:column;align-items:stretch;gap:8px;padding:12px}
+    .room{height:calc(100dvh - 200px);min-height:380px;max-height:none}
+    .room-head{flex-direction:column;align-items:stretch;gap:8px;padding:10px 12px}
     .room-head .who{flex:none}
     .party-pill{white-space:nowrap;padding:4px 8px;font-size:9px}
-    .share-room{margin:4px 0 0;width:100%;padding:9px 12px}
+    .share-room{margin:4px 0 0;width:100%;padding:8px 12px}
     .room-log{padding:12px 10px 18px}
+    .room-foot{flex-direction:column;align-items:flex-start;gap:6px;padding:8px 12px}
     .turn{max-width:100%;gap:6px}
     .avatar{width:26px;height:26px;font-size:8px}
     .turn.first .avatar{margin-top:20px}
     .bubble{font-size:15px;padding:9px 12px}
     .who-line{font-size:10px}
     .bubble-meta{font-size:9px;gap:8px}
+    .msg-actions{opacity:1;pointer-events:auto;transform:none}
   }
 
   /* detail */
@@ -325,6 +344,12 @@ ${ogMeta}
   .act:hover{background:var(--fg);color:var(--bg)}
   .act-like{background:var(--fg);color:var(--bg);border-color:var(--fg);font-family:'Space Grotesk';font-size:14px;font-weight:600;padding:12px 22px}
   .act-like.liked{background:var(--sig);border-color:var(--sig);color:var(--on-sig)}
+  .act-vote{display:inline-flex;align-items:center;gap:6px;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;padding:12px 18px;transition:background .15s, border-color .15s, color .15s}
+  .act-vote.act-up:hover{border-color:#16a34a;color:#16a34a}
+  .act-vote.act-down:hover{border-color:#dc2626;color:#dc2626}
+  .act-vote.act-up.voted{background:#16a34a;border-color:#16a34a;color:#fff}
+  .act-vote.act-down.voted{background:#dc2626;border-color:#dc2626;color:#fff}
+  .act-vote.mining{border-color:var(--sig);color:var(--sig);animation:flick .8s infinite;cursor:progress}
   .act-share{background:var(--sig);color:var(--on-sig);border-color:var(--sig);font-family:'Space Grotesk';font-size:14px;font-weight:600;padding:12px 20px;margin-left:auto}
   .act-share:hover{background:var(--sigH);border-color:var(--sigH);color:var(--on-sig)}
   .caption{text-align:center;font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4);margin-top:22px}
@@ -394,10 +419,12 @@ ${ogMeta}
 <script>
 
 (function(){
-  var state={screen:'landing',filter:null,address:null,category:null,sort:'hot',liked:{},mining:{},collections:[],categories:[],feed:[],nextBefore:null,detailTx:null,from:null,cache:{},chat:{messages:[],participants:[],nextBefore:null},chatScroll:null};
+  var state={screen:'landing',filter:null,address:null,category:null,sort:'hot',liked:{},voted:{},mining:{},collections:[],categories:[],feed:[],nextBefore:null,detailTx:null,from:null,cache:{},chat:{messages:[],participants:[],nextBefore:null},chatScroll:null};
   var POW_BITS=16;
   var _inApp=0;
   try{state.liked=JSON.parse(localStorage.getItem('opreturn_liked')||'{}');}catch(e){}
+  try{state.voted=JSON.parse(localStorage.getItem('opreturn_voted')||'{}');}catch(e){}
+  for(var _k in state.liked){if(state.liked[_k]&&!state.voted[_k])state.voted[_k]='up';}
 
   var app=document.getElementById('app');
   var HOSTILE={'Prompt Injection':1,'Threats / Hostility':1,'Laundry / Service Ads':1};
@@ -535,12 +562,13 @@ ${ogMeta}
   }
 
   function msgHTML(m,rank){
-    var liked=!!state.liked[m.id];
+    var voted=state.voted[m.id]||(state.liked[m.id]?'up':null);
     var hostile=HOSTILE[m.category];
     var h='<article class="msg">';
     h+='<div class="rail"><span class="rank">'+(rank!=null?'#'+(rank+1):'')+'</span>';
-    h+='<button class="likebtn'+(liked?' liked':'')+'" data-action="like" data-id="'+m.id+'">\\u2665</button>';
-    h+='<span class="lc'+(liked?' liked':'')+'" data-lc="'+m.id+'">'+m.likes+'</span></div>';
+    h+='<button class="likebtn up'+(voted==='up'?' liked':'')+'" data-action="vote" data-dir="up" data-id="'+m.id+'" title="Upvote (mines PoW nonce)">▲</button>';
+    h+='<span class="lc'+(voted?' liked':'')+'" data-lc="'+m.id+'">'+(m.likes||0)+'</span>';
+    h+='<button class="likebtn down'+(voted==='down'?' liked':'')+'" data-action="vote" data-dir="down" data-id="'+m.id+'" title="Downvote">▼</button></div>';
     h+='<div class="body"><div class="head">';
     h+=(m.category?'<a class="cat'+(hostile?' sig':'')+'" href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a>':'<span class="cat'+(hostile?' sig':'')+'">Unclassified</span>');
     h+='<span class="st '+(m.is_mempool?'mem':'conf')+'">'+(m.is_mempool?'\\u25f7 IN MEMPOOL':'\\u2713 CONFIRMED')+'</span>';
@@ -604,19 +632,26 @@ ${ogMeta}
     var href=party?'/a/'+attr(sender)+'/chat':(sender?'https://mempool.space/address/'+attr(sender):'https://mempool.space/tx/'+attr(m.txid));
     var ext=party?'':' target="_blank" rel="noopener"';
     var text=m.content||'';var long=text.length>520;if(long)text=text.slice(0,480)+'\u2026';
+    var voted=state.voted[m.id]||(state.liked[m.id]?'up':null);
     var h='<div class="turn'+(party?' party':'')+(first?' first gap':'')+'">';
     h+='<a class="avatar" style="background:'+color+'" href="'+href+'"'+ext+' title="'+attr(sender||'sender unknown')+'">'+esc(initials(sender))+'</a>';
     h+='<div class="stack">';
     if(first){h+='<div class="who-line"><span>'+esc(name)+'</span>';
       if(multi&&m.address!==sender){h+='<span class="to">\u2192 '+esc(partyName(partyOf(m.address),m.address))+'</span>';}
       h+='</div>';}
+    h+='<div class="bubble-wrap">';
     h+='<button class="bubble'+(m.is_mempool?' mem':'')+'" data-action="open-msg" data-txid="'+attr(m.txid)+'">'+esc(text)+(long?'<span class="readmore">read full message \u2192</span>':'')+'</button>';
+    h+='<div class="msg-actions">';
+    h+='<button class="vote-act up'+(voted==='up'?' voted':'')+'" data-action="vote" data-dir="up" data-id="'+m.id+'" title="Upvote (mines PoW nonce)">▲</button>';
+    h+='<span class="vote-count" data-lc="'+m.id+'">'+(m.likes||0)+'</span>';
+    h+='<button class="vote-act down'+(voted==='down'?' voted':'')+'" data-action="vote" data-dir="down" data-id="'+m.id+'" title="Downvote">▼</button>';
+    h+='</div></div>';
     h+='<div class="bubble-meta">';
     if(m.category)h+='<span class="cat'+(HOSTILE[m.category]?' sig':'')+'">'+esc(m.category)+'</span>';
     if(m.is_mempool)h+='<span class="st mem">\u25f7 in mempool</span>';
     if(m.dup_count>1)h+='<span title="Same message broadcast in '+m.dup_count+' separate transactions">\u00d7'+m.dup_count+' txs</span>';
     h+='<span>'+esc(clock(tsOf(m)))+'</span>';
-    if(m.likes)h+='<span>\u2665 '+m.likes+'</span>';
+    if(m.likes)h+='<span class="bubble-likes" data-lc="'+m.id+'">\u2665 '+m.likes+'</span>';
     h+='</div></div></div>';
     return h;
   }
@@ -641,16 +676,21 @@ ${ogMeta}
       h+=bubbleHTML(m,first,multi);
       lastSender=sender;lastTs=ts;
     });
-    h+='</div></div><p class="caption">Every bubble is an OP_RETURN output etched into Bitcoin. Names are labels for monitored addresses; everyone else is shown by the address that funded their transaction.</p></section>';
+    h+='</div>';
+    h+='<div class="room-foot"><span class="room-status"><span class="room-status-dot"></span>Live from Bitcoin blockchain & mempool</span><a class="room-etch-btn" href="/guide">Etch a reply on Bitcoin \u2197</a></div>';
+    h+='</div><p class="caption">Every bubble is an OP_RETURN output etched into Bitcoin. Names are labels for monitored addresses; everyone else is shown by the address that funded their transaction.</p></section>';
     app.innerHTML=h;
-    var sc=state.chatScroll;state.chatScroll=null;
-    if(sc&&sc.keep!=null){window.scrollTo(0,document.body.scrollHeight-sc.keep);}
-    else{window.scrollTo(0,document.body.scrollHeight);}
+    var logEl=document.getElementById('room-log');
+    if(logEl){
+      var sc=state.chatScroll;state.chatScroll=null;
+      if(sc&&sc.keep!=null){logEl.scrollTop=logEl.scrollHeight-sc.keep;}
+      else{logEl.scrollTop=logEl.scrollHeight;}
+    }
   }
 
   function renderDetail(){
     var m=state.cache[state.detailTx];if(!m){go('feed');return;}
-    var liked=!!state.liked[m.id];var hostile=HOSTILE[m.category];
+    var voted=state.voted[m.id]||(state.liked[m.id]?'up':null);var hostile=HOSTILE[m.category];
     var h='<section class="wrap wrap-card"><button class="back" data-action="back">\\u2190 back</button>';
     h+='<div class="artifact"><div class="bar"><span>\\u25c6 OP_RETURN \\u00b7 IMMUTABLE RECORD</span><span class="bar-right"><span class="st '+(m.is_mempool?'mem':'conf')+'">'+(m.is_mempool?'\\u25f7 IN MEMPOOL':'\\u2713 CONFIRMED')+'</span><button class="bar-x" data-action="back" aria-label="close" title="close">\\u2715</button></span></div>';
     h+='<div class="pad"><span class="cat'+(hostile?' sig':'')+'">'+esc(m.category||'Unclassified')+'</span>';
@@ -669,7 +709,9 @@ ${ogMeta}
     h+='<div class="cell"><div class="k">Total fee</div><div class="v">'+(m.fee_sats!=null?('<span style="white-space:nowrap" title="'+m.fee_sats.toLocaleString()+' sats">'+fmtSats(m.fee_sats)+' sats</span> <span id="feeusd" style="color:var(--fg4);white-space:nowrap;font-size:11px"></span>'):'\\u2014')+'</div></div>';
     h+=cell('Block',m.is_mempool?'in mempool':(m.block_time!=null?new Date(m.block_time*1000).toISOString().slice(0,10):'\\u2014'));
     h+='</div></div>';
-    h+='<div class="actions"><button class="act act-like'+(liked?' liked':'')+'" data-action="like" data-id="'+m.id+'">\\u2665 <span data-lc="'+m.id+'">'+m.likes+'</span> likes</button>';
+    h+='<div class="actions">';
+    h+='<button class="act act-vote act-up'+(voted==='up'?' voted':'')+'" data-action="vote" data-dir="up" data-id="'+m.id+'" title="Upvote (mines PoW nonce)">▲ Upvote <span data-lc="'+m.id+'">'+(m.likes||0)+'</span></button>';
+    h+='<button class="act act-vote act-down'+(voted==='down'?' voted':'')+'" data-action="vote" data-dir="down" data-id="'+m.id+'" title="Downvote">▼ Downvote</button>';
     h+='<button class="act" data-action="copy" data-copy="'+attr(m.address)+'">Copy address \\u29c9</button>';
     h+='<a class="act" href="https://mempool.space/tx/'+attr(m.txid)+'" target="_blank" rel="noopener">View on mempool \\u2197</a>';
     if(m.collection_id){h+='<a class="act" href="/c/'+attr(colSlug(colById(m.collection_id)))+'/chat">Full conversation \ud83d\udcac</a>';}
@@ -842,10 +884,11 @@ ${ogMeta}
     if(a==='sort'){var s=t.getAttribute('data-sort');history.replaceState({},'',location.pathname+(s===defaultSort(currentRoute())?'':'?sort='+s));route();return;}
     if(a==='more'){loadFeed(true).then(render);return;}
     if(a==='view'){navigate(t.getAttribute('data-view')==='chat'?chatPath():feedPath());return;}
-    if(a==='chat-earlier'){state.chatScroll={keep:document.body.scrollHeight-window.scrollY};loadChat(true).then(render);return;}
+    if(a==='chat-earlier'){var log=document.getElementById('room-log');state.chatScroll={keep:log?log.scrollHeight-log.scrollTop:0};loadChat(true).then(render);return;}
     if(a==='share-room'){shareRoom(t);return;}
     if(a==='open-msg')return go('detail',t.getAttribute('data-txid'));
-    if(a==='like'){like(Number(t.getAttribute('data-id')),t);return;}
+    if(a==='vote'){vote(Number(t.getAttribute('data-id')),t.getAttribute('data-dir')==='down'?'down':'up');return;}
+    if(a==='like'){vote(Number(t.getAttribute('data-id')),'up');return;}
     if(a==='copy'){copy(t.getAttribute('data-copy'),t);return;}
     if(a==='share'){share(t);return;}
     if(a==='suggest-open'){openSuggest(t.getAttribute('data-col'));return;}
@@ -874,25 +917,44 @@ ${ogMeta}
     });
   }
   function setMineStatus(n){var st=document.getElementById('status');if(st)st.textContent='\\u26cf mining proof-of-work\\u2026 '+n.toLocaleString()+' hashes tried ('+POW_BITS+'-bit target)';}
-  function markMining(id){
-    var btns=document.querySelectorAll('[data-action="like"][data-id="'+id+'"]');
-    for(var i=0;i<btns.length;i++){btns[i].classList.add('mining');btns[i].innerHTML='\\u26cf';}
+  function markMining(id,dir){
+    var btns=document.querySelectorAll('[data-id="'+id+'"][data-action="vote"], [data-id="'+id+'"][data-action="like"]');
+    for(var i=0;i<btns.length;i++){
+      var b=btns[i];
+      if(!dir||b.getAttribute('data-dir')===dir||b.getAttribute('data-action')==='like'){
+        b.classList.add('mining');
+        b.innerHTML='\\u26cf';
+      }
+    }
     setMineStatus(0);
   }
-  function like(id){
-    if(state.liked[id]||state.mining[id])return;
-    state.mining[id]=true;markMining(id);
+  function vote(id,dir){
+    dir=dir==='down'?'down':'up';
+    if(state.voted[id]||state.mining[id])return;
+    state.mining[id]=true;markMining(id,dir);
     mineAsync(String(id),setMineStatus).then(function(pow){
-      return fetchJSON('/api/like',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message_id:id,nonce:pow.nonce,pow:pow.hash})});
+      return fetchJSON('/api/vote',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message_id:id,nonce:pow.nonce,pow:pow.hash,direction:dir})});
     }).then(function(res){
       state.mining[id]=false;
       if((res.d&&res.d.ok)||res.status===409){
-        state.liked[id]=true;localStorage.setItem('opreturn_liked',JSON.stringify(state.liked));
-        if(typeof res.d.likes==='number'){if(state.cache[id])state.cache[id].likes=res.d.likes;state.feed.forEach(function(m){if(m.id===id)m.likes=res.d.likes;});}
+        state.voted[id]=dir;
+        if(dir==='up')state.liked[id]=true;
+        try{
+          localStorage.setItem('opreturn_voted',JSON.stringify(state.voted));
+          localStorage.setItem('opreturn_liked',JSON.stringify(state.liked));
+        }catch(e){}
+        if(res.d&&typeof res.d.likes==='number'){
+          if(state.cache[id])state.cache[id].likes=res.d.likes;
+          state.feed.forEach(function(m){if(m.id===id)m.likes=res.d.likes;});
+          if(state.chat&&state.chat.messages){
+            state.chat.messages.forEach(function(m){if(m.id===id)m.likes=res.d.likes;});
+          }
+        }
       }
       render();
     }).catch(function(){state.mining[id]=false;render();});
   }
+  function like(id){vote(id,'up');}
   function copy(txt,btn){try{navigator.clipboard.writeText(txt);var old=btn.textContent;btn.textContent='copied \\u2713';setTimeout(function(){render();},1100);}catch(e){}}
   function shareRoom(btn){try{navigator.clipboard.writeText(location.href);btn.textContent='\u2713 Link copied';setTimeout(function(){btn.textContent='Share room \u2197';},1600);}catch(e){}}
   function share(btn){try{navigator.clipboard.writeText(location.href);btn.textContent='\u2713 Link copied';setTimeout(function(){btn.textContent='Share this \u2197';},1600);}catch(e){}}

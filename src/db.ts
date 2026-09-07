@@ -537,10 +537,16 @@ export async function getVote(db: D1Database, messageId: number, voterHash: stri
   return Boolean(row);
 }
 
-export async function addVote(db: D1Database, messageId: number, voterHash: string): Promise<void> {
+export async function addVote(
+  db: D1Database,
+  messageId: number,
+  voterHash: string,
+  direction: 'up' | 'down' = 'up'
+): Promise<void> {
+  const delta = direction === 'down' ? -1 : 1;
   await db.batch([
     db.prepare('INSERT INTO votes (message_id, voter_hash) VALUES (?, ?)').bind(messageId, voterHash),
-    db.prepare('UPDATE messages SET likes = likes + 1 WHERE id = ?').bind(messageId),
+    db.prepare('UPDATE messages SET likes = MAX(0, likes + ?) WHERE id = ?').bind(delta, messageId),
   ]);
 }
 

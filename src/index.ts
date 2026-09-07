@@ -164,9 +164,9 @@ app.get('/api/message/:key', async (c) => {
   return c.json(msg);
 });
 
-app.post('/api/like', async (c) => {
+const handleVote = async (c: Context<Bindings>) => {
   const body = (await c.req.json().catch(() => null)) as
-    | { message_id?: unknown; nonce?: unknown }
+    | { message_id?: unknown; nonce?: unknown; direction?: unknown }
     | null;
   const messageId = Number(body?.message_id);
   if (!Number.isInteger(messageId) || messageId <= 0) {
@@ -197,10 +197,18 @@ app.post('/api/like', async (c) => {
     return jsonError('already voted', 409);
   }
 
-  await db.addVote(c.env.DB, messageId, voterHash);
+  const dir = body?.direction === 'down' ? 'down' : 'up';
+  await db.addVote(c.env.DB, messageId, voterHash, dir);
   const updated = await db.getMessage(c.env.DB, messageId);
-  return c.json({ ok: true, likes: updated?.likes ?? 0 });
-});
+  return c.json(
+    { ok: true, likes: updated?.likes ?? 0, direction: dir },
+    200,
+    { 'access-control-allow-origin': '*' }
+  );
+};
+
+app.post('/api/like', handleVote);
+app.post('/api/vote', handleVote);
 
 // Public address suggestions. Untrusted input is validated + proof-of-worked,
 // then queued as `pending` for admin review — never written into `addresses`
