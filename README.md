@@ -83,7 +83,19 @@ npm run deploy              # push worker + cron trigger
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
-| GET | `/` | – | Web UI |
+| GET | `/` | – | Web UI (SSR + dynamic client hydration) |
+| GET | `/robots.txt` | – | Search & AI crawler directives (RFC 9309 + Content-Signal) |
+| GET | `/sitemap.xml` | – | Dynamic XML sitemap covering collections, categories, addresses, and messages |
+| GET | `/llms.txt` | – | LLM Context file (summary, protocol definitions, collections, API) |
+| GET | `/llms-full.txt` | – | Full LLM reference dossier with CLI examples and address directory |
+| GET | `/.well-known/api-catalog` | – | RFC 9727 API Catalog Linkset (`application/linkset+json`) |
+| GET | `/api/openapi.json` | – | OpenAPI 3.0 specification for machine discovery |
+| GET | `/auth.md` | – | Agent authorization & authentication discovery policy |
+| GET | `/.well-known/oauth-protected-resource` | – | RFC 9728 OAuth 2.0 Protected Resource Metadata |
+| GET | `/.well-known/oauth-authorization-server` | – | RFC 8414 OAuth 2.0 Authorization Server Metadata |
+| GET | `/.well-known/agent-card.json` | – | A2A Protocol Agent Card |
+| GET | `/.well-known/mcp/server-card.json` | – | Model Context Protocol (MCP SEP-1649) Server Card |
+| ALL | `/mcp` | – | MCP JSON-RPC 2.0 tool execution endpoint (`search_messages`, `get_collections`, `get_message`, `get_etch_guide`) |
 | GET | `/api/collections` | – | Collections with address/message counts |
 | GET | `/api/messages?collection_id=&sort=hot\|new&limit=&before=` | – | Message feed |
 | POST | `/api/like` | – | `{ "message_id": 1, "nonce": <mined> }` — requires a 16-bit PoW nonce + one vote per visitor |

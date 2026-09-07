@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import seedCollections from '../collections.json';
 import { categoryFromSlug, categorySlug } from './classify';
 import { classifyOnePass } from './cron';
 import { runCron } from './cron';
@@ -18,10 +19,46 @@ import {
   pngResponse,
   svgToPng,
 } from './og';
+import {
+  buildBreadcrumbSchema,
+  buildCollectionSchema,
+  buildFaqSchema,
+  buildGuideHowToSchema,
+  buildMessageSchema,
+  buildWebSiteGraph,
+  generateAgentCardJson,
+  generateApiCatalogJson,
+  generateAuthMd,
+  generateLlmsFullTxt,
+  generateLlmsTxt,
+  generateMcpServerCardJson,
+  generateOAuthProtectedResourceJson,
+  generateOAuthServerJson,
+  generateOpenApiJson,
+  generateRobotsTxt,
+  generateSitemapXml,
+  renderAddressMarkdown,
+  renderAddressSsr,
+  renderCategoryMarkdown,
+  renderCategorySsr,
+  renderCollectionMarkdown,
+  renderCollectionSsr,
+  renderCollectionsMarkdown,
+  renderCollectionsSsr,
+  renderFeedMarkdown,
+  renderFeedSsr,
+  renderGuideMarkdown,
+  renderGuideSsr,
+  renderLandingMarkdown,
+  renderLandingSsr,
+  renderMessageMarkdown,
+  renderMessageSsr,
+  renderNotFoundSsr,
+} from './seo';
 import { ensureSeeded, slugify } from './seed';
 import type { ChatCardData } from './og';
 import type { ChatMessage, CollectionWithStats, Env } from './types';
-import { renderIndex, type PageMeta } from './ui';
+import { renderIndex } from './ui';
 
 type Bindings = { Bindings: Env };
 
@@ -63,8 +100,6 @@ function hasLeadingZeroBits(hex: string, bits: number): boolean {
 // ---------------------------------------------------------------------------
 // Public routes
 // ---------------------------------------------------------------------------
-
-app.get('/', (c) => c.html(renderIndex()));
 
 app.get('/api/health', (c) => c.json({ ok: true, time: new Date().toISOString() }));
 
@@ -367,63 +402,476 @@ async function collectionMap(db_inst: D1Database): Promise<Map<number, Collectio
   return new Map(cols.map((c) => [c.id, c]));
 }
 
-function page(c: Context<Bindings>, meta?: PageMeta): Response {
-  return c.html(renderIndex(meta));
+// ---------------------------------------------------------------------------
+// Search Engine & Generative AI Discovery Directives
+// ---------------------------------------------------------------------------
+
+app.get('/robots.txt', (c) => {
+  const origin = originOf(c);
+  return new Response(generateRobotsTxt(origin), {
+    headers: {
+      'content-type': 'text/plain; charset=utf-8',
+      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+    },
+  });
+});
+
+app.get('/llms.txt', (c) => {
+  const origin = originOf(c);
+  return new Response(generateLlmsTxt(origin), {
+    headers: {
+      'content-type': 'text/markdown; charset=utf-8',
+      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+    },
+  });
+});
+
+app.get('/llms-full.txt', async (c) => {
+  const origin = originOf(c);
+  const [cols, addrs] = await Promise.all([
+    db.listCollections(c.env.DB).catch(() => []),
+    db.listAddresses(c.env.DB).catch(() => []),
+  ]);
+  const finalCols = cols.length ? cols : (seedCollections as unknown as CollectionWithStats[]);
+  return new Response(generateLlmsFullTxt(origin, finalCols, addrs), {
+    headers: {
+      'content-type': 'text/markdown; charset=utf-8',
+      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+    },
+  });
+});
+
+app.get('/sitemap.xml', async (c) => {
+  const origin = originOf(c);
+  const [cols, addrs, feedRes] = await Promise.all([
+    db.listCollections(c.env.DB).catch(() => []),
+    db.listAddresses(c.env.DB).catch(() => []),
+    db.getMessages(c.env.DB, { sort: 'hot', limit: 100 }).catch(() => ({ messages: [] })),
+  ]);
+  const finalCols = cols.length ? cols : (seedCollections as unknown as CollectionWithStats[]);
+  const topMsgs = feedRes.messages.map((m) => ({
+    txid: m.txid,
+    block_time: m.block_time,
+    created_at: m.created_at,
+  }));
+  const xml = generateSitemapXml(origin, finalCols, addrs, topMsgs);
+  return new Response(xml, {
+    headers: {
+      'content-type': 'application/xml; charset=utf-8',
+      'cache-control': 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400',
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Markdown for Agents & Discovery Helpers
+// ---------------------------------------------------------------------------
+
+function wantsMarkdown(c: Context): boolean {
+  const accept = c.req.header('accept') || '';
+  return accept.includes('text/markdown');
 }
 
-app.get('/', (c) =>
-  page(c, {
-    title: 'The Permanent Record \u2014 messages inside Bitcoin',
-    description:
-      'People are leaving messages inside Bitcoin. Forever. Threats, confessions, prayers, ads, haiku \u2014 archived live from the chain.',
-    url: originOf(c) + '/',
-    image: originOf(c) + '/og/default.png',
-  })
-);
+function linkHeaders(origin: string): string {
+  return [
+    `<${origin}/.well-known/api-catalog>; rel="api-catalog"`,
+    `<${origin}/api/openapi.json>; rel="service-desc"; type="application/vnd.oai.openapi+json;version=3.0"`,
+    `<${origin}/guide>; rel="service-doc"`,
+    `<${origin}/.well-known/agent-card.json>; rel="describedby"; type="application/json"`,
+    `<${origin}/auth.md>; rel="authorizationserver"`,
+  ].join(', ');
+}
 
-app.get('/feed', (c) =>
-  page(c, {
-    title: 'All transmissions \u2014 The Permanent Record',
-    description: 'Every monitored OP_RETURN message, live from the chain.',
-    url: originOf(c) + '/feed',
-    image: originOf(c) + '/og/default.png',
-  })
-);
+function applyDiscoveryHeaders(c: Context, origin: string): void {
+  c.header('Link', linkHeaders(origin));
+  c.header('Content-Signal', 'search=yes, ai-train=yes, ai-input=yes');
+  c.header('Vary', 'Accept');
+}
 
-app.get('/collections', (c) =>
-  page(c, {
-    title: 'Collections \u2014 The Permanent Record',
-    description: 'Addresses grouped by the phenomenon behind them.',
-    url: originOf(c) + '/collections',
-    image: originOf(c) + '/og/default.png',
-  })
-);
+function markdownResponse(
+  content: string,
+  origin: string,
+  cacheControl = 'public, max-age=60, s-maxage=300, stale-while-revalidate=86400'
+): Response {
+  return new Response(content, {
+    headers: {
+      'content-type': 'text/markdown; charset=utf-8',
+      'cache-control': cacheControl,
+      'Link': linkHeaders(origin),
+      'Content-Signal': 'search=yes, ai-train=yes, ai-input=yes',
+      'Vary': 'Accept',
+    },
+  });
+}
 
-app.get('/guide', (c) =>
-  page(c, {
-    title: 'Field Manual \u2014 etch a message onto Bitcoin',
-    description: 'How to attach an OP_RETURN output and leave a permanent mark.',
-    url: originOf(c) + '/guide',
-    image: originOf(c) + '/og/default.png',
-  })
-);
+// ---------------------------------------------------------------------------
+// RFC 9727 API Catalog & OpenAPI
+// ---------------------------------------------------------------------------
+
+app.get('/.well-known/api-catalog', (c) => {
+  const origin = originOf(c);
+  return new Response(JSON.stringify(generateApiCatalogJson(origin), null, 2), {
+    headers: {
+      'content-type': 'application/linkset+json; charset=utf-8',
+      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+    },
+  });
+});
+
+app.get('/api/openapi.json', (c) => {
+  const origin = originOf(c);
+  return new Response(JSON.stringify(generateOpenApiJson(origin), null, 2), {
+    headers: {
+      'content-type': 'application/vnd.oai.openapi+json;version=3.0; charset=utf-8',
+      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Agent Auth & Discovery (RFC 9728, RFC 8414, Auth.md)
+// ---------------------------------------------------------------------------
+
+app.get('/auth.md', (c) => {
+  const origin = originOf(c);
+  return new Response(generateAuthMd(origin), {
+    headers: {
+      'content-type': 'text/markdown; charset=utf-8',
+      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+    },
+  });
+});
+
+app.get('/.well-known/oauth-protected-resource', (c) => {
+  const origin = originOf(c);
+  return new Response(JSON.stringify(generateOAuthProtectedResourceJson(origin), null, 2), {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+    },
+  });
+});
+
+const handleOAuthServer = (c: Context<Bindings>) => {
+  const origin = originOf(c);
+  return new Response(JSON.stringify(generateOAuthServerJson(origin), null, 2), {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+    },
+  });
+};
+
+app.get('/.well-known/oauth-authorization-server', handleOAuthServer);
+app.get('/.well-known/openid-configuration', handleOAuthServer);
+
+app.get('/.well-known/jwks.json', () => {
+  return new Response(JSON.stringify({ keys: [] }, null, 2), {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Agent-to-Agent (A2A) & Model Context Protocol (MCP - SEP-1649)
+// ---------------------------------------------------------------------------
+
+app.get('/.well-known/agent-card.json', (c) => {
+  const origin = originOf(c);
+  return new Response(JSON.stringify(generateAgentCardJson(origin), null, 2), {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+    },
+  });
+});
+
+app.get('/.well-known/mcp/server-card.json', (c) => {
+  const origin = originOf(c);
+  return new Response(JSON.stringify(generateMcpServerCardJson(origin), null, 2), {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
+    },
+  });
+});
+
+// MCP Endpoint: Info and JSON-RPC 2.0 tool execution
+app.all('/mcp', async (c) => {
+  const origin = originOf(c);
+  const card = generateMcpServerCardJson(origin);
+
+  if (c.req.method === 'GET') {
+    return c.json(card);
+  }
+
+  if (c.req.method === 'POST') {
+    let body: any = {};
+    try {
+      body = await c.req.json();
+    } catch {
+      return jsonError('Invalid JSON body', 400);
+    }
+
+    const { id, method, params } = body;
+    if (method === 'initialize') {
+      return c.json({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: card.capabilities,
+          serverInfo: card.serverInfo,
+        },
+      });
+    }
+
+    if (method === 'tools/list') {
+      return c.json({
+        jsonrpc: '2.0',
+        id,
+        result: { tools: card.tools },
+      });
+    }
+
+    if (method === 'tools/call') {
+      const toolName = params?.name;
+      const args = params?.arguments || {};
+
+      if (toolName === 'get_collections') {
+        const cols = await db.listCollections(c.env.DB).catch(() => []);
+        return c.json({
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [{ type: 'text', text: JSON.stringify(cols, null, 2) }],
+          },
+        });
+      }
+
+      if (toolName === 'search_messages') {
+        const res = await db.getMessages(c.env.DB, {
+          collectionId: args.collection_id ? Number(args.collection_id) : undefined,
+          address: args.address ? String(args.address) : undefined,
+          category: args.category ? String(args.category) : undefined,
+          sort: args.sort === 'new' ? 'new' : 'hot',
+          limit: Math.min(Number(args.limit) || 20, 100),
+        }).catch(() => ({ messages: [] }));
+        return c.json({
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [{ type: 'text', text: JSON.stringify(res, null, 2) }],
+          },
+        });
+      }
+
+      if (toolName === 'get_message') {
+        const key = String(args.key || '');
+        const msg = await db.getMessageByTxid(c.env.DB, key).catch(() => null);
+        return c.json({
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [{ type: 'text', text: msg ? JSON.stringify(msg, null, 2) : 'Message not found' }],
+            isError: !msg,
+          },
+        });
+      }
+
+      if (toolName === 'get_etch_guide') {
+        const guide = renderGuideMarkdown(origin);
+        return c.json({
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [{ type: 'text', text: guide }],
+          },
+        });
+      }
+
+      return c.json({
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32601, message: `Tool '${toolName}' not found` },
+      });
+    }
+
+    return c.json({
+      jsonrpc: '2.0',
+      id,
+      result: { ok: true, server: card.serverInfo },
+    });
+  }
+
+  return jsonError('Method Not Allowed', 405);
+});
+
+// ---------------------------------------------------------------------------
+// Public Content Pages (SSR + SEO + Structured Data Graph + Agent Markdown)
+// ---------------------------------------------------------------------------
+
+app.get('/', async (c) => {
+  const origin = originOf(c);
+  const [cols, addrs, feedRes] = await Promise.all([
+    db.listCollections(c.env.DB).catch(() => []),
+    db.listAddresses(c.env.DB).catch(() => []),
+    db.getMessages(c.env.DB, { sort: 'hot', limit: 1 }).catch(() => ({ messages: [] })),
+  ]);
+  const colsCount = cols.length || seedCollections.length;
+  const addrsCount =
+    addrs.length ||
+    seedCollections.reduce((sum, col) => sum + (col.addresses?.length || 0), 0);
+  const feat = feedRes.messages[0] || null;
+  const cmap = new Map(cols.map((col) => [col.id, col.name]));
+  const colName = feat?.collection_id ? cmap.get(feat.collection_id) : undefined;
+
+  if (wantsMarkdown(c)) {
+    return markdownResponse(
+      renderLandingMarkdown(origin, colsCount, addrsCount, feat, colName),
+      origin
+    );
+  }
+
+  applyDiscoveryHeaders(c, origin);
+  const graph = [...buildWebSiteGraph(origin), buildFaqSchema()];
+  const initialHtml = renderLandingSsr(colsCount, addrsCount, feat, colName);
+
+  return c.html(
+    renderIndex({
+      title: 'The Permanent Record \u2014 messages inside Bitcoin',
+      description:
+        'People are leaving messages inside Bitcoin. Forever. Threats, confessions, prayers, ads, haiku \u2014 archived live from the chain.',
+      url: origin + '/',
+      image: origin + '/og/default.png',
+      jsonLd: { '@context': 'https://schema.org', '@graph': graph },
+      initialHtml,
+    })
+  );
+});
+
+app.get('/feed', (c) => {
+  const origin = originOf(c);
+  if (wantsMarkdown(c)) {
+    return markdownResponse(renderFeedMarkdown(origin), origin);
+  }
+  applyDiscoveryHeaders(c, origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Transmissions', path: '/feed' },
+  ]);
+  return c.html(
+    renderIndex({
+      title: 'All transmissions \u2014 The Permanent Record',
+      description: 'Every monitored OP_RETURN message, live from the Bitcoin chain.',
+      url: origin + '/feed',
+      image: origin + '/og/default.png',
+      jsonLd: crumbs,
+      initialHtml: renderFeedSsr(),
+    })
+  );
+});
+
+app.get('/collections', async (c) => {
+  const origin = originOf(c);
+  const cols = await db.listCollections(c.env.DB).catch(() => []);
+  const finalCols = cols.length ? cols : (seedCollections as unknown as CollectionWithStats[]);
+  if (wantsMarkdown(c)) {
+    return markdownResponse(renderCollectionsMarkdown(origin, finalCols), origin);
+  }
+  applyDiscoveryHeaders(c, origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Collections', path: '/collections' },
+  ]);
+  return c.html(
+    renderIndex({
+      title: 'Collections \u2014 The Permanent Record',
+      description: 'Addresses grouped by the phenomenon behind them.',
+      url: origin + '/collections',
+      image: origin + '/og/default.png',
+      jsonLd: crumbs,
+      initialHtml: renderCollectionsSsr(finalCols),
+    })
+  );
+});
+
+app.get('/guide', (c) => {
+  const origin = originOf(c);
+  if (wantsMarkdown(c)) {
+    return markdownResponse(renderGuideMarkdown(origin), origin);
+  }
+  applyDiscoveryHeaders(c, origin);
+  const howTo = buildGuideHowToSchema(origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Field Manual', path: '/guide' },
+  ]);
+  return c.html(
+    renderIndex({
+      title: 'Field Manual \u2014 etch a message onto Bitcoin',
+      description: 'How to attach an OP_RETURN output and leave a permanent mark.',
+      url: origin + '/guide',
+      image: origin + '/og/default.png',
+      jsonLd: { '@context': 'https://schema.org', '@graph': [howTo, crumbs] },
+      initialHtml: renderGuideSsr(),
+    })
+  );
+});
 
 app.get('/m/:txid', async (c) => {
   const txid = c.req.param('txid')!;
   const msg = await db.getMessageByTxid(c.env.DB, txid);
   const origin = originOf(c);
   if (!msg) {
-    return page(c, { title: 'Message not found', url: `${origin}/m/${txid}`, image: `${origin}/og/default.png` });
+    if (wantsMarkdown(c)) {
+      return new Response('# Message Not Found\n\nTransaction was not found in the monitored archive.', {
+        status: 404,
+        headers: { 'content-type': 'text/markdown; charset=utf-8', Vary: 'Accept' },
+      });
+    }
+    return c.html(
+      renderIndex({
+        title: 'Message not found \u2014 The Permanent Record',
+        description: 'Transaction was not found in the monitored archive.',
+        url: `${origin}/m/${txid}`,
+        image: `${origin}/og/default.png`,
+        noindex: true,
+        initialHtml: renderNotFoundSsr(
+          'Message not found',
+          `Transaction ${txid} was not found in the monitored archive.`
+        ),
+      }),
+      404
+    );
   }
   const cmap = await collectionMap(c.env.DB);
   const colName = msg.collection_id != null ? cmap.get(msg.collection_id)?.name ?? '' : '';
-  return page(c, {
-    title: `\u201c${clamp(msg.content || 'OP_RETURN', 64)}\u201d`,
-    description: `${colName || 'Untracked address'} \u00b7 ${shortAddr(msg.address)} \u00b7 ${msg.likes} likes \u00b7 The Permanent Record`,
-    url: `${origin}/m/${txid}`,
-    image: `${origin}/og/message/${txid}.png`,
-    type: 'article',
-  });
+
+  if (wantsMarkdown(c)) {
+    return markdownResponse(renderMessageMarkdown(origin, msg, colName), origin);
+  }
+
+  applyDiscoveryHeaders(c, origin);
+  const postSchema = buildMessageSchema(origin, msg, colName);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Transmissions', path: '/feed' },
+    { name: `\u201c${clamp(msg.content || 'OP_RETURN', 24)}\u201d`, path: `/m/${txid}` },
+  ]);
+  return c.html(
+    renderIndex({
+      title: `\u201c${clamp(msg.content || 'OP_RETURN', 64)}\u201d`,
+      description: `${colName || 'Untracked address'} \u00b7 ${shortAddr(msg.address)} \u00b7 ${msg.likes} likes \u00b7 The Permanent Record`,
+      url: `${origin}/m/${txid}`,
+      image: `${origin}/og/message/${txid}.png`,
+      type: 'article',
+      jsonLd: { '@context': 'https://schema.org', '@graph': [postSchema, crumbs] },
+      initialHtml: renderMessageSsr(msg, colName),
+    })
+  );
 });
 
 app.get('/c/:slug', async (c) => {
@@ -431,14 +879,52 @@ app.get('/c/:slug', async (c) => {
   const col = await db.getCollectionBySlug(c.env.DB, slug);
   const origin = originOf(c);
   if (!col) {
-    return page(c, { title: 'Collection not found', url: `${origin}/c/${slug}`, image: `${origin}/og/default.png` });
+    if (wantsMarkdown(c)) {
+      return new Response(`# Collection Not Found\n\nCollection "${slug}" was not found in the archive.`, {
+        status: 404,
+        headers: { 'content-type': 'text/markdown; charset=utf-8', Vary: 'Accept' },
+      });
+    }
+    return c.html(
+      renderIndex({
+        title: 'Collection not found \u2014 The Permanent Record',
+        description: 'This collection was not found in the archive.',
+        url: `${origin}/c/${slug}`,
+        image: `${origin}/og/default.png`,
+        noindex: true,
+        initialHtml: renderNotFoundSsr(
+          'Collection not found',
+          `The collection slug \u201c${slug}\u201d does not exist in the archive.`
+        ),
+      }),
+      404
+    );
   }
-  return page(c, {
-    title: col.name,
-    description: `${clamp(col.description || 'Addresses monitored on-chain.', 120)} \u00b7 ${col.address_count} addresses \u00b7 ${col.message_count} messages`,
-    url: `${origin}/c/${slug}`,
-    image: `${origin}/og/collection/${slug}.png`,
-  });
+  const allAddrs = await db.listAddresses(c.env.DB).catch(() => []);
+  const colAddrs = allAddrs.filter((a) => a.collection_id === col.id);
+
+  if (wantsMarkdown(c)) {
+    return markdownResponse(renderCollectionMarkdown(origin, col, colAddrs), origin);
+  }
+
+  applyDiscoveryHeaders(c, origin);
+  const colSchema = buildCollectionSchema(origin, col);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Collections', path: '/collections' },
+    { name: col.name, path: `/c/${slug}` },
+  ]);
+
+  return c.html(
+    renderIndex({
+      title: col.name,
+      description: `${clamp(col.description || 'Addresses monitored on-chain.', 120)} \u00b7 ${col.address_count} addresses \u00b7 ${col.message_count} messages`,
+      url: `${origin}/c/${slug}`,
+      image: `${origin}/og/collection/${slug}.png`,
+      jsonLd: { '@context': 'https://schema.org', '@graph': [colSchema, crumbs] },
+      initialHtml: renderCollectionSsr(col, colAddrs),
+    })
+  );
 });
 
 app.get('/c/:slug/chat', async (c) => {
@@ -446,36 +932,100 @@ app.get('/c/:slug/chat', async (c) => {
   const col = await db.getCollectionBySlug(c.env.DB, slug);
   const origin = originOf(c);
   if (!col) {
-    return page(c, { title: 'Collection not found', url: `${origin}/c/${slug}/chat`, image: `${origin}/og/default.png` });
+    if (wantsMarkdown(c)) {
+      return new Response(`# Collection Not Found\n\nCollection "${slug}" was not found in the archive.`, {
+        status: 404,
+        headers: { 'content-type': 'text/markdown; charset=utf-8', Vary: 'Accept' },
+      });
+    }
+    return c.html(
+      renderIndex({
+        title: 'Collection not found \u2014 The Permanent Record',
+        description: 'This collection was not found in the archive.',
+        url: `${origin}/c/${slug}/chat`,
+        image: `${origin}/og/default.png`,
+        noindex: true,
+        initialHtml: renderNotFoundSsr(
+          'Collection not found',
+          `The collection slug \u201c${slug}\u201d does not exist in the archive.`
+        ),
+      }),
+      404
+    );
   }
-  return page(c, {
-    title: `${col.name} \u2014 chat room`,
-    description: `The whole on-chain conversation, oldest to newest: ${col.message_count} OP_RETURN messages between ${col.address_count} monitored addresses and everyone writing to them.`,
-    url: `${origin}/c/${slug}/chat`,
-    image: `${origin}/og/chat/collection/${slug}.png`,
-  });
+  if (wantsMarkdown(c)) {
+    return markdownResponse(
+      `# ${col.name} — Chat Room\n\n${col.description || ''}\n\n* Messages: ${col.message_count}\n* Addresses: ${col.address_count}\n* Chat API: ${origin}/api/chat?collection_id=${col.id}\n`,
+      origin
+    );
+  }
+  applyDiscoveryHeaders(c, origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Collections', path: '/collections' },
+    { name: col.name, path: `/c/${slug}` },
+    { name: 'Chat Room', path: `/c/${slug}/chat` },
+  ]);
+  return c.html(
+    renderIndex({
+      title: `${col.name} \u2014 chat room`,
+      description: `The whole on-chain conversation, oldest to newest: ${col.message_count} OP_RETURN messages between ${col.address_count} monitored addresses and everyone writing to them.`,
+      url: `${origin}/c/${slug}/chat`,
+      image: `${origin}/og/chat/collection/${slug}.png`,
+      jsonLd: crumbs,
+      initialHtml: renderCollectionSsr(col, []),
+    })
+  );
 });
 
 app.get('/a/:address', (c) => {
   const address = c.req.param('address');
   const origin = originOf(c);
-  return page(c, {
-    title: `Address record \u2014 ${address}`,
-    description: `Every archived OP_RETURN message sent to ${address}.`,
-    url: `${origin}/a/${address}`,
-    image: `${origin}/og/address/${encodeURIComponent(address)}.png`,
-  });
+  if (wantsMarkdown(c)) {
+    return markdownResponse(renderAddressMarkdown(origin, address), origin);
+  }
+  applyDiscoveryHeaders(c, origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Address Record', path: `/a/${address}` },
+  ]);
+  return c.html(
+    renderIndex({
+      title: `Address record \u2014 ${address}`,
+      description: `Every archived OP_RETURN message sent to ${address}.`,
+      url: `${origin}/a/${address}`,
+      image: `${origin}/og/address/${encodeURIComponent(address)}.png`,
+      jsonLd: crumbs,
+      initialHtml: renderAddressSsr(address),
+    })
+  );
 });
 
 app.get('/a/:address/chat', (c) => {
   const address = c.req.param('address');
   const origin = originOf(c);
-  return page(c, {
-    title: `Chat room \u2014 ${address}`,
-    description: `The whole on-chain conversation around ${address}, oldest to newest.`,
-    url: `${origin}/a/${address}/chat`,
-    image: `${origin}/og/chat/address/${encodeURIComponent(address)}.png`,
-  });
+  if (wantsMarkdown(c)) {
+    return markdownResponse(
+      `# Chat Room: ${address}\n\nOn-chain communications involving ${address}.\n\n* Chat API: ${origin}/api/chat?address=${encodeURIComponent(address)}\n`,
+      origin
+    );
+  }
+  applyDiscoveryHeaders(c, origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: address, path: `/a/${address}` },
+    { name: 'Chat Room', path: `/a/${address}/chat` },
+  ]);
+  return c.html(
+    renderIndex({
+      title: `Chat room \u2014 ${address}`,
+      description: `The whole on-chain conversation around ${address}, oldest to newest.`,
+      url: `${origin}/a/${address}/chat`,
+      image: `${origin}/og/chat/address/${encodeURIComponent(address)}.png`,
+      jsonLd: crumbs,
+      initialHtml: renderAddressSsr(address),
+    })
+  );
 });
 
 app.get('/cat/:slug', async (c) => {
@@ -483,16 +1033,50 @@ app.get('/cat/:slug', async (c) => {
   const cat = categoryFromSlug(slug);
   const origin = originOf(c);
   if (!cat) {
-    return page(c, { title: 'Category not found', url: `${origin}/cat/${slug}`, image: `${origin}/og/default.png` });
+    if (wantsMarkdown(c)) {
+      return new Response(`# Category Not Found\n\nCategory slug "${slug}" does not exist in the taxonomy.`, {
+        status: 404,
+        headers: { 'content-type': 'text/markdown; charset=utf-8', Vary: 'Accept' },
+      });
+    }
+    return c.html(
+      renderIndex({
+        title: 'Category not found \u2014 The Permanent Record',
+        description: 'Category not found.',
+        url: `${origin}/cat/${slug}`,
+        image: `${origin}/og/default.png`,
+        noindex: true,
+        initialHtml: renderNotFoundSsr(
+          'Category not found',
+          `Category slug \u201c${slug}\u201d does not exist in the taxonomy.`
+        ),
+      }),
+      404
+    );
   }
   const stats = await db.listCategories(c.env.DB);
   const count = stats.find((s) => categorySlug(s.category) === slug)?.count ?? 0;
-  return page(c, {
-    title: `${cat} \u2014 The Permanent Record`,
-    description: `${count} archived messages classified as ${cat.toLowerCase()}.`,
-    url: `${origin}/cat/${slug}`,
-    image: `${origin}/og/category/${slug}.png`,
-  });
+
+  if (wantsMarkdown(c)) {
+    return markdownResponse(renderCategoryMarkdown(origin, cat, count), origin);
+  }
+
+  applyDiscoveryHeaders(c, origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Categories', path: '/feed' },
+    { name: cat, path: `/cat/${slug}` },
+  ]);
+  return c.html(
+    renderIndex({
+      title: `${cat} \u2014 The Permanent Record`,
+      description: `${count} archived messages classified as ${cat.toLowerCase()}.`,
+      url: `${origin}/cat/${slug}`,
+      image: `${origin}/og/category/${slug}.png`,
+      jsonLd: crumbs,
+      initialHtml: renderCategorySsr(cat, count),
+    })
+  );
 });
 
 // Brand favicon / app icon, served through routes (no static-asset binding).
@@ -594,14 +1178,24 @@ app.get('/og/address/:address', async (c) => {
   return pngResponse(await svgToPng(addressCardSvg(address)));
 });
 
-// Anything else: the SPA shell so in-app paths deep-link fine; /api stays JSON.
+// Unmatched routes: return genuine HTTP 404 with noindex to prevent soft-404 index bloat.
 app.get('*', (c) => {
   if (c.req.path.startsWith('/api')) return jsonError('not found', 404);
-  return page(c, {
-    title: 'The Permanent Record \u2014 messages inside Bitcoin',
-    url: originOf(c) + c.req.path,
-    image: originOf(c) + '/og/default.png',
-  });
+  const origin = originOf(c);
+  return c.html(
+    renderIndex({
+      title: 'Page not found \u2014 The Permanent Record',
+      description: 'The requested transmission or collection does not exist.',
+      url: origin + c.req.path,
+      image: `${origin}/og/default.png`,
+      noindex: true,
+      initialHtml: renderNotFoundSsr(
+        'Page not found',
+        `The requested route \u201c${c.req.path}\u201d was not found.`
+      ),
+    }),
+    404
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -12,6 +12,10 @@ export interface PageMeta {
   image?: string;
   url?: string;
   type?: string;
+  noindex?: boolean;
+  keywords?: string;
+  jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
+  initialHtml?: string;
 }
 
 function esc(s: string): string {
@@ -25,14 +29,27 @@ function esc(s: string): string {
 
 export function renderIndex(meta?: PageMeta): string {
   const m: PageMeta = meta || {};
-  const ogTitle = m.title || 'OP_RETURN Monitor';
+  const ogTitle = m.title || 'The Permanent Record — messages inside Bitcoin';
   const ogDesc =
     m.description ||
     'People are leaving messages inside Bitcoin. Forever. Threats, confessions, prayers, ads, haiku — archived live from the chain.';
   const ogUrl = m.url || 'https://opreturn.xyz/';
   const ogImage = m.image || 'https://opreturn.xyz/og/default.png';
   const ogType = m.type || 'website';
-  const ogMeta = `<meta property="og:site_name" content="The Permanent Record" />
+  const robotsDirectives = m.noindex
+    ? 'noindex, nofollow'
+    : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1';
+  const metaKeywords =
+    m.keywords ||
+    'bitcoin op_return, op_return monitor, bitcoin message board, immutable messages, blockchain memorials, bitcoin graffiti, satoshi tributes, crypto communications';
+  const jsonLdScript = m.jsonLd
+    ? `<script type="application/ld+json">${JSON.stringify(m.jsonLd)}</script>`
+    : '';
+  const ogMeta = `<meta name="description" content="${esc(ogDesc)}" />
+<meta name="keywords" content="${esc(metaKeywords)}" />
+<meta name="author" content="xbtoshi" />
+<meta name="robots" content="${robotsDirectives}" />
+<meta property="og:site_name" content="The Permanent Record" />
 <meta property="og:type" content="${esc(ogType)}" />
 <meta property="og:title" content="${esc(ogTitle)}" />
 <meta property="og:description" content="${esc(ogDesc)}" />
@@ -43,8 +60,15 @@ export function renderIndex(meta?: PageMeta): string {
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="${esc(ogTitle)}" />
 <meta name="twitter:description" content="${esc(ogDesc)}" />
-<meta name="twitter:image" content="${esc(ogImage)}" />
-<link rel="canonical" href="${esc(ogUrl)}" />`;
+<link rel="canonical" href="${esc(ogUrl)}" />
+<link rel="alternate" type="text/markdown" href="/llms.txt" title="LLM Context (llms.txt)" />
+<link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+<link rel="api-catalog" type="application/linkset+json" href="/.well-known/api-catalog" />
+<link rel="service-desc" type="application/vnd.oai.openapi+json;version=3.0" href="/api/openapi.json" />
+<link rel="service-doc" type="text/markdown" href="/llms.txt" />
+<link rel="describedby" type="application/json" href="/.well-known/agent-card.json" />
+<link rel="describedby" type="text/markdown" href="/auth.md" />
+${jsonLdScript}`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -317,6 +341,13 @@ ${ogMeta}
   .callout p{font-size:14px;color:var(--fg2);line-height:1.5}
   .gnote{font-family:'Martian Mono',monospace;font-size:12px;color:var(--fg4);margin-top:18px}
 
+  /* FAQ / Semantic Sections */
+  .faq-wrap{margin-top:clamp(36px,5vw,64px);border-top:1px solid var(--line);padding-top:clamp(28px,4vw,48px)}
+  .faq-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;margin-top:20px}
+  .faq-item{border:1px solid var(--line);background:var(--card);padding:22px 20px}
+  .faq-q{font-size:clamp(15px,1.8vw,18px);font-weight:600;letter-spacing:-.01em;color:var(--fg);margin-bottom:10px}
+  .faq-a{font-size:14px;color:var(--fg2);line-height:1.6}
+
   footer{border-top:1px solid var(--line);background:var(--bg);padding:26px clamp(16px,4vw,44px);display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center;font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
   .status{color:var(--fg4);font-family:'Martian Mono',monospace;font-size:12px;text-align:center;padding:12px 0}
 </style>
@@ -338,7 +369,7 @@ ${ogMeta}
     <button class="navbtn active" data-action="home" data-nav="landing">About</button>
   </nav>
 </header>
-<main id="app"></main>
+<main id="app">${m.initialHtml || ''}</main>
 <footer>
   <span>OP_RETURN &middot; opreturn.xyz</span>
   <span>DATA: mempool.space &middot; CLASSIFICATION: AI &middot; NOT FINANCIAL ADVICE</span>
@@ -463,6 +494,22 @@ ${ogMeta}
     h+=stat('\\u221e','Years it stays online');
     h+='</div>';
     h+=renderChart();
+    h+='<div class="faq-wrap">';
+    h+='<div class="kicker">\u25c6 FREQUENTLY ASKED QUESTIONS \u00b7 THE PERMANENT RECORD</div>';
+    h+='<h2 class="title" style="font-size:clamp(24px,3.5vw,36px)">Understanding Bitcoin OP_RETURN Transmissions</h2>';
+    h+='<div class="faq-grid">';
+    var faqs=[
+      {q:'What is an OP_RETURN message in Bitcoin?',a:'An OP_RETURN output is a Bitcoin Script opcode (0x6a) used to embed arbitrary data into a transaction. Because OP_RETURN outputs are provably unspendable, nodes exclude them from the RAM-resident UTXO set, making it the standard method for recording permanent, tamper-evident messages without blockchain bloat.'},
+      {q:'Can an OP_RETURN message be deleted, altered, or censored?',a:'No. Once a transaction carrying an OP_RETURN output is confirmed inside a Bitcoin block, it becomes an immutable part of the distributed ledger. It cannot be altered, edited, or removed by any central authority, corporation, or node operator.'},
+      {q:'How much data can fit inside an OP_RETURN output?',a:'Historically, Bitcoin standard relay policy restricted OP_RETURN outputs to 40 bytes and later 80 bytes. In 2025, Bitcoin Core v30 removed the default 80-byte relay cap, allowing larger arbitrary data payloads to propagate across the network as standard transactions.'},
+      {q:'What kinds of messages are monitored on The Permanent Record?',a:'The Permanent Record monitors high-profile Bitcoin addresses that have evolved into public bulletin boards: whitehat and hacker communications (such as the Liquid Network and Coldcard incidents), dormant early wallet legal notices (including Mt. Gox 1Feex), Genesis block tributes to Satoshi Nakamoto, and geopolitical marking campaigns.'},
+      {q:'How does AI classification categorize transmissions?',a:'Each message is decoded to UTF-8 and processed through an OpenAI-compatible endpoint that classifies content into one of seven categories: Laundry / Service Ads, Begging / Victim Appeals, Threats / Hostility, Prompt Injection, Haiku / Philosophical, Self-deprecating / Black Humor, or Other.'},
+      {q:'How can I etch my own message into Bitcoin?',a:'You can attach an OP_RETURN output using non-custodial tools such as Sparrow Wallet (Tools \u2192 Add OP_RETURN), Bitcoin Core CLI (createrawtransaction), or Electrum. You pay a standard network miner fee proportional to data size. Full instructions are available in our Field Manual.'}
+    ];
+    faqs.forEach(function(f){
+      h+='<div class="faq-item"><h3 class="faq-q">'+esc(f.q)+'</h3><p class="faq-a">'+esc(f.a)+'</p></div>';
+    });
+    h+='</div></div>';
     h+='</section>';
     app.innerHTML=h;
   }
@@ -674,6 +721,18 @@ ${ogMeta}
     app.innerHTML=h;
   }
 
+  function renderNotFound(){
+    var h='<section class="wrap wrap-narrow" style="text-align:center;padding-top:clamp(40px,8vw,90px)">';
+    h+='<div class="kicker">\u25c6 404 NOT FOUND</div>';
+    h+='<h1 class="hero" style="font-size:clamp(32px,6vw,64px);margin:16px auto">Record not found</h1>';
+    h+='<p class="lede" style="margin:0 auto 32px">The requested blockchain transmission or collection does not exist in this archive.</p>';
+    h+='<div class="cta" style="justify-content:center">';
+    h+='<button class="btn btn-primary" data-action="home">Return to transmissions \u2192</button>';
+    h+='<button class="btn" data-action="collections">Browse collections</button>';
+    h+='</div></section>';
+    app.innerHTML=h;
+  }
+
   function render(){
     setNav();
     if(state.screen==='landing')renderLanding();
@@ -682,6 +741,7 @@ ${ogMeta}
     else if(state.screen==='guide')renderGuide();
     else if(state.screen==='detail')renderDetail();
     else if(state.screen==='chat')renderChat();
+    else if(state.screen==='notfound')renderNotFound();
     setFootAndTicker();
   }
 
@@ -704,10 +764,36 @@ ${ogMeta}
     if(r.name==='collections'){state.screen='collections';return render();}
     if(r.name==='guide'){state.screen='guide';return render();}
     if(r.name==='feed'){state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
-    if(r.name==='c'){var col=colById(Number(r.param))||colBySlug(r.param);if(col){state.filter=col.id;if(r.chat){state.screen='chat';resetChat();return loadChat(false).then(render);}state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}}
-    if(r.name==='cat'){var cn=catName(r.param);if(cn){state.screen='feed';state.category=cn;state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}}
-    if(r.name==='a'&&r.param){state.address=r.param;if(r.chat){state.screen='chat';resetChat();return loadChat(false).then(render);}state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
-    if(r.name==='m'&&r.param){state.screen='detail';state.detailTx=r.param;return ensureDetail().then(render);}
+    if(r.name==='c'){
+      var col=colById(Number(r.param))||colBySlug(r.param);
+      if(col){
+        state.filter=col.id;
+        if(r.chat){state.screen='chat';resetChat();return loadChat(false).then(render);}
+        state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);
+      }
+      state.screen='notfound';return render();
+    }
+    if(r.name==='cat'){
+      var cn=catName(r.param);
+      if(cn){state.screen='feed';state.category=cn;state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
+      state.screen='notfound';return render();
+    }
+    if(r.name==='a'&&r.param){
+      state.address=r.param;
+      if(r.chat){state.screen='chat';resetChat();return loadChat(false).then(render);}
+      state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);
+    }
+    if(r.name==='m'&&r.param){
+      state.screen='detail';state.detailTx=r.param;
+      return ensureDetail().then(function(){
+        if(!state.cache[r.param]){state.screen='notfound';}
+        render();
+      });
+    }
+    if(r.name!=='landing'&&r.name!==''){
+      state.screen='notfound';
+      return render();
+    }
     state.screen='landing';
     // Landing builds the featured message + category chart from state.cache,
     // which only loadFeed() fills — so a fresh page load would miss them.
@@ -840,7 +926,80 @@ ${ogMeta}
     }).catch(function(){b.disabled=false;setSugMsg('Network error \u2014 try again.','err');});
   }
 
+  /* ---- WebMCP: Expose site tools to AI agents via browser API ---- */
+  function initWebMcp(){
+    if(typeof navigator==='undefined'||!('modelContext' in navigator)||!navigator.modelContext||typeof navigator.modelContext.registerTool!=='function')return;
+    try{
+      navigator.modelContext.registerTool({
+        name: "search-transmissions",
+        description: "Search and retrieve live monitored Bitcoin OP_RETURN messages. Returns messages with txid, content, sender, address, and category.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sort: { type: "string", enum: ["hot", "new"], description: "Sort by hottest or newest" },
+            collection_id: { type: "number", description: "Filter by collection ID" },
+            category: { type: "string", description: "Filter by category slug" },
+            limit: { type: "number", description: "Max results to return (1-50)" }
+          }
+        },
+        execute: async function(params){
+          var q = '/api/messages?sort=' + (params.sort || 'hot') + '&limit=' + (params.limit || 20);
+          if (params.collection_id) q += '&collection_id=' + params.collection_id;
+          if (params.category) q += '&category=' + encodeURIComponent(params.category);
+          var r = await fetch(q);
+          var data = await r.json();
+          return { content: [{ type: "text", text: JSON.stringify(data.messages || data) }] };
+        }
+      });
+
+      navigator.modelContext.registerTool({
+        name: "list-collections",
+        description: "List all curated collections of monitored Bitcoin addresses (e.g. Liquid Network whitehat, Coldcard exploit, Genesis memorials).",
+        inputSchema: { type: "object", properties: {} },
+        execute: async function(){
+          var r = await fetch('/api/collections');
+          var data = await r.json();
+          return { content: [{ type: "text", text: JSON.stringify(data) }] };
+        }
+      });
+
+      navigator.modelContext.registerTool({
+        name: "get-message-detail",
+        description: "Fetch a specific immutable Bitcoin OP_RETURN message by its 64-character transaction ID (txid).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            txid: { type: "string", description: "Bitcoin transaction ID (hex)" }
+          },
+          required: ["txid"]
+        },
+        execute: async function(params){
+          var r = await fetch('/api/message/' + encodeURIComponent(params.txid));
+          var data = await r.json();
+          return { content: [{ type: "text", text: JSON.stringify(data) }] };
+        }
+      });
+
+      navigator.modelContext.registerTool({
+        name: "navigate-page",
+        description: "Navigate to a specific page on The Permanent Record ('feed', 'collections', 'guide', 'landing').",
+        inputSchema: {
+          type: "object",
+          properties: {
+            page: { type: "string", enum: ["feed", "collections", "guide", "landing"], description: "Destination screen" }
+          },
+          required: ["page"]
+        },
+        execute: async function(params){
+          go(params.page);
+          return { content: [{ type: "text", text: "Navigated to " + params.page }] };
+        }
+      });
+    }catch(e){}
+  }
+
   /* ---- boot ---- */
+  initWebMcp();
   loadCollections().then(function(){
     return loadCategories();
   }).then(function(){
