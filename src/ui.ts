@@ -853,6 +853,11 @@ ${ogMeta}
     h+='</div></div>';
     h+='<div class="bubble-meta">';
     if(m.category)h+='<span class="cat'+(HOSTILE[m.category]?' sig':'')+'">'+esc(m.category)+'</span>';
+    if(env){
+      if(env.isSigned)h+='<span class="cat" style="border-color:#16a34a;color:#16a34a">🛡️ PGP Signed</span>';
+      else if(env.type==='bie1')h+='<span class="cat" style="border-color:#eab308;color:#ca8a04">⚡ BIE1 ECIES</span>';
+      else if(env.type==='pgp-encrypted')h+='<span class="cat" style="border-color:#3b82f6;color:#2563eb">🔒 PGP Encrypted</span>';
+    }
     if(m.is_mempool)h+='<span class="st mem">\u25f7 in mempool</span>';
     if(m.dup_count>1)h+='<span title="Same message broadcast in '+m.dup_count+' separate transactions">\u00d7'+m.dup_count+' txs</span>';
     h+='<span>'+esc(clock(tsOf(m)))+'</span>';
