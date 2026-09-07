@@ -225,7 +225,16 @@ export async function getChat(
   db: D1Database,
   opts: GetChatOpts
 ): Promise<{ participants: ChatParticipant[]; messages: ChatMessage[]; next_before: string | null }> {
+  // Bind order must follow the order of '?' in the SQL: is_party subquery,
+  // then the row filter, then the cursor, then the limit.
   const params: unknown[] = [];
+  // "Party" means a labelled address of THIS room, matching what the UI can
+  // name; an address monitored under some other collection is just a sender.
+  const partySql = opts.address
+    ? 'm.sender = ?'
+    : 'EXISTS (SELECT 1 FROM addresses p WHERE p.address = m.sender AND p.collection_id = ?)';
+  params.push(opts.address ?? opts.collectionId ?? 0);
+
   let where = '';
   if (opts.collectionId) {
     where = 'WHERE a.collection_id = ?';
@@ -242,7 +251,8 @@ export async function getChat(
     outer.push('(ts < ? OR (ts = ? AND id < ?))');
     params.push(cur.ts, cur.ts, cur.id);
   }
-  params.push(opts.limit);
+  // One extra row tells us whether an older page really exists.
+  params.push(opts.limit + 1);
 
   const participantsQ = opts.address
     ? db.prepare('SELECT address, label FROM addresses WHERE address = ?').bind(opts.address)
@@ -258,7 +268,7 @@ export async function getChat(
            SELECT m.id, m.txid, m.address, m.sender, m.content, m.category, m.likes, m.is_mempool,
                   m.created_at, m.block_time, m.fee_sats, m.fee_rate, a.collection_id,
                   ${TS_EXPR} AS ts,
-                  EXISTS (SELECT 1 FROM addresses p WHERE p.address = m.sender) AS is_party,
+                  (${partySql}) AS is_party,
                   COUNT(*) OVER (PARTITION BY COALESCE(m.sender, ''), COALESCE(m.content, m.txid)) AS dup_count,
                   ROW_NUMBER() OVER (PARTITION BY COALESCE(m.sender, ''), COALESCE(m.content, m.txid)
                                      ORDER BY ${TS_EXPR} DESC, m.id DESC) AS rn
@@ -273,7 +283,8 @@ export async function getChat(
       .all<Record<string, unknown>>(),
   ]);
 
-  const rows = msgRes.results;
+  const hasMore = msgRes.results.length > opts.limit;
+  const rows = hasMore ? msgRes.results.slice(0, opts.limit) : msgRes.results;
   const messages: ChatMessage[] = rows
     .map((r) => ({
       id: num(r, 'id'),
@@ -296,7 +307,7 @@ export async function getChat(
     .reverse();
 
   let next_before: string | null = null;
-  if (rows.length >= opts.limit) {
+  if (hasMore) {
     const oldest = rows[rows.length - 1];
     next_before = `${num(oldest, 'ts')}:${num(oldest, 'id')}`;
   }

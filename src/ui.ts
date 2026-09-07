@@ -384,12 +384,17 @@ ${ogMeta}
     });
   }
 
+  var _chatSeq=0;
+  function resetChat(){state.chat={messages:[],participants:[],nextBefore:null};_chatSeq++;}
   function loadChat(prepend){
+    var seq=++_chatSeq;
     var q='/api/chat?limit=200';
     if(state.filter)q+='&collection_id='+state.filter;
     if(state.address)q+='&address='+encodeURIComponent(state.address);
     if(prepend&&state.chat.nextBefore)q+='&before='+encodeURIComponent(state.chat.nextBefore);
     return fetchJSON(q).then(function(r){
+      // A slower response from a room we already left must not be spliced into the current one.
+      if(seq!==_chatSeq)return;
       var d=r.d||{};var msgs=d.messages||[];cacheMsgs(msgs);
       state.chat.messages=prepend?msgs.concat(state.chat.messages):msgs;
       state.chat.participants=d.participants||state.chat.participants||[];
@@ -678,9 +683,9 @@ ${ogMeta}
     if(r.name==='collections'){state.screen='collections';return render();}
     if(r.name==='guide'){state.screen='guide';return render();}
     if(r.name==='feed'){state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
-    if(r.name==='c'){var col=colById(Number(r.param))||colBySlug(r.param);if(col){state.filter=col.id;if(r.chat){state.screen='chat';return loadChat(false).then(render);}state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}}
+    if(r.name==='c'){var col=colById(Number(r.param))||colBySlug(r.param);if(col){state.filter=col.id;if(r.chat){state.screen='chat';resetChat();return loadChat(false).then(render);}state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}}
     if(r.name==='cat'){var cn=catName(r.param);if(cn){state.screen='feed';state.category=cn;state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}}
-    if(r.name==='a'&&r.param){state.address=r.param;if(r.chat){state.screen='chat';return loadChat(false).then(render);}state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
+    if(r.name==='a'&&r.param){state.address=r.param;if(r.chat){state.screen='chat';resetChat();return loadChat(false).then(render);}state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
     if(r.name==='m'&&r.param){state.screen='detail';state.detailTx=r.param;return ensureDetail().then(render);}
     state.screen='landing';
     // Landing builds the featured message + category chart from state.cache,
