@@ -327,6 +327,45 @@ const BUBBLE_MAX_W = 780;
 const NAME_H = 22;
 const BUBBLE_GAP = 8;
 
+/** CJK / fullwidth glyphs render ~1em wide in the mono font, not the 0.6em Latin advance. */
+function isWide(cp: number): boolean {
+  return (
+    (cp >= 0x1100 && cp <= 0x115f) ||
+    (cp >= 0x2e80 && cp <= 0xa4cf) ||
+    (cp >= 0xac00 && cp <= 0xd7a3) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe30 && cp <= 0xfe4f) ||
+    (cp >= 0xff00 && cp <= 0xff60) ||
+    (cp >= 0xffe0 && cp <= 0xffe6) ||
+    (cp >= 0x20000 && cp <= 0x3fffd)
+  );
+}
+
+/** Width of a string in Latin-mono character units, counting wide glyphs as 1/ADV. */
+function effLen(str: string): number {
+  let n = 0;
+  for (const ch of str) n += isWide(ch.codePointAt(0) ?? 0) ? 1 / ADV : 1;
+  return n;
+}
+
+/** Wrap to a pixel budget, tightening the character budget until wide glyphs fit too. */
+function wrapToWidth(text: string, font: number, widthPx: number, maxLines: number): string[] {
+  let maxChars = Math.max(6, Math.floor(widthPx / (font * ADV)));
+  let lines = wrapText(text, maxChars);
+  while (maxChars > 6 && lines.some((l) => effLen(l) > maxChars)) {
+    maxChars = Math.max(6, Math.floor(maxChars * 0.85));
+    lines = wrapText(text, maxChars);
+  }
+  if (lines.length > maxLines) {
+    lines = lines.slice(0, maxLines);
+    const k = maxLines - 1;
+    let last = lines[k];
+    while (last.length > 1 && effLen(last) + 1 > maxChars) last = last.slice(0, -1);
+    lines[k] = last.replace(/[\s\u2026]+$/, '') + '\u2026';
+  }
+  return lines;
+}
+
 /** Share card for a chat room: title plus the last few turns drawn as bubbles. */
 export function chatCardSvg(data: ChatCardData): string {
   let svg = svgHeader() + paperDefs() + paper() + headerBar() + footerRule();
@@ -341,16 +380,9 @@ export function chatCardSvg(data: ChatCardData): string {
   const bandTop = 192;
   const bandBottom = 524;
   const laid = data.bubbles.map((b) => {
-    const f = fit(oneLine(b.text), {
-      start: BUBBLE_FONT,
-      min: BUBBLE_FONT,
-      lf: 1.3,
-      maxLines: 2,
-      width: BUBBLE_MAX_W - BUBBLE_PAD * 2,
-      height: 999,
-    });
-    const lines = f.lines.length ? f.lines : ['…'];
-    const longest = Math.max(...lines.map((l) => l.length));
+    const wrapped = wrapToWidth(oneLine(b.text), BUBBLE_FONT, BUBBLE_MAX_W - BUBBLE_PAD * 2, 2);
+    const lines = wrapped.length ? wrapped : ['…'];
+    const longest = Math.max(...lines.map(effLen));
     const w = Math.min(BUBBLE_MAX_W, Math.max(120, longest * BUBBLE_FONT * ADV + BUBBLE_PAD * 2 + 6));
     const h = lines.length * BUBBLE_LH + BUBBLE_PAD * 2;
     return { ...b, lines, w, h, total: NAME_H + h };

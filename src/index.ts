@@ -576,6 +576,7 @@ app.get('/og/chat/address/:address', async (c) => {
   const address = c.req.param('address')!.replace(/\.png$/, '');
   const count = await db.countMessagesForAddress(c.env.DB, address);
   const data = await chatCardData(c.env.DB, { address }, midEllipsis(address, 30), count);
+  if (count === 0 && data.partyCount === 0) return jsonError('not found', 404);
   return pngResponse(await svgToPng(chatCardSvg(data)));
 });
 
