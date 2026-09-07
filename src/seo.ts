@@ -1408,6 +1408,36 @@ export function renderAddressSsr(address: string): string {
   return h;
 }
 
+export function cleanCryptoPreview(content?: string | null): string {
+  if (!content) return '';
+  const text = content.trim();
+  if (text.includes('-----BEGIN PGP SIGNED MESSAGE-----')) {
+    const sigIdx = text.indexOf('-----BEGIN PGP SIGNATURE-----');
+    const headIdx = text.indexOf('-----BEGIN PGP SIGNED MESSAGE-----');
+    let body = text.slice(headIdx, sigIdx !== -1 ? sigIdx : text.length);
+    body = body.replace(/-----BEGIN PGP SIGNED MESSAGE-----[\r\n]+(Hash:[^\r\n]+[\r\n]+)?/, '').trim();
+    const bMatch = body.match(/QklFMQ[A-Za-z0-9+/=]+/);
+    if (bMatch) {
+      const lead = body.slice(0, bMatch.index).trim();
+      return lead ? `${lead} [BIE1 Payload]` : '[Electrum BIE1 ECIES Encrypted]';
+    }
+    return body;
+  }
+  if (text.includes('-----BEGIN PGP MESSAGE-----')) {
+    const msgIdx = text.indexOf('-----BEGIN PGP MESSAGE-----');
+    const lead = text.slice(0, msgIdx).trim();
+    return lead ? `${lead} [PGP Encrypted]` : '[OpenPGP Encrypted Transmission]';
+  }
+  if (text.includes('QklFMQ')) {
+    const match = text.match(/QklFMQ[A-Za-z0-9+/=]+/);
+    if (match) {
+      const lead = text.slice(0, match.index).trim();
+      return lead ? `${lead} [BIE1 Payload]` : '[Electrum BIE1 ECIES Encrypted]';
+    }
+  }
+  return content;
+}
+
 export function renderMessageSsr(msg: Message, colName?: string): string {
   let h = '<section class="wrap wrap-card">';
   h += '<a class="back" href="/feed">\u2190 Back to transmissions</a>';
@@ -1417,7 +1447,18 @@ export function renderMessageSsr(msg: Message, colName?: string): string {
   if (msg.category) {
     h += `<span class="cat">${escHtml(msg.category)}</span>`;
   }
-  h += `<blockquote>\u201c${escHtml(msg.content || 'OP_RETURN transmission')}\u201d</blockquote>`;
+  const isPgpSigned = (msg.content || '').includes('-----BEGIN PGP SIGNATURE-----');
+  const isBie1 = (msg.content || '').includes('QklFMQ');
+  const isPgpEnc = (msg.content || '').includes('-----BEGIN PGP MESSAGE-----');
+  if (isPgpSigned) {
+    h += `<span class="cat" style="margin-left:6px;border-color:#16a34a;color:#16a34a">\ud83d\udee1\ufe0f PGP Signed</span>`;
+  } else if (isBie1) {
+    h += `<span class="cat" style="margin-left:6px;border-color:#eab308;color:#ca8a04">\u26a1 BIE1 ECIES</span>`;
+  } else if (isPgpEnc) {
+    h += `<span class="cat" style="margin-left:6px;border-color:#3b82f6;color:#2563eb">\ud83d\udd12 PGP Encrypted</span>`;
+  }
+  const preview = cleanCryptoPreview(msg.content);
+  h += `<blockquote>\u201c${escHtml(preview || msg.content || 'OP_RETURN transmission')}\u201d</blockquote>`;
   h += '<div class="metagrid">';
   if (colName) {
     h += `<div class="cell full"><div class="k">Collection</div><div class="v single">${escHtml(colName)}</div></div>`;

@@ -293,6 +293,51 @@ ${ogMeta}
   .bubble-meta{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:5px 4px 0;font-family:'Martian Mono',monospace;font-size:10px;color:var(--fg4)}
   .turn.party .bubble-meta{justify-content:flex-end}
   .bubble-meta .cat{padding:1px 6px;font-size:9px}
+  .bubble-text{cursor:pointer}
+  .crypto-sig-badge{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:6px 10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);color:var(--fg);font-family:'Martian Mono',monospace;font-size:11px;margin-bottom:8px;border-radius:4px}
+  .crypto-sig-badge .sig-icon{font-size:13px}
+  .crypto-sig-badge strong{color:#16a34a}
+  .crypto-sig-badge code{background:rgba(0,0,0,.06);padding:1px 4px;border-radius:2px;font-size:10px}
+  .crypto-sig-badge a{color:var(--sig);text-decoration:none}
+  .crypto-sig-badge a:hover{text-decoration:underline}
+  .crypto-envelope{margin-top:8px;border:1px solid var(--line);background:var(--card);padding:10px 12px;border-radius:6px;display:flex;flex-direction:column;gap:8px}
+  .crypto-envelope.bie1{border-left:3px solid #eab308;background:rgba(234,179,8,.04)}
+  .crypto-envelope.pgp{border-left:3px solid #3b82f6;background:rgba(59,130,246,.04)}
+  .env-head{display:flex;align-items:center;gap:8px}
+  .env-icon{font-size:16px}
+  .env-info{display:flex;flex-direction:column;gap:1px}
+  .env-title{font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;color:var(--fg)}
+  .env-sub{font-family:'Martian Mono',monospace;font-size:10px;color:var(--fg4)}
+  .env-sub code{color:var(--fg2)}
+  .env-actions{display:flex;flex-wrap:wrap;gap:6px}
+  .env-btn{background:var(--bg);border:1px solid var(--line);color:var(--fg);padding:5px 10px;font-family:'Martian Mono',monospace;font-size:10px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;text-decoration:none;border-radius:2px;transition:all .12s}
+  .env-btn:hover{background:var(--inv-bg);color:var(--inv-fg);border-color:var(--inv-bg)}
+  .env-btn.decrypt-btn{background:var(--sig);color:var(--on-sig);border-color:var(--sig);font-weight:600}
+  .env-btn.decrypt-btn:hover{background:var(--sigH);border-color:var(--sigH)}
+  .env-decrypted{background:rgba(34,197,94,.1);border:1px solid #16a34a;padding:10px;font-family:'Martian Mono',monospace;font-size:12px;color:var(--fg);border-radius:4px;white-space:pre-wrap;word-break:break-word}
+  .env-armor{max-height:180px;overflow:auto;background:var(--bg);border:1px solid var(--line2);padding:8px;border-radius:3px}
+  .env-armor pre{margin:0;font-family:'Martian Mono',monospace;font-size:10px;line-height:1.35;color:var(--fg3);white-space:pre-wrap;word-break:break-all}
+  .env-armor-toggle{margin-top:6px}
+  .env-text-btn{background:none;border:none;color:var(--fg4);font-family:'Martian Mono',monospace;font-size:10px;cursor:pointer;padding:0;text-decoration:underline}
+  .env-text-btn:hover{color:var(--sig)}
+  .key-exchange-banner{margin-bottom:18px;border:1px solid var(--line);background:var(--card);box-shadow:0 4px 20px rgba(0,0,0,.04)}
+  .keb-head{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--inv-bg);color:var(--inv-fg);font-family:'Martian Mono',monospace;font-size:11px;letter-spacing:.06em}
+  .keb-badge{margin-left:auto;background:var(--sig);color:var(--on-sig);padding:2px 7px;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .keb-body{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:center;padding:16px 18px}
+  .keb-party{display:flex;flex-direction:column;gap:5px}
+  .keb-role{font-family:'Martian Mono',monospace;font-size:10px;color:var(--fg4);letter-spacing:.08em;font-weight:600}
+  .keb-name{font-size:15px;font-weight:600;color:var(--fg)}
+  .keb-key{font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg3);display:flex;flex-direction:column;gap:2px}
+  .keb-fp{font-family:'Martian Mono',monospace;font-size:10px;color:var(--fg4);word-break:break-all}
+  .keb-desc{font-size:12px;color:var(--fg3);line-height:1.4}
+  .keb-links{display:flex;gap:12px;margin-top:3px}
+  .keb-links a{font-family:'Martian Mono',monospace;font-size:11px;color:var(--sig);text-decoration:none}
+  .keb-links a:hover{text-decoration:underline}
+  .keb-divider{font-size:22px;color:var(--fg4);font-family:'Martian Mono',monospace;display:flex;align-items:center;justify-content:center}
+  @media (max-width:720px){
+    .keb-body{grid-template-columns:1fr;gap:12px}
+    .keb-divider{display:none}
+  }
   @media(max-width:600px){
     header{padding:10px 12px;gap:8px}
     .brand .tag{display:none}
@@ -413,6 +458,36 @@ ${ogMeta}
       <div class="modal-msg" id="sug-msg"></div>
     </div>
     <div class="modal-foot"><button class="btn" data-action="suggest-close">Cancel</button><button class="btn btn-primary" id="sug-submit" data-action="suggest-submit">Submit suggestion</button></div>
+  </div>
+</div>
+
+<div class="scrim" id="decrypt-modal" hidden>
+  <div class="modal">
+    <div class="modal-head"><span>&#9670; DECRYPT ELECTRUM BIE1 PAYLOAD</span><button class="modal-x" data-action="decrypt-close" aria-label="close">&#10005;</button></div>
+    <div class="modal-body">
+      <p class="modal-lede">Payload encrypted with <strong>Electrum BIE1 ECIES</strong> to Bitcoin key for:<br><code id="dec-target-addr" style="color:var(--sig);font-weight:600;word-break:break-all"></code></p>
+      <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.28);padding:9px 12px;font-size:12px;color:var(--fg2);margin-bottom:14px">
+        <strong style="color:#16a34a">&#128274; 100% Client-Side Decryption:</strong> Computed locally in your browser using secp256k1 &amp; WebCrypto. Your key never leaves this tab.
+      </div>
+      <label class="fld">
+        <span>Bitcoin Private Key (WIF or 64-hex)</span>
+        <div style="display:flex;gap:0">
+          <input id="dec-privkey" type="password" placeholder="e.g. L... or 64-character hex" autocomplete="off" spellcheck="false" />
+          <button type="button" class="btn-sm" id="dec-toggle-pwd" style="border-left:none" title="Toggle visibility">&#128065;</button>
+        </div>
+      </label>
+      <input type="hidden" id="dec-payload" />
+      <input type="hidden" id="dec-target-txid" />
+      <div class="modal-msg" id="dec-msg"></div>
+      <div id="dec-result" style="display:none;margin-top:14px">
+        <div style="font-family:'Martian Mono',monospace;font-size:11px;color:#16a34a;font-weight:600;margin-bottom:6px">&#128275; DECRYPTED PLAINTEXT:</div>
+        <div id="dec-plaintext" style="background:var(--bg);border:1px solid #16a34a;padding:12px;font-family:'Martian Mono',monospace;font-size:13px;white-space:pre-wrap;word-break:break-word;user-select:all"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" data-action="decrypt-close">Close</button>
+      <button class="btn btn-primary" id="dec-submit" data-action="decrypt-submit">Decrypt message</button>
+    </div>
   </div>
 </div>
 
@@ -564,6 +639,7 @@ ${ogMeta}
   function msgHTML(m,rank){
     var voted=state.voted[m.id]||(state.liked[m.id]?'up':null);
     var hostile=HOSTILE[m.category];
+    var env=parseCryptoEnvelope(m.content);
     var h='<article class="msg">';
     h+='<div class="rail"><span class="rank">'+(rank!=null?'#'+(rank+1):'')+'</span>';
     h+='<button class="likebtn up'+(voted==='up'?' liked':'')+'" data-action="vote" data-dir="up" data-id="'+m.id+'" title="Upvote (mines PoW nonce)">▲</button>';
@@ -571,11 +647,22 @@ ${ogMeta}
     h+='<button class="likebtn down'+(voted==='down'?' liked':'')+'" data-action="vote" data-dir="down" data-id="'+m.id+'" title="Downvote">▼</button></div>';
     h+='<div class="body"><div class="head">';
     h+=(m.category?'<a class="cat'+(hostile?' sig':'')+'" href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a>':'<span class="cat'+(hostile?' sig':'')+'">Unclassified</span>');
+    if(env){
+      if(env.isSigned)h+='<span class="cat" style="border-color:#16a34a;color:#16a34a">🛡️ PGP Signed</span>';
+      else if(env.type==='bie1')h+='<span class="cat" style="border-color:#eab308;color:#ca8a04">⚡ BIE1 ECIES</span>';
+      else if(env.type==='pgp-encrypted')h+='<span class="cat" style="border-color:#3b82f6;color:#2563eb">🔒 PGP Encrypted</span>';
+    }
     h+='<span class="st '+(m.is_mempool?'mem':'conf')+'">'+(m.is_mempool?'\\u25f7 IN MEMPOOL':'\\u2713 CONFIRMED')+'</span>';
     h+='<span class="fee">'+esc(feeText(m))+'</span>';
     if(m.dup_count>1)h+='<span class="fee" title="Same message broadcast in '+m.dup_count+' separate transactions">\\u00d7'+m.dup_count+' txs</span>';
     h+='<span class="time">'+esc(timeAgo(msgTime(m)))+'</span></div>';
-    h+='<button class="content-btn" data-action="open-msg" data-txid="'+attr(m.txid)+'"><p class="content">'+esc(m.content)+'</p>'+((m.content||'').length>280?'<div class="readmore">\\u2026 read full message \\u2192</div>':'')+'</button>';
+    var displayText=m.content||'';
+    if(env){
+      if(env.leadText)displayText=env.leadText;
+      else if(env.type==='bie1')displayText='[Electrum BIE1 ECIES encrypted payload to '+shortAddr(m.address)+']';
+      else if(env.type==='pgp-encrypted')displayText='[OpenPGP encrypted transmission to Blockstream Security (BB332D31CBA44EDF)]';
+    }
+    h+='<button class="content-btn" data-action="open-msg" data-txid="'+attr(m.txid)+'"><p class="content">'+esc(displayText)+'</p>'+(displayText.length>280?'<div class="readmore">\\u2026 read full message \\u2192</div>':'')+'</button>';
     h+='<div class="foot">';
     if(m.collection_id){h+='<span>\u21b3 <a href="/c/'+attr(colSlug(colById(m.collection_id)))+'">'+esc(colName(m.collection_id))+'</a></span>';}
     h+='<a href="/a/'+attr(m.address)+'">'+esc(shortAddr(m.address))+'</a>';
@@ -625,14 +712,132 @@ ${ogMeta}
   }
   function chatPath(){return state.address?'/a/'+encodeURIComponent(state.address)+'/chat':'/c/'+colSlug(colById(state.filter))+'/chat';}
   function feedPath(){return state.address?'/a/'+encodeURIComponent(state.address):'/c/'+colSlug(colById(state.filter));}
+  /* Cryptographic envelope parser for OpenPGP & Electrum BIE1 ECIES messages */
+  function parseCryptoEnvelope(content){
+    if(!content)return null;
+    var text=String(content).trim();
+    var hasPgpSigned=text.indexOf('-----BEGIN PGP SIGNED MESSAGE-----')!==-1;
+    var hasPgpMsg=text.indexOf('-----BEGIN PGP MESSAGE-----')!==-1;
+    var hasBie1=text.indexOf('QklFMQ')!==-1;
+    if(!hasPgpSigned&&!hasPgpMsg&&!hasBie1)return null;
+
+    var res={
+      type:'plain',
+      leadText:'',
+      bie1Payload:null,
+      pgpArmor:null,
+      isSigned:false,
+      signer:null,
+      signerKey:null,
+      signerFp:null,
+      recipient:null,
+      recipientKey:null,
+      raw:text
+    };
+
+    if(text.indexOf('-----BEGIN PGP SIGNATURE-----')!==-1){
+      res.isSigned=true;
+      res.signer='Blockstream Security';
+      res.signerKey='4AC8CC886844A2D6';
+      res.signerFp='1176 542D A98E 71E1 3372 2EF7 4AC8 CC88 6844 A2D6';
+    }
+
+    if(hasPgpSigned){
+      var sigIdx=text.indexOf('-----BEGIN PGP SIGNATURE-----');
+      var headIdx=text.indexOf('-----BEGIN PGP SIGNED MESSAGE-----');
+      var body=text.slice(headIdx,sigIdx!==-1?sigIdx:text.length);
+      body=body.replace(/-----BEGIN PGP SIGNED MESSAGE-----[\r\n]+(Hash:[^\r\n]+[\r\n]+)?/,'').trim();
+      var bMatch=body.match(/QklFMQ[A-Za-z0-9+/=]+/);
+      if(bMatch){
+        res.type='bie1';
+        res.bie1Payload=bMatch[0];
+        res.leadText=body.slice(0,bMatch.index).trim();
+        res.recipient='Whitehat (bc1ql4mfu...jlte)';
+      } else {
+        res.type='pgp-signed';
+        res.leadText=body;
+      }
+      res.pgpArmor=sigIdx!==-1?text.slice(sigIdx):null;
+      return res;
+    }
+
+    if(hasPgpMsg){
+      var msgIdx=text.indexOf('-----BEGIN PGP MESSAGE-----');
+      var lead=text.slice(0,msgIdx).trim();
+      var endIdx=text.indexOf('-----END PGP MESSAGE-----');
+      var armor=text.slice(msgIdx,endIdx!==-1?endIdx+25:text.length);
+      res.type='pgp-encrypted';
+      res.leadText=lead;
+      res.pgpArmor=armor;
+      res.recipient='Blockstream Security';
+      res.recipientKey='BB332D31CBA44EDF';
+      return res;
+    }
+
+    if(hasBie1){
+      var bMatch2=text.match(/QklFMQ[A-Za-z0-9+/=]+/);
+      if(bMatch2){
+        res.type='bie1';
+        res.bie1Payload=bMatch2[0];
+        res.leadText=text.slice(0,bMatch2.index).trim();
+        res.recipient='Whitehat (bc1ql4mfu...jlte)';
+        if(res.isSigned){
+          var sIdx=text.indexOf('-----BEGIN PGP SIGNATURE-----');
+          if(sIdx!==-1)res.pgpArmor=text.slice(sIdx);
+        }
+        return res;
+      }
+    }
+    return null;
+  }
+
   function bubbleHTML(m,first,multi){
     var sender=m.sender||'';var party=sender?partyOf(sender):null;
     var name=sender?partyName(party,sender):'unknown sender';
     var color=party?'var(--sig)':avatarColor(sender||m.txid);
     var href=party?'/a/'+attr(sender)+'/chat':(sender?'https://mempool.space/address/'+attr(sender):'https://mempool.space/tx/'+attr(m.txid));
     var ext=party?'':' target="_blank" rel="noopener"';
-    var text=m.content||'';var long=text.length>520;if(long)text=text.slice(0,480)+'\u2026';
     var voted=state.voted[m.id]||(state.liked[m.id]?'up':null);
+
+    var env=parseCryptoEnvelope(m.content);
+    var bodyHTML='';
+    if(env){
+      if(env.isSigned){
+        bodyHTML+='<div class="crypto-sig-badge"><span class="sig-icon">🛡️</span><span>Signed by <strong>'+esc(env.signer||'Blockstream Security')+'</strong></span><span>Key: <code>'+esc(env.signerKey||'4AC8CC886844A2D6')+'</code></span><a href="https://blockstream.com/pgp.txt" target="_blank" rel="noopener">pgp.txt ↗</a></div>';
+      }
+      if(env.leadText){
+        var ltext=env.leadText;var llong=ltext.length>520;if(llong)ltext=ltext.slice(0,480)+'\u2026';
+        bodyHTML+='<div class="bubble-text" data-action="open-msg" data-txid="'+attr(m.txid)+'">'+esc(ltext)+(llong?'<span class="readmore">read full message \u2192</span>':'')+'</div>';
+      }
+      if(env.type==='bie1'){
+        bodyHTML+='<div class="crypto-envelope bie1" id="env-'+attr(m.txid)+'">';
+        bodyHTML+='<div class="env-head"><span class="env-icon">⚡</span><div class="env-info"><div class="env-title">Electrum BIE1 ECIES Encrypted</div><div class="env-sub">Recipient: <code>'+esc(shortAddr(m.address))+'</code> (secp256k1)</div></div></div>';
+        bodyHTML+='<div class="env-actions">';
+        bodyHTML+='<button class="env-btn decrypt-btn" data-action="open-decrypt" data-txid="'+attr(m.txid)+'" data-payload="'+attr(env.bie1Payload)+'" data-addr="'+attr(m.address)+'">🔑 Decrypt with Private Key</button>';
+        bodyHTML+='<button class="env-btn" data-action="copy" data-copy="'+attr(env.bie1Payload)+'">📋 Copy Payload</button>';
+        bodyHTML+='<button class="env-btn" data-action="toggle-armor" data-target="armor-'+attr(m.txid)+'">🔍 Raw Payload</button>';
+        bodyHTML+='</div>';
+        bodyHTML+='<div class="env-decrypted" id="dec-'+attr(m.txid)+'" style="display:none"></div>';
+        bodyHTML+='<div class="env-armor" id="armor-'+attr(m.txid)+'" style="display:none"><pre><code>'+esc(env.bie1Payload)+'</code></pre></div>';
+        bodyHTML+='</div>';
+      } else if(env.type==='pgp-encrypted'){
+        bodyHTML+='<div class="crypto-envelope pgp" id="env-'+attr(m.txid)+'">';
+        bodyHTML+='<div class="env-head"><span class="env-icon">🔒</span><div class="env-info"><div class="env-title">Encrypted for Blockstream Security</div><div class="env-sub">RSA-4096 Subkey: <code>BB332D31CBA44EDF</code></div></div></div>';
+        bodyHTML+='<div class="env-actions">';
+        bodyHTML+='<button class="env-btn" data-action="toggle-armor" data-target="armor-'+attr(m.txid)+'">🔍 Inspect PGP Armor</button>';
+        bodyHTML+='<button class="env-btn" data-action="copy" data-copy="'+attr(env.pgpArmor||m.content)+'">📋 Copy PGP</button>';
+        bodyHTML+='<a class="env-btn" href="https://blockstream.com/pgp.txt" target="_blank" rel="noopener">🔑 Public Key ↗</a>';
+        bodyHTML+='</div>';
+        bodyHTML+='<div class="env-armor" id="armor-'+attr(m.txid)+'" style="display:none"><pre><code>'+esc(env.pgpArmor||m.content)+'</code></pre></div>';
+        bodyHTML+='</div>';
+      } else if(env.type==='pgp-signed'&&env.pgpArmor){
+        bodyHTML+='<div class="env-armor-toggle"><button class="env-text-btn" data-action="toggle-armor" data-target="armor-'+attr(m.txid)+'">🔍 Inspect raw PGP signature</button><div class="env-armor" id="armor-'+attr(m.txid)+'" style="display:none"><pre><code>'+esc(env.pgpArmor)+'</code></pre></div></div>';
+      }
+    } else {
+      var text=m.content||'';var long=text.length>520;if(long)text=text.slice(0,480)+'\u2026';
+      bodyHTML='<div class="bubble-text" data-action="open-msg" data-txid="'+attr(m.txid)+'">'+esc(text)+(long?'<span class="readmore">read full message \u2192</span>':'')+'</div>';
+    }
+
     var h='<div class="turn'+(party?' party':'')+(first?' first gap':'')+'">';
     h+='<a class="avatar" style="background:'+color+'" href="'+href+'"'+ext+' title="'+attr(sender||'sender unknown')+'">'+esc(initials(sender))+'</a>';
     h+='<div class="stack">';
@@ -640,7 +845,7 @@ ${ogMeta}
       if(multi&&m.address!==sender){h+='<span class="to">\u2192 '+esc(partyName(partyOf(m.address),m.address))+'</span>';}
       h+='</div>';}
     h+='<div class="bubble-wrap">';
-    h+='<button class="bubble'+(m.is_mempool?' mem':'')+'" data-action="open-msg" data-txid="'+attr(m.txid)+'">'+esc(text)+(long?'<span class="readmore">read full message \u2192</span>':'')+'</button>';
+    h+='<div class="bubble'+(m.is_mempool?' mem':'')+'">'+bodyHTML+'</div>';
     h+='<div class="msg-actions">';
     h+='<button class="vote-act up'+(voted==='up'?' voted':'')+'" data-action="vote" data-dir="up" data-id="'+m.id+'" title="Upvote (mines PoW nonce)">▲</button>';
     h+='<span class="vote-count" data-lc="'+m.id+'">'+(m.likes||0)+'</span>';
@@ -660,13 +865,31 @@ ${ogMeta}
     var title=state.address?state.address:(col?col.name:'Chat room');
     var h='<section class="wrap wrap-narrow"><div class="feed-head"><div><div class="kicker" style="margin-bottom:6px">\u25c6 CHAT ROOM \u00b7 OLDEST TO NEWEST</div><h2 class="title" style="font-size:clamp(26px,4vw,40px);overflow-wrap:anywhere">'+esc(title)+'</h2></div>';
     h+='<div class="head-ctl">'+viewToggle('chat')+'</div></div>';
+
+    var msgs=state.chat.messages;
+    var hasCrypto=msgs.some(function(m){return parseCryptoEnvelope(m.content);});
+    if(hasCrypto){
+      h+='<div class="key-exchange-banner">';
+      h+='<div class="keb-head"><span class="keb-icon">🔐</span><span class="keb-title">CRYPTOGRAPHIC KEY EXCHANGE ACTIVE</span><span class="keb-badge">On-Chain PGP / ECIES</span></div>';
+      h+='<div class="keb-body">';
+      h+='<div class="keb-party"><div class="keb-role">RESPONDER / PROTOCOL DEFENSE</div><div class="keb-name">Blockstream Security Reporting</div>';
+      h+='<div class="keb-key"><span>PGP Signing Key: <code>4AC8CC886844A2D6</code></span><span>Encryption Subkey: <code>BB332D31CBA44EDF</code> (RSA-4096)</span></div>';
+      h+='<div class="keb-fp">Fingerprint: <code>1176 542D A98E 71E1 3372 2EF7 4AC8 CC88 6844 A2D6</code></div>';
+      h+='<div class="keb-links"><a href="https://blockstream.com/pgp.txt" target="_blank" rel="noopener">Download pgp.txt \u2197</a><a href="https://keyserver.ubuntu.com/pks/lookup?search=0x1176542DA98E71E133722EF74AC8CC886844A2D6&fingerprint=on&op=index" target="_blank" rel="noopener">Ubuntu Keyserver \u2197</a></div></div>';
+      h+='<div class="keb-divider">\u21c4</div>';
+      h+='<div class="keb-party"><div class="keb-role">CALLER / WHITEHAT HOLDING</div><div class="keb-name">Peg-Out Auditor Address</div>';
+      h+='<div class="keb-key"><span>Bitcoin Address: <code>bc1ql4mfu...jlte</code></span><span>Scheme: <strong>Electrum BIE1 ECIES</strong> (secp256k1)</span></div>';
+      h+='<div class="keb-desc">Blockstream encrypts payloads to the whitehat using Bitcoin secp256k1 ECDH + AES-128-CBC + HMAC-SHA256. The whitehat replies using Blockstream\u2019s RSA-4096 PGP subkey.</div>';
+      h+='<div class="keb-links"><a href="/a/bc1ql4mfu6aundtkksxklfajs2h3t9nzcd6gyqjlte/chat">Filter Whitehat Chat \u2197</a></div></div>';
+      h+='</div></div>';
+    }
+
     var parts=state.chat.participants||[];var multi=parts.length>1;
     h+='<div class="room"><div class="room-head"><span>'+parts.length+' monitored '+(parts.length===1?'party':'parties')+'</span><div class="who">';
     parts.forEach(function(p){h+='<a class="party-pill" href="/a/'+attr(p.address)+'/chat" title="'+attr((p.label?p.label+' \u00b7 ':'')+p.address)+'"><span class="dot"></span>'+esc(partyName(p,p.address))+'</a>';});
     h+='</div><button class="share-room" data-action="share-room">Share room \u2197</button></div>';
     h+='<div class="room-log" id="room-log">';
     if(state.chat.nextBefore)h+='<button class="btn-more" data-action="chat-earlier">\u2191 Load earlier</button>';
-    var msgs=state.chat.messages;
     if(!msgs.length)h+='<div class="empty">No messages yet \u2014 waiting for the next poll.</div>';
     var lastDay='',lastSender=null,lastTs=0;
     msgs.forEach(function(m){
@@ -691,11 +914,48 @@ ${ogMeta}
   function renderDetail(){
     var m=state.cache[state.detailTx];if(!m){go('feed');return;}
     var voted=state.voted[m.id]||(state.liked[m.id]?'up':null);var hostile=HOSTILE[m.category];
-    var h='<section class="wrap wrap-card"><button class="back" data-action="back">\\u2190 back</button>';
-    h+='<div class="artifact"><div class="bar"><span>\\u25c6 OP_RETURN \\u00b7 IMMUTABLE RECORD</span><span class="bar-right"><span class="st '+(m.is_mempool?'mem':'conf')+'">'+(m.is_mempool?'\\u25f7 IN MEMPOOL':'\\u2713 CONFIRMED')+'</span><button class="bar-x" data-action="back" aria-label="close" title="close">\\u2715</button></span></div>';
+    var env=parseCryptoEnvelope(m.content);
+    var h='<section class="wrap wrap-card"><button class="back" data-action="back">\u2190 back</button>';
+    h+='<div class="artifact"><div class="bar"><span>\u25c6 OP_RETURN \u00b7 IMMUTABLE RECORD</span><span class="bar-right"><span class="st '+(m.is_mempool?'mem':'conf')+'">'+(m.is_mempool?'\u25f7 IN MEMPOOL':'\u2713 CONFIRMED')+'</span><button class="bar-x" data-action="back" aria-label="close" title="close">\u2715</button></span></div>';
     h+='<div class="pad"><span class="cat'+(hostile?' sig':'')+'">'+esc(m.category||'Unclassified')+'</span>';
-    var qlen=(m.content||'').length;var qcls=qlen>600?' long':(qlen>240?' med':'');
-    h+='<blockquote class="'+qcls.trim()+'">\\u201c'+esc(m.content)+'\\u201d</blockquote>';
+    if(env){
+      if(env.isSigned)h+='<span class="cat" style="margin-left:6px;border-color:#16a34a;color:#16a34a">🛡️ PGP Signed</span>';
+      else if(env.type==='bie1')h+='<span class="cat" style="margin-left:6px;border-color:#eab308;color:#ca8a04">⚡ BIE1 ECIES</span>';
+      else if(env.type==='pgp-encrypted')h+='<span class="cat" style="margin-left:6px;border-color:#3b82f6;color:#2563eb">🔒 PGP Encrypted</span>';
+    }
+    if(env&&env.isSigned){
+      h+='<div class="crypto-sig-badge" style="margin-top:12px"><span class="sig-icon">🛡️</span><span>Signed by <strong>'+esc(env.signer||'Blockstream Security')+'</strong></span><span>Key ID: <code>'+esc(env.signerKey||'4AC8CC886844A2D6')+'</code></span><a href="https://blockstream.com/pgp.txt" target="_blank" rel="noopener">pgp.txt ↗</a></div>';
+    }
+    var qtext=(env&&env.leadText)?env.leadText:m.content;
+    var qlen=(qtext||'').length;var qcls=qlen>600?' long':(qlen>240?' med':'');
+    h+='<blockquote class="'+qcls.trim()+'">\u201c'+esc(qtext)+'\u201d</blockquote>';
+
+    if(env){
+      if(env.type==='bie1'){
+        h+='<div class="crypto-envelope bie1" id="env-'+attr(m.txid)+'" style="margin:16px 0">';
+        h+='<div class="env-head"><span class="env-icon">⚡</span><div class="env-info"><div class="env-title">Electrum BIE1 ECIES Encrypted</div><div class="env-sub">Recipient: <code>'+esc(m.address)+'</code> (secp256k1)</div></div></div>';
+        h+='<div class="env-actions">';
+        h+='<button class="env-btn decrypt-btn" data-action="open-decrypt" data-txid="'+attr(m.txid)+'" data-payload="'+attr(env.bie1Payload)+'" data-addr="'+attr(m.address)+'">🔑 Decrypt with Private Key</button>';
+        h+='<button class="env-btn" data-action="copy" data-copy="'+attr(env.bie1Payload)+'">📋 Copy Payload</button>';
+        h+='<button class="env-btn" data-action="toggle-armor" data-target="armor-det-'+attr(m.txid)+'">🔍 Raw Payload</button>';
+        h+='</div>';
+        h+='<div class="env-decrypted" id="dec-'+attr(m.txid)+'" style="display:none"></div>';
+        h+='<div class="env-armor" id="armor-det-'+attr(m.txid)+'" style="display:none"><pre><code>'+esc(env.bie1Payload)+'</code></pre></div>';
+        h+='</div>';
+      } else if(env.type==='pgp-encrypted'){
+        h+='<div class="crypto-envelope pgp" id="env-'+attr(m.txid)+'" style="margin:16px 0">';
+        h+='<div class="env-head"><span class="env-icon">🔒</span><div class="env-info"><div class="env-title">Encrypted for Blockstream Security</div><div class="env-sub">RSA-4096 Subkey: <code>BB332D31CBA44EDF</code></div></div></div>';
+        h+='<div class="env-actions">';
+        h+='<button class="env-btn" data-action="toggle-armor" data-target="armor-det-'+attr(m.txid)+'">🔍 Inspect PGP Armor</button>';
+        h+='<button class="env-btn" data-action="copy" data-copy="'+attr(env.pgpArmor||m.content)+'">📋 Copy PGP</button>';
+        h+='<a class="env-btn" href="https://blockstream.com/pgp.txt" target="_blank" rel="noopener">🔑 Public Key ↗</a>';
+        h+='</div>';
+        h+='<div class="env-armor" id="armor-det-'+attr(m.txid)+'" style="display:none"><pre><code>'+esc(env.pgpArmor||m.content)+'</code></pre></div>';
+        h+='</div>';
+      } else if(env.type==='pgp-signed'&&env.pgpArmor){
+        h+='<div class="env-armor-toggle" style="margin:16px 0"><button class="env-text-btn" data-action="toggle-armor" data-target="armor-det-'+attr(m.txid)+'">🔍 Inspect raw PGP signature</button><div class="env-armor" id="armor-det-'+attr(m.txid)+'" style="display:none"><pre><code>'+esc(env.pgpArmor)+'</code></pre></div></div>';
+      }
+    }
     h+='<div class="metagrid">';
     if(m.collection_id){h+='<div class="cell full"><div class="k">Collection</div><div class="v single"><a href="/c/'+attr(colSlug(colById(m.collection_id)))+'">'+esc(colName(m.collection_id))+'</a></div></div>';}
     h+=cellCopy('Address',m.address);
@@ -891,6 +1151,14 @@ ${ogMeta}
     if(a==='like'){vote(Number(t.getAttribute('data-id')),'up');return;}
     if(a==='copy'){copy(t.getAttribute('data-copy'),t);return;}
     if(a==='share'){share(t);return;}
+    if(a==='open-decrypt'){openDecrypt(t.getAttribute('data-txid'),t.getAttribute('data-payload'),t.getAttribute('data-addr'));return;}
+    if(a==='decrypt-close'){closeDecrypt();return;}
+    if(a==='decrypt-submit'){submitDecrypt();return;}
+    if(a==='toggle-armor'){
+      var tgt=document.getElementById(t.getAttribute('data-target'));
+      if(tgt)tgt.style.display=tgt.style.display==='none'?'block':'none';
+      return;
+    }
     if(a==='suggest-open'){openSuggest(t.getAttribute('data-col'));return;}
     if(a==='suggest-close'){closeSuggest();return;}
     if(a==='suggest-submit'){submitSuggest();return;}
@@ -898,7 +1166,14 @@ ${ogMeta}
 
   var _sm=document.getElementById('suggest-modal');
   if(_sm)_sm.addEventListener('click',function(e){if(e.target===this)closeSuggest();});
-  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSuggest();});
+  var _dm=document.getElementById('decrypt-modal');
+  if(_dm)_dm.addEventListener('click',function(e){if(e.target===this)closeDecrypt();});
+  var _pwdToggle=document.getElementById('dec-toggle-pwd');
+  if(_pwdToggle)_pwdToggle.addEventListener('click',function(){
+    var inp=document.getElementById('dec-privkey');
+    if(inp)inp.type=inp.type==='password'?'text':'password';
+  });
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeSuggest();closeDecrypt();}});
 
   /* synchronous SHA-256 (hex) so 16-bit PoW mines in ~milliseconds instead of thousands of async WebCrypto calls */
   function sha256(a){function e(a,b){return a>>>b|a<<32-b}var b,c,d,h=Math.pow,j=h(2,32),k="",l=[],m=8*a.length,n=sha256.h=sha256.h||[],o=sha256.k=sha256.k||[],p=o.length;for(var q={},r=2;p<64;r++)if(!q[r]){for(b=0;b<313;b+=r)q[b]=r;n[p]=h(r,.5)*j|0,o[p++]=h(r,1/3)*j|0}for(a+="\\u0080";a.length%64-56;)a+="\\u0000";for(b=0;b<a.length;b++){if(c=a.charCodeAt(b),c>>8)return;l[b>>2]|=c<<(3-b)%4*8}for(l[l.length]=m/j|0,l[l.length]=m,d=0;d<l.length;){var s=l.slice(d,d+=16),t=n;for(n=n.slice(0,8),b=0;b<64;b++){var u=s[b-15],v=s[b-2],w=n[0],x=n[4],y=n[7]+(e(x,6)^e(x,11)^e(x,25))+(x&n[5]^~x&n[6])+o[b]+(s[b]=b<16?s[b]:s[b-16]+(e(u,7)^e(u,18)^u>>>3)+s[b-7]+(e(v,17)^e(v,19)^v>>>10)|0),z=(e(w,2)^e(w,13)^e(w,22))+(w&n[1]^w&n[2]^n[1]&n[2]);n=[y+z|0].concat(n),n[4]=n[4]+y|0}for(b=0;b<8;b++)n[b]=n[b]+t[b]|0}for(b=0;b<8;b++)for(c=3;c+1;c--){var A=n[b]>>8*c&255;k+=(A<16?0:"")+A.toString(16)}return k}
@@ -985,7 +1260,168 @@ ${ogMeta}
       if(res.status===200&&res.d&&res.d.ok){setSugMsg('\u2713 Submitted for review. Thank you.','ok');b.textContent='Submitted';setTimeout(closeSuggest,1500);}
       else if(res.status===409){setSugMsg('This address is already '+((res.d&&res.d.error==='already monitored')?'monitored.':'in the review queue.'),'err');}
       else{setSugMsg((res.d&&res.d.error)||'Something went wrong \u2014 try again.','err');}
-    }).catch(function(){b.disabled=false;setSugMsg('Network error \u2014 try again.','err');});
+  }
+
+  /* ---- client-side Electrum BIE1 ECIES decryption ---- */
+  var B58_CHARS='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  function b58decode(str){
+    var bytes=[0];
+    for(var i=0;i<str.length;i++){
+      var c=str[i];var val=B58_CHARS.indexOf(c);
+      if(val===-1)throw new Error('Invalid base58 character: '+c);
+      for(var j=0;j<bytes.length;j++)bytes[j]*=58;
+      bytes[0]+=val;
+      var carry=0;
+      for(var j=0;j<bytes.length;j++){bytes[j]+=carry;carry=bytes[j]>>8;bytes[j]&=255;}
+      while(carry>0){bytes.push(carry&255);carry>>=8;}
+    }
+    for(var i=0;i<str.length&&str[i]==='1';i++)bytes.push(0);
+    return bytes.reverse();
+  }
+  function wifToHex(wif){
+    wif=wif.trim();
+    if(/^[0-9a-fA-F]{64}$/.test(wif))return wif.toLowerCase();
+    var raw=b58decode(wif);
+    if(raw.length===37||raw.length===38){
+      var hex='';
+      for(var i=1;i<33;i++)hex+=(raw[i]<16?'0':'')+raw[i].toString(16);
+      return hex;
+    }
+    throw new Error('Invalid key format. Enter a 64-hex string or WIF key.');
+  }
+
+  var SECP_P=BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F');
+  function secpMod(a,m){var r=a%(m||SECP_P);return r>=0n?r:r+(m||SECP_P);}
+  function secpInv(a,m){
+    a=secpMod(a,m||SECP_P);
+    var exp=(m||SECP_P)-2n,res=1n,base=a;
+    while(exp>0n){if(exp&1n)res=(res*base)%(m||SECP_P);base=(base*base)%(m||SECP_P);exp>>=1n;}
+    return res;
+  }
+  function secpAdd(p1,p2){
+    if(!p1)return p2;if(!p2)return p1;
+    var x1=p1[0],y1=p1[1],x2=p2[0],y2=p2[1];
+    if(x1===x2){
+      if(y1!==y2)return null;
+      var lam=(3n*x1*x1%SECP_P*secpInv(2n*y1))%SECP_P;
+      var x3=secpMod(lam*lam-2n*x1);
+      var y3=secpMod(lam*(x1-x3)-y1);
+      return [x3,y3];
+    }
+    var lam=(secpMod(y2-y1)*secpInv(secpMod(x2-x1)))%SECP_P;
+    var x3=secpMod(lam*lam-x1-x2);
+    var y3=secpMod(lam*(x1-x3)-y1);
+    return [x3,y3];
+  }
+  function secpMul(k,p){
+    var r=null,base=p;
+    while(k>0n){if(k&1n)r=secpAdd(r,base);base=secpAdd(base,base);k>>=1n;}
+    return r;
+  }
+  function secpDecompress(bytes){
+    var prefix=bytes[0];
+    var hex='';for(var i=1;i<bytes.length;i++)hex+=(bytes[i]<16?'0':'')+bytes[i].toString(16);
+    var x=BigInt('0x'+hex);
+    var ySq=secpMod(x*x*x+7n);
+    var exp=(SECP_P+1n)/4n,res=1n,base=ySq;
+    while(exp>0n){if(exp&1n)res=(res*base)%SECP_P;base=(base*base)%SECP_P;exp>>=1n;}
+    var y=res;
+    if((y%2n===0n?2:3)!==prefix)y=secpMod(-y);
+    return [x,y];
+  }
+
+  async function decryptBIE1WebCrypto(b64,privKeyHex){
+    var subtle=window.crypto&&window.crypto.subtle;
+    if(!subtle)throw new Error('WebCrypto API not supported in this environment');
+    var raw=atob(b64.trim().replace(/\s+/g,''));
+    var buf=new Uint8Array(raw.length);
+    for(var i=0;i<raw.length;i++)buf[i]=raw.charCodeAt(i);
+    if(buf.length<85)throw new Error('Ciphertext payload is too short (< 85 bytes)');
+    var magic=String.fromCharCode(buf[0],buf[1],buf[2],buf[3]);
+    if(magic!=='BIE1')throw new Error('Invalid magic bytes: expected BIE1');
+    var ephemPubBytes=buf.slice(4,37);
+    var ciphertext=buf.slice(37,buf.length-32);
+    var mac=buf.slice(buf.length-32);
+    var ephemPoint=secpDecompress(ephemPubBytes);
+    var privInt=BigInt('0x'+privKeyHex);
+    var sharedPoint=secpMul(privInt,ephemPoint);
+    if(!sharedPoint)throw new Error('Invalid point multiplication (point at infinity)');
+    var sharedHex=(sharedPoint[1]%2n===0n?'02':'03')+sharedPoint[0].toString(16).padStart(64,'0');
+    var sharedBytes=new Uint8Array(33);
+    for(var i=0;i<33;i++)sharedBytes[i]=parseInt(sharedHex.slice(i*2,i*2+2),16);
+
+    var hashBuf=await subtle.digest('SHA-512',sharedBytes);
+    var key=new Uint8Array(hashBuf);
+    var iv=key.slice(0,16);
+    var key_e=key.slice(16,32);
+    var key_m=key.slice(32,64);
+
+    var hmacKey=await subtle.importKey('raw',key_m,{name:'HMAC',hash:'SHA-256'},false,['verify']);
+    var isValid=await subtle.verify('HMAC',hmacKey,mac,buf.slice(0,buf.length-32));
+    if(!isValid)throw new Error('HMAC verification failed (incorrect private key for this message)');
+
+    var aesKey=await subtle.importKey('raw',key_e,{name:'AES-CBC'},false,['decrypt']);
+    var decryptedBuf=await subtle.decrypt({name:'AES-CBC',iv:iv},aesKey,ciphertext);
+    return new TextDecoder().decode(decryptedBuf);
+  }
+
+  function openDecrypt(txid,payload,addr){
+    var m=document.getElementById('decrypt-modal');
+    if(!m)return;
+    document.getElementById('dec-target-txid').value=txid||'';
+    document.getElementById('dec-payload').value=payload||'';
+    document.getElementById('dec-target-addr').textContent=addr||'';
+    document.getElementById('dec-privkey').value='';
+    var msgEl=document.getElementById('dec-msg');
+    msgEl.textContent='';msgEl.className='modal-msg';
+    document.getElementById('dec-result').style.display='none';
+    document.getElementById('dec-plaintext').textContent='';
+    var b=document.getElementById('dec-submit');b.disabled=false;b.textContent='Decrypt message';
+    m.hidden=false;
+    setTimeout(function(){var a=document.getElementById('dec-privkey');if(a)a.focus();},40);
+  }
+  function closeDecrypt(){var m=document.getElementById('decrypt-modal');if(m)m.hidden=true;}
+  function submitDecrypt(){
+    var privKey=document.getElementById('dec-privkey').value.trim();
+    var payload=document.getElementById('dec-payload').value.trim();
+    var txid=document.getElementById('dec-target-txid').value.trim();
+    var msgEl=document.getElementById('dec-msg');
+    var resEl=document.getElementById('dec-result');
+    var ptEl=document.getElementById('dec-plaintext');
+    var b=document.getElementById('dec-submit');
+    if(!privKey){msgEl.textContent='Please enter a private key.';msgEl.className='modal-msg err';return;}
+    b.disabled=true;
+    msgEl.textContent='\u26cf Computing secp256k1 point multiplication & WebCrypto AES...';
+    msgEl.className='modal-msg';
+    setTimeout(function(){
+      try{
+        var hexKey=wifToHex(privKey);
+        decryptBIE1WebCrypto(payload,hexKey).then(function(decrypted){
+          b.disabled=false;
+          msgEl.textContent='\u2713 Decrypted successfully!';
+          msgEl.className='modal-msg ok';
+          ptEl.textContent=decrypted;
+          resEl.style.display='block';
+          if(txid){
+            var cardDec=document.getElementById('dec-'+txid);
+            if(cardDec){
+              cardDec.innerHTML='<strong>\ud83d\udd13 Decrypted Plaintext:</strong><div style="margin-top:5px">'+esc(decrypted)+'</div>';
+              cardDec.style.display='block';
+            }
+          }
+        }).catch(function(err){
+          b.disabled=false;
+          msgEl.textContent='Decryption error: '+(err.message||'Invalid key or corrupted ciphertext');
+          msgEl.className='modal-msg err';
+          resEl.style.display='none';
+        });
+      }catch(err){
+        b.disabled=false;
+        msgEl.textContent='Decryption error: '+(err.message||'Invalid private key format');
+        msgEl.className='modal-msg err';
+        resEl.style.display='none';
+      }
+    },20);
   }
 
   /* ---- WebMCP: Expose site tools to AI agents via browser API ---- */

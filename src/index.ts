@@ -56,6 +56,7 @@ import {
   renderMessageMarkdown,
   renderMessageSsr,
   renderNotFoundSsr,
+  cleanCryptoPreview,
 } from './seo';
 import { ensureSeeded, slugify } from './seed';
 import type { ChatCardData } from './og';
@@ -975,15 +976,16 @@ app.get('/m/:txid', async (c) => {
   }
 
   applyDiscoveryHeaders(c, origin);
-  const postSchema = buildMessageSchema(origin, msg, colName);
+  const previewText = cleanCryptoPreview(msg.content) || msg.content || 'OP_RETURN';
+  const postSchema = buildMessageSchema(origin, { ...msg, content: previewText }, colName);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
     { name: 'Transmissions', path: '/feed' },
-    { name: `\u201c${clamp(msg.content || 'OP_RETURN', 24)}\u201d`, path: `/m/${txid}` },
+    { name: `\u201c${clamp(previewText, 24)}\u201d`, path: `/m/${txid}` },
   ]);
   return c.html(
     renderIndex({
-      title: `\u201c${clamp(msg.content || 'OP_RETURN', 64)}\u201d`,
+      title: `\u201c${clamp(previewText, 64)}\u201d`,
       description: `${colName || 'Untracked address'} \u00b7 ${shortAddr(msg.address)} \u00b7 ${msg.likes} likes \u00b7 The Permanent Record`,
       url: `${origin}/m/${txid}`,
       image: `${origin}/og/message/${txid}.png`,
