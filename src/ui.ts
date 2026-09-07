@@ -223,9 +223,10 @@ ${ogMeta}
   .room{background:var(--card);border:1px solid var(--line);display:flex;flex-direction:column;min-height:60vh}
   .room-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
   .room-head .who{display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;flex:1}
-  .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line4);padding:4px 9px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg2);text-decoration:none}
-  .pill:hover{border-color:var(--sig);color:var(--sig)}
-  .pill .dot{width:8px;height:8px;border-radius:50%;background:var(--sig)}
+  /* Not .pill: the landing page owns that name (with a 28px bottom margin). */
+  .party-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line4);padding:4px 9px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg2);text-decoration:none;margin:0}
+  .party-pill:hover{border-color:var(--sig);color:var(--sig)}
+  .party-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--sig)}
   .share-room{margin-left:auto;background:none;border:1px solid var(--line);color:var(--fg);padding:6px 12px;font-family:inherit;font-size:11px;cursor:pointer}
   .share-room:hover{background:var(--inv-bg);color:var(--inv-fg)}
   .room-log{padding:18px 18px 24px;display:flex;flex-direction:column;gap:4px}
@@ -259,7 +260,7 @@ ${ogMeta}
     .room{min-height:0}
     .room-head{flex-direction:column;align-items:stretch;gap:8px;padding:12px}
     .room-head .who{flex:none}
-    .pill{white-space:nowrap;padding:4px 8px;font-size:9px}
+    .party-pill{white-space:nowrap;padding:4px 8px;font-size:9px}
     .share-room{margin:4px 0 0;width:100%;padding:9px 12px}
     .room-log{padding:12px 10px 18px}
     .turn{max-width:100%;gap:6px}
@@ -578,7 +579,7 @@ ${ogMeta}
     h+='<div class="head-ctl">'+viewToggle('chat')+'</div></div>';
     var parts=state.chat.participants||[];var multi=parts.length>1;
     h+='<div class="room"><div class="room-head"><span>'+parts.length+' monitored '+(parts.length===1?'party':'parties')+'</span><div class="who">';
-    parts.forEach(function(p){h+='<a class="pill" href="/a/'+attr(p.address)+'/chat" title="'+attr((p.label?p.label+' \u00b7 ':'')+p.address)+'"><span class="dot"></span>'+esc(partyName(p,p.address))+'</a>';});
+    parts.forEach(function(p){h+='<a class="party-pill" href="/a/'+attr(p.address)+'/chat" title="'+attr((p.label?p.label+' \u00b7 ':'')+p.address)+'"><span class="dot"></span>'+esc(partyName(p,p.address))+'</a>';});
     h+='</div><button class="share-room" data-action="share-room">Share room \u2197</button></div>';
     h+='<div class="room-log" id="room-log">';
     if(state.chat.nextBefore)h+='<button class="btn-more" data-action="chat-earlier">\u2191 Load earlier</button>';
