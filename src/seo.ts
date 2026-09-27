@@ -113,13 +113,14 @@ export function generateLlmsTxt(siteUrl: string): string {
 ## Monitored Collections & On-Chain Phenomena
 
 The archive focuses on addresses that have evolved into public bulletin boards:
-1. **Liquid Network Peg-Out Bulletin Board**: Addresses from the September 2026 Liquid Network whitehat incident (~3,996 BTC peg-out negotiation between hackers and Blockstream security).
-2. **Coldcard Exploit Bulletin Board**: Primary holding addresses from the July-August 2026 Coldcard firmware RNG exploit, filled with laundry ads, victim pleas, threats, and prompt injections.
-3. **High-Value Dormant Wallet Notices**: Early 2010-2011 high-balance addresses (including the Mt. Gox 1Feex address) targeted with legal notices, ownership claims, and phishing attempts.
-4. **Genesis & Satoshi Tribute**: The Genesis block address (\`1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa\`), receiving ongoing memorials and prayers to Satoshi Nakamoto.
-5. **Russian Intelligence Marking Campaign**: Addresses marked in 2022 via OP_RETURN as associated with GRU / SVR / FSB intelligence agencies.
-6. **Cultural Memorials & Digital Graffiti**: Permanent personal tributes, biblical verses, and vanity address communications.
-7. **Historical Hacker Negotiation Boards**: Historic addresses used for public bounty negotiations and victim-attacker dialogue.
+1. **Bitget Hack Bulletin Board**: Largest unspent Bitcoin parcels from the 24 September 2026 Bitget hot-wallet breach (~190 BTC across eight addresses on Bitget's public stolen-funds tracker).
+2. **Liquid Network Peg-Out Bulletin Board**: Addresses from the September 2026 Liquid Network whitehat incident (~3,996 BTC peg-out negotiation between hackers and Blockstream security).
+3. **Coldcard Exploit Bulletin Board**: Primary holding addresses from the July-August 2026 Coldcard firmware RNG exploit, filled with laundry ads, victim pleas, threats, and prompt injections.
+4. **High-Value Dormant Wallet Notices**: Early 2010-2011 high-balance addresses (including the Mt. Gox 1Feex address) targeted with legal notices, ownership claims, and phishing attempts.
+5. **Genesis & Satoshi Tribute**: The Genesis block address (\`1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa\`), receiving ongoing memorials and prayers to Satoshi Nakamoto.
+6. **Russian Intelligence Marking Campaign**: Addresses marked in 2022 via OP_RETURN as associated with GRU / SVR / FSB intelligence agencies.
+7. **Cultural Memorials & Digital Graffiti**: Permanent personal tributes, biblical verses, and vanity address communications.
+8. **Historical Hacker Negotiation Boards**: Historic addresses used for public bounty negotiations and victim-attacker dialogue.
 
 ## AI Classification Taxonomy
 
@@ -768,7 +769,7 @@ export function generateAgentCardJson(siteUrl: string): Record<string, unknown> 
       {
         id: 'get-collections',
         name: 'Get Collections Directory',
-        description: 'Retrieve curated Bitcoin address collections (Liquid Network whitehat, Coldcard exploit, Mt. Gox 1Feex, Genesis tributes).',
+        description: 'Retrieve curated Bitcoin address collections (Bitget hack, Liquid Network whitehat, Coldcard exploit, Mt. Gox 1Feex, Genesis tributes).',
       },
       {
         id: 'get-chat-stream',
@@ -821,7 +822,7 @@ export function generateMcpServerCardJson(siteUrl: string): Record<string, unkno
       },
       {
         name: 'get_collections',
-        description: 'List all monitored Bitcoin collections (Liquid Network whitehats, Coldcard exploit, Mt Gox, Genesis)',
+        description: 'List all monitored Bitcoin collections (Bitget hack, Liquid Network whitehats, Coldcard exploit, Mt Gox, Genesis)',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -937,7 +938,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'What kinds of messages are monitored on The Permanent Record?',
-    a: 'The Permanent Record monitors high-profile Bitcoin addresses that have evolved into public bulletin boards: whitehat and hacker communications (such as the Liquid Network and Coldcard incidents), dormant early wallet legal notices (including Mt. Gox 1Feex), Genesis block tributes to Satoshi Nakamoto, and geopolitical marking campaigns.',
+    a: 'The Permanent Record monitors high-profile Bitcoin addresses that have evolved into public bulletin boards: whitehat and hacker communications (such as the Bitget, Liquid Network and Coldcard incidents), dormant early wallet legal notices (including Mt. Gox 1Feex), Genesis block tributes to Satoshi Nakamoto, and geopolitical marking campaigns.',
   },
   {
     q: 'How does AI classification categorize transmissions?',

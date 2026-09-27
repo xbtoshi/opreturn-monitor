@@ -1,5 +1,44 @@
 [
   {
+    "name": "Bitget Hack Bulletin Board",
+    "description": "Largest unspent Bitcoin parcels attributed to the attacker in the 24 September 2026 Bitget hot-wallet breach. Bitget says about $387.5 million left its hot and warm wallets across Ethereum, XRP, TRON, Zcash and other chains, and much of what moved was swapped into BTC. These eight addresses are the biggest balances on Bitget's public stolen-funds tracker (trace.bgblockchain.xyz) as of 28 September 2026: about 190 BTC, mostly a single receipt each.",
+    "slug": "bitget-hack-bulletin-board",
+    "addresses": [
+      {
+        "address": "bc1q578370zc2zrr39l9prsjfc7xhwdmhek3pavwvz",
+        "label": "42.06 BTC holding address"
+      },
+      {
+        "address": "bc1q3q57s0etyfla66rwtckfxt5zzz0emclmjjy7mw",
+        "label": "25.99 BTC holding address"
+      },
+      {
+        "address": "bc1qzacwkkldkee3cnsg3ntq9a4ppxcy8kyl8tecsw",
+        "label": "25.38 BTC holding address"
+      },
+      {
+        "address": "bc1qcjndd78tmvsmdttazc50gfsfa3qqdx4f6ru5dj",
+        "label": "21.57 BTC holding address"
+      },
+      {
+        "address": "bc1q6ctdtjk2zej0kem9f0jmq7kntq3xkhhgt234dc",
+        "label": "21.27 BTC holding address"
+      },
+      {
+        "address": "bc1qq2g6up5ete6s35qm7k0tqd8z2lhlk4rwhxz9lu",
+        "label": "18.55 BTC holding address"
+      },
+      {
+        "address": "bc1ql0nc646qq8c8anrfumk42ugwt528ymlz2za7yp",
+        "label": "18.21 BTC holding address"
+      },
+      {
+        "address": "bc1qyrntxyc9pkef88v97lshnmhs2dk966ersgjghe",
+        "label": "17.23 BTC holding address"
+      }
+    ]
+  },
+  {
     "name": "Liquid Network Peg-Out Bulletin Board",
     "description": "Addresses from the September 2026 Liquid Network incident, in which self-described whitehats used an L-BTC inflation bug and a valid SideSwap peg-out authorization to withdraw ~3,996 BTC (about 95% of federation reserves) in block 965,783. The hackers, Blockstream security and the usual crowd of lawyers, launderers and wallet ads are all talking through OP_RETURN.",
     "slug": "liquid-network-peg-out-bulletin-board",

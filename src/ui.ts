@@ -604,7 +604,7 @@ ${ogMeta}
       {q:'What is an OP_RETURN message in Bitcoin?',a:'An OP_RETURN output is a Bitcoin Script opcode (0x6a) used to embed arbitrary data into a transaction. Because OP_RETURN outputs are provably unspendable, nodes exclude them from the RAM-resident UTXO set, making it the standard method for recording permanent, tamper-evident messages without blockchain bloat.'},
       {q:'Can an OP_RETURN message be deleted, altered, or censored?',a:'No. Once a transaction carrying an OP_RETURN output is confirmed inside a Bitcoin block, it becomes an immutable part of the distributed ledger. It cannot be altered, edited, or removed by any central authority, corporation, or node operator.'},
       {q:'How much data can fit inside an OP_RETURN output?',a:'Historically, Bitcoin standard relay policy restricted OP_RETURN outputs to 40 bytes and later 80 bytes. In 2025, Bitcoin Core v30 removed the default 80-byte relay cap, allowing larger arbitrary data payloads to propagate across the network as standard transactions.'},
-      {q:'What kinds of messages are monitored on The Permanent Record?',a:'The Permanent Record monitors high-profile Bitcoin addresses that have evolved into public bulletin boards: whitehat and hacker communications (such as the Liquid Network and Coldcard incidents), dormant early wallet legal notices (including Mt. Gox 1Feex), Genesis block tributes to Satoshi Nakamoto, and geopolitical marking campaigns.'},
+      {q:'What kinds of messages are monitored on The Permanent Record?',a:'The Permanent Record monitors high-profile Bitcoin addresses that have evolved into public bulletin boards: whitehat and hacker communications (such as the Bitget, Liquid Network and Coldcard incidents), dormant early wallet legal notices (including Mt. Gox 1Feex), Genesis block tributes to Satoshi Nakamoto, and geopolitical marking campaigns.'},
       {q:'How does AI classification categorize transmissions?',a:'Each message is decoded to UTF-8 and processed through an OpenAI-compatible endpoint that classifies content into one of seven categories: Laundry / Service Ads, Begging / Victim Appeals, Threats / Hostility, Prompt Injection, Haiku / Philosophical, Self-deprecating / Black Humor, or Other.'},
       {q:'How can I etch my own message into Bitcoin?',a:'You can attach an OP_RETURN output using non-custodial tools such as Sparrow Wallet (Tools \u2192 Add OP_RETURN), Bitcoin Core CLI (createrawtransaction), or Electrum. You pay a standard network miner fee proportional to data size. Full instructions are available in our Field Manual.'}
     ];
@@ -1466,7 +1466,7 @@ ${ogMeta}
 
       navigator.modelContext.registerTool({
         name: "list-collections",
-        description: "List all curated collections of monitored Bitcoin addresses (e.g. Liquid Network whitehat, Coldcard exploit, Genesis memorials).",
+        description: "List all curated collections of monitored Bitcoin addresses (e.g. Bitget hack, Liquid Network whitehat, Coldcard exploit, Genesis memorials).",
         inputSchema: { type: "object", properties: {} },
         execute: async function(){
           var r = await fetch('/api/collections');
