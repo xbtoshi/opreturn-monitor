@@ -112,6 +112,14 @@ describe('decodeScript', () => {
     expect(decodeScript('6a')).toMatchObject({ protocol: 'binary' });
   });
 
+  it('keeps bare protocol markers and control-byte payloads out of the text feed', () => {
+    expect(decodeScript(opReturn('SATFLOW'))?.protocol).toBe('satflow');
+    expect(decodeScript(opReturn('BRC20PROG'))?.protocol).toBe('brc20-prog');
+    expect(decodeScript(opReturn(new Uint8Array([0x44, 0x49, 0x4f, 0x31, 0x02, 0x00, 0x00])))?.protocol).toBe('dio');
+    expect(decodeScript(opReturn('hello\u0002world'))?.protocol).toBe('binary');
+    expect(decodeScript(opReturn('SATFLOW is great'))?.protocol).toBe('text');
+  });
+
   it('does not mistake the word "sys" or "CORE" in prose for a protocol tag', () => {
     expect(decodeScript(opReturn('system is down'))?.protocol).toBe('text');
     expect(decodeScript(opReturn('CORE values matter'))?.protocol).toBe('text');

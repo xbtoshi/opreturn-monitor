@@ -91,6 +91,7 @@ export function isReadableText(s: string): boolean {
   for (const ch of s) {
     if (ch === '�') replacement++;
     else if (ch >= ' ' || ch === '\n' || ch === '\r' || ch === '\t') printable++;
+    else return false; // a control byte means this is a binary layout, not prose
   }
   const n = Math.max(1, s.length);
   return replacement / n < 0.4 && printable / n >= 0.6;
@@ -173,6 +174,15 @@ const RE_EVM_HASH = /^0x[0-9a-fA-F]{64}$/;
 const RE_LIFI = /=\|lifi/;
 const RE_SLUG = /[^a-z0-9._-]+/g;
 
+/** Bare protocol markers that are ASCII but not messages. */
+const MARKER_TAGS: Record<string, string> = {
+  SATFLOW: 'satflow',
+  BRC20PROG: 'brc20-prog',
+  DIO1: 'dio',
+  ALPN: 'alpn',
+};
+
+
 function slugProtocol(p: string): string {
   return p.toLowerCase().replace(RE_SLUG, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'unknown';
 }
@@ -237,6 +247,13 @@ export function detectFromText(text: string): Omit<DecodedOp, 'vout' | 'payload_
 
   if (RE_EVM_HASH.test(t)) {
     return { protocol: 'evm-hash', op: null, tick: null, amount: null, text: t };
+  }
+
+  // Bare marker followed by nothing, a control byte or non-ASCII data.
+  for (const tag of Object.keys(MARKER_TAGS)) {
+    if (t.startsWith(tag) && (t.length === tag.length || t.charCodeAt(tag.length) < 0x20 || t.charCodeAt(tag.length) >= 0x80)) {
+      return { protocol: MARKER_TAGS[tag], op: null, tick: null, amount: null, text: tag };
+    }
   }
 
   return null;
