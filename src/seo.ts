@@ -1374,8 +1374,8 @@ export function renderLandingSsr(
   colName?: string
 ): string {
   let h = '<section class="wrap" style="padding-bottom:clamp(30px,4vw,56px)">';
-  h += '<div class="pill"><span class="dot"></span>LIVE ON-CHAIN \u00b7 IMMUTABLE BITCOIN MONITOR</div>';
-  h += '<h1 class="hero">People are leaving messages inside Bitcoin. Forever.</h1>';
+  h += '<div class="pill-live"><span class="d"></span>LIVE ON-CHAIN \u00b7 IMMUTABLE BITCOIN MONITOR</div>';
+  h += '<h1 class="hero-title">People are leaving messages inside Bitcoin. Forever.</h1>';
   h += '<p class="lede">Every one of these was etched into an <span class="mono" style="font-size:.85em">OP_RETURN</span> output on the blockchain \u2014 threats, confessions, prayers, ads, haiku. Immutable. Unstoppable. We scan every block, decode every OP_RETURN protocol, and keep the human messages front and centre.</p>';
   h += '<div class="cta"><a class="btn btn-primary" href="/feed">Enter the feed \u2192</a><a class="btn" href="/collections">Browse collections</a></div>';
   h += '<p class="mono" style="margin-top:20px;font-size:13px;color:var(--fg4)">Want to leave your own mark? <a href="/guide" style="color:var(--sig);text-decoration:underline">Read the field manual \u2192</a></p>';
@@ -1522,7 +1522,7 @@ export function renderMessageListSsr(
     if (isProto && op && (op.op || op.amount || op.tick)) {
       h += '<div class="opline">' + (op.op ? `<span>${escHtml(op.op)}</span>` : '') + (op.amount ? `<span class="amt">${escHtml(op.amount)}</span>` : '') + (op.tick ? `<a class="tk" href="/tick/${escHtml(encodeURIComponent(op.tick))}">$${escHtml(op.tick)}</a>` : '') + '</div>';
     }
-    h += `<a href="/m/${escHtml(m.txid)}" style="text-decoration:none;color:inherit"><p class="content${isProto ? ' proto' : ''}">${escHtml(isProto ? messageExcerpt(m, 200) : messageExcerpt(m))}</p></a>`;
+    h += `<a href="/m/${escHtml(m.txid)}" style="text-decoration:none;color:inherit"><h3 class="content${isProto ? ' proto' : ''}">${escHtml(isProto ? messageExcerpt(m, 200) : messageExcerpt(m))}</h3></a>`;
     h += '<div class="foot"><span class="chain">';
     h += m.block_height != null ? `<a href="/block/${m.block_height}">#${m.block_height.toLocaleString('en-US')}</a>` : 'unconfirmed';
     if (m.address) h += ` \u00b7 <a href="/a/${escHtml(m.address)}">${escHtml(shortAddr(m.address))}</a>`;
@@ -1840,7 +1840,7 @@ export function renderBlockMarkdown(siteUrl: string, block: { height: number; ha
 export function renderNotFoundSsr(title?: string, message?: string): string {
   let h = '<section class="wrap wrap-narrow" style="text-align:center;padding-top:clamp(40px,8vw,90px)">';
   h += '<div class="kicker">\u25c6 404 NOT FOUND</div>';
-  h += `<h1 class="hero" style="font-size:clamp(32px,6vw,64px);margin:16px auto">${escHtml(title || 'Record not found')}</h1>`;
+  h += `<h1 class="hero-title" style="font-size:clamp(32px,6vw,64px);margin:16px auto">${escHtml(title || 'Record not found')}</h1>`;
   h += `<p class="lede" style="margin:0 auto 32px">${escHtml(message || 'The requested blockchain transmission or collection does not exist in this archive.')}</p>`;
   h += '<div class="cta" style="justify-content:center">';
   h += '<a class="btn btn-primary" href="/">Return to transmissions \u2192</a>';

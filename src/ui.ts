@@ -54,7 +54,7 @@ function sidebarHtml(s: ShellData): string {
     h += `<a href="${href}" data-nav="${key}"><span>${label}</span>${count ? `<span class="n" data-count="${count}"></span>` : ''}</a>`;
   }
   h += '</nav>';
-  h += '<div class="sfilters" id="side-filters" hidden>';
+  h += '<div class="sfilters" id="side-filters">';
   if (s.collections && s.collections.length) {
     h += '<div class="sgroup"><span class="slabel">COLLECTION</span>';
     for (const c of s.collections) {
@@ -571,13 +571,13 @@ ${ogMeta}
   .wrap{padding:36px 44px;max-width:1180px;display:flex;flex-direction:column;gap:18px}
   .wrap-narrow{max-width:1000px}
   .wrap-card{max-width:1180px}
-  .hero-title{font-size:56px;line-height:1;font-weight:600;letter-spacing:-.035em}
-  .feed-list{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line)}
-  .msg{display:flex;flex-direction:column;gap:10px;padding:20px 24px;border-bottom:1px solid var(--line2)}
-  .msg .head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg3)}
-  .msg .content{font-size:21px;line-height:1.36;font-weight:500;white-space:pre-wrap;word-break:break-word;max-width:60ch}
-  .msg .content.proto{font-family:'Martian Mono',monospace;font-size:13px;font-weight:400;color:var(--fg2)}
-  .msg .foot{display:flex;flex-wrap:wrap;gap:14px;font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
+  .hero-title{font-size:56px;line-height:1;font-weight:600;letter-spacing:-.035em;text-wrap:balance}
+  h3.content{margin:0}
+  .featured .inner{display:contents}
+  .featured .meta{display:flex;flex-wrap:wrap;gap:14px;font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
+  .featured .strong{font-weight:600;color:var(--fg)}
+  .featured .sig{color:var(--sig)}
+  .featured .k,.featured .kicker{font-family:'Martian Mono',monospace;font-size:11px;letter-spacing:.12em;color:var(--fg4)}
   .cat{font-family:'Martian Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3)}
   .cat.proto{color:var(--tok)}
   .fee,.time{font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
@@ -663,7 +663,7 @@ ${ogMeta}
 ${sidebarHtml(s)}
 <div class="stage">
   <div class="mtop"><div class="mbar"><a class="brandm" href="/">OP_RETURN</a><div class="right"><button class="themebtn" data-action="theme" type="button">&#9790; Dark</button><span class="tip">&#9679; <span data-tip>${s.tip ? '#' + s.tip.toLocaleString('en-US') : '&mdash;'}</span></span></div></div><div class="mctl" id="mfeedctl" hidden></div></div>
-  <main id="app">${m.initialHtml || ''}</main>
+  <div id="app">${m.initialHtml || ''}</div>
 </div>
 </div>
 ${tabbarHtml()}
@@ -891,7 +891,7 @@ ${tabbarHtml()}
     var mc=document.getElementById('mfeedctl');
     if(mc){mc.hidden=!isFeedScreen();if(isFeedScreen()){var n=feedFilters().length;mc.innerHTML='<div class="seg2"><a href="'+attr(sortHref('hot'))+'" class="'+(state.sort==='hot'?'active':'')+'">Hottest</a><a href="'+attr(sortHref('new'))+'" class="'+(state.sort==='new'?'active':'')+'">Newest</a></div><button class="fbtn" data-action="sheet-open">Filter'+(n?' · '+n:'')+'</button>';}}
     var q=document.getElementById('side-q');if(q&&q.value!==state.q&&document.activeElement!==q)q.value=state.q;
-    var sheet=document.getElementById('sheet-body');if(sheet)sheet.innerHTML=filtersHTML(true);
+    var sheet=document.getElementById('sheet-body');if(sheet&&state.sheet)sheet.innerHTML=filtersHTML(true);
     var cnt=document.getElementById('sheet-count');if(cnt)cnt.textContent=String(state.feed.length);
   }
   function sortHref(s){var qs=new URLSearchParams(location.search);if(s===defaultSort(currentRoute()))qs.delete('sort');else qs.set('sort',s);var q=qs.toString();return location.pathname+(q?'?'+q:'');}
@@ -1057,6 +1057,7 @@ ${tabbarHtml()}
     fetchJSON('/api/chain').then(function(r){
       if(!r.d||r.d.blocks==null)return;state.chain=r.d;
       if(!prevTip||r.d.highest_height<=prevTip)return;
+      syncShell();
       return fetchJSON('/api/messages?sort=new&limit=50'+(state.kind==='all'?'&kind=all':'')).then(function(rr){
         var w=state.watermark;var have={};state.feed.forEach(function(m){have[m.id]=1;});
         var fresh=((rr.d&&rr.d.messages)||[]).filter(function(m){var t=tsOf(m);return !have[m.id]&&(t>w.ts||(t===w.ts&&m.id>w.id));});
@@ -1346,8 +1347,10 @@ ${tabbarHtml()}
   function goBack(){if(_inApp>0){_inApp--;history.back();}else navigate('/feed');}
 
   /* ---- sheet & theme ---- */
-  function openSheet(){var s=document.getElementById('sheet');if(!s)return;s.hidden=false;document.body.classList.add('locked');state.sheet=true;syncShell();}
-  function closeSheet(){var s=document.getElementById('sheet');if(s)s.hidden=true;document.body.classList.remove('locked');state.sheet=false;}
+  var _sheetOpener=null;
+  function openSheet(){var s=document.getElementById('sheet');if(!s)return;_sheetOpener=document.activeElement;s.hidden=false;document.body.classList.add('locked');state.sheet=true;syncShell();var f=s.querySelector('a,button');if(f)f.focus();}
+  function closeSheet(){var s=document.getElementById('sheet');if(!s||s.hidden){state.sheet=false;document.body.classList.remove('locked');return;}s.hidden=true;document.body.classList.remove('locked');state.sheet=false;if(_sheetOpener&&_sheetOpener.focus){try{_sheetOpener.focus();}catch(e){}}_sheetOpener=null;}
+  document.addEventListener('keydown',function(e){if(e.key!=='Tab'||!state.sheet)return;var s=document.getElementById('sheet');var f=s.querySelectorAll('a[href],button:not([disabled])');if(!f.length)return;var first=f[0],last=f[f.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}});
   function applyTheme(t){var root=document.documentElement;if(t)root.setAttribute('data-theme',t);else root.removeAttribute('data-theme');var dark=t?t==='dark':(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches);var b=document.querySelectorAll('[data-action="theme"]');for(var i=0;i<b.length;i++)b[i].textContent=dark?'☀ Light':'☾ Dark';}
   function toggleTheme(){var cur=document.documentElement.getAttribute('data-theme');var dark=cur?cur==='dark':(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches);var next=dark?'light':'dark';try{localStorage.setItem('opreturn_theme',next);}catch(e){}applyTheme(next);}
 
@@ -1392,7 +1395,7 @@ ${tabbarHtml()}
   });
   document.addEventListener('keydown',function(e){
     if(e.key==='Escape'){closeSuggest();closeDecrypt();closeSheet();return;}
-    if(e.key==='/'&&!/input|textarea|select/i.test(e.target.tagName)){var q=document.getElementById('side-q');if(q){e.preventDefault();q.focus();}}
+    if(e.key==='/'&&!/input|textarea|select/i.test(e.target.tagName)&&!e.target.isContentEditable&&window.innerWidth>=760){var q=document.getElementById('side-q');if(q){e.preventDefault();q.focus();}}
     if(e.key==='Enter'&&e.target.id==='side-q'){var v=e.target.value.trim();navigate('/feed'+(v?'?q='+encodeURIComponent(v):'')+(state.kind==='all'?(v?'&':'?')+'kind=all':''));}
   });
   var sheetEl=document.getElementById('sheet');
@@ -1813,7 +1816,7 @@ ${tabbarHtml()}
         inputSchema: {
           type: "object",
           properties: {
-            page: { type: "string", enum: ["feed", "collections", "guide", "landing"], description: "Destination screen" }
+            page: { type: "string", enum: ["feed", "rooms", "protocols", "collections", "guide", "about", "landing"], description: "Destination screen" }
           },
           required: ["page"]
         },
@@ -1825,7 +1828,7 @@ ${tabbarHtml()}
     }catch(e){}
   }
 
-  function go(screen){navigate({landing:'/',about:'/',feed:'/feed',collections:'/collections',guide:'/guide',protocols:'/protocols'}[screen]||'/');}
+  function go(screen){navigate({landing:'/',about:'/',feed:'/feed',rooms:'/rooms',collections:'/collections',guide:'/guide',protocols:'/protocols'}[screen]||'/');}
 
   /* ---- boot ---- */
   try{applyTheme(localStorage.getItem('opreturn_theme')||'');}catch(e){applyTheme('');}

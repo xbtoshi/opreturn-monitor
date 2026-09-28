@@ -97,7 +97,8 @@ function shellFor(c: Context<Bindings>): ShellData {
           },
         };
       } catch {
-        // keep whatever we had
+        // Keep whatever we had, but don't retry on every request during a DB blip.
+        shellCache = { at: Date.now() - 45000, data: shellCache ? shellCache.data : {} };
       } finally {
         shellRefreshing = null;
       }
