@@ -59,6 +59,8 @@ export interface Message {
   /** Monitored address this row is attributed to, if any. */
   monitored_address?: string | null;
   block_height?: number | null;
+  /** 1 when an older twin of this row (same content, same address) is the representative. */
+  is_dup?: number;
   /** Decoded OP_RETURN outputs (detail queries only). */
   ops?: MessageOp[];
 }

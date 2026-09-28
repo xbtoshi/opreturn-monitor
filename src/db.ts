@@ -221,7 +221,21 @@ function mapFeedRow(r: Record<string, unknown>): Message {
     recipient: nullableStr(r, 'recipient'),
     monitored_address: nullableStr(r, 'monitored_address'),
     block_height: nullableNum(r, 'block_height'),
+    is_dup: r.is_dup == null ? undefined : num(r, 'is_dup'),
   };
+}
+
+/** txid of the representative row of this row's collapse group (itself when not a dup). */
+export async function getRepresentativeTxid(db: D1Database, id: number): Promise<string | null> {
+  const row = await db
+    .prepare(
+      `SELECT r.txid AS txid FROM messages m
+         JOIN messages r ON r.address = m.address AND r.content_hash = m.content_hash AND r.is_dup = 0
+        WHERE m.id = ? ORDER BY r.ts DESC, r.id DESC LIMIT 1`
+    )
+    .bind(id)
+    .first<{ txid: string }>();
+  return row?.txid ?? null;
 }
 
 /** WHERE fragments shared by the feed and chat queries. */

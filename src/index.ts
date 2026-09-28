@@ -58,6 +58,8 @@ import {
   renderLandingSsr,
   renderMessageMarkdown,
   renderMessageSsr,
+  messageHeadline,
+  messageExcerpt,
   renderNotFoundSsr,
   renderProtocolSsr,
   renderProtocolMarkdown,
@@ -67,7 +69,6 @@ import {
   renderTickMarkdown,
   renderBlockSsr,
   renderBlockMarkdown,
-  cleanCryptoPreview,
 } from './seo';
 import { ensureSeeded, slugify } from './seed';
 import type { ChatCardData } from './og';
@@ -561,6 +562,20 @@ async function collectionMap(db_inst: D1Database): Promise<Map<number, Collectio
   return new Map(cols.map((c) => [c.id, c]));
 }
 
+async function collectionNames(db_inst: D1Database): Promise<Map<number, string>> {
+  const cols = await db.listCollections(db_inst).catch(() => []);
+  return new Map(cols.map((c) => [c.id, c.name]));
+}
+
+/** First page of records for a server-rendered listing; never throws. */
+async function ssrList(db_inst: D1Database, opts: Partial<db.GetMessagesOpts>): Promise<{ msgs: import('./types').Message[]; names: Map<number, string> }> {
+  const [res, names] = await Promise.all([
+    db.getMessages(db_inst, { sort: 'new', limit: 30, ...opts } as db.GetMessagesOpts).catch(() => ({ messages: [] })),
+    collectionNames(db_inst),
+  ]);
+  return { msgs: res.messages, names };
+}
+
 // ---------------------------------------------------------------------------
 // Search Engine & Generative AI Discovery Directives
 // ---------------------------------------------------------------------------
@@ -605,7 +620,12 @@ app.get('/sitemap.xml', async (c) => {
   const [cols, addrs, feedRes, protocols, ticks] = await Promise.all([
     db.listCollections(c.env.DB).catch(() => []),
     db.listAddresses(c.env.DB).catch(() => []),
-    db.getMessages(c.env.DB, { sort: 'hot', limit: 100, kind: 'text' }).catch(() => ({ messages: [] })),
+    db.getMessages(c.env.DB, { sort: 'hot', limit: 100, kind: 'text' }).then(async (hot) => {
+      // Hottest human messages plus the newest ones, so fresh records get discovered too.
+      const recent = await db.getMessages(c.env.DB, { sort: 'new', limit: 200, kind: 'text' }).catch(() => ({ messages: [] }));
+      const seen = new Set<string>();
+      return { messages: [...hot.messages, ...recent.messages].filter((m) => !seen.has(m.txid) && seen.add(m.txid)) };
+    }).catch(() => ({ messages: [] })),
     db.listProtocols(c.env.DB).catch(() => []),
     db.listTicks(c.env.DB, undefined, 0, 200).catch(() => []),
   ]);
@@ -1059,11 +1079,13 @@ app.get('/', async (c) => {
   );
 });
 
-app.get('/feed', (c) => {
+app.get('/feed', async (c) => {
   const origin = originOf(c);
   if (wantsMarkdown(c)) {
     return markdownResponse(renderFeedMarkdown(origin), origin);
   }
+  const all = c.req.query('kind') === 'all';
+  const list = await ssrList(c.env.DB, { kind: all ? 'all' : 'text', sort: 'new', limit: 30 });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1076,7 +1098,7 @@ app.get('/feed', (c) => {
       url: origin + '/feed',
       image: origin + '/og/default.png',
       jsonLd: crumbs,
-      initialHtml: renderFeedSsr(),
+      initialHtml: renderFeedSsr(list.msgs, list.names),
     })
   );
 });
@@ -1185,24 +1207,38 @@ app.get('/m/:txid', async (c) => {
   if (wantsMarkdown(c)) {
     return markdownResponse(renderMessageMarkdown(origin, msg, colName), origin);
   }
+  const related = await ssrList(c.env.DB, { address: msg.address, kind: 'all', sort: 'new', limit: 7 });
 
   applyDiscoveryHeaders(c, origin);
-  const previewText = cleanCryptoPreview(msg.content) || msg.content || 'OP_RETURN';
+  const previewText = messageExcerpt(msg, 2000) || msg.content || 'OP_RETURN';
   const postSchema = buildMessageSchema(origin, { ...msg, content: previewText }, colName);
+  const headline = messageHeadline(msg, 64);
+  const isProto = Boolean(msg.protocol && msg.protocol !== 'text');
+  const when = msg.block_time ? new Date(msg.block_time * 1000).toISOString().slice(0, 10) : 'unconfirmed';
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
-    { name: 'Transmissions', path: '/feed' },
-    { name: `\u201c${clamp(previewText, 24)}\u201d`, path: `/m/${txid}` },
+    { name: isProto ? protocolLabel(msg.protocol as string) : 'Transmissions', path: isProto ? `/p/${msg.protocol}` : '/feed' },
+    { name: clamp(headline, 40), path: `/m/${txid}` },
   ]);
+  // Twins of the same message to the same address share one canonical page.
+  const rep = msg.is_dup ? await db.getRepresentativeTxid(c.env.DB, msg.id).catch(() => null) : null;
+  const descBits = [
+    isProto ? `${protocolLabel(msg.protocol as string)} OP_RETURN transaction` : 'Bitcoin OP_RETURN message',
+    colName ? `in ${colName}` : `to ${shortAddr(msg.address)}`,
+    msg.block_height != null ? `block ${msg.block_height.toLocaleString()}` : when,
+    isProto ? messageExcerpt(msg, 90) : `${msg.likes} likes`,
+  ];
   return c.html(
     renderIndex({
-      title: `\u201c${clamp(previewText, 64)}\u201d`,
-      description: `${colName || 'Untracked address'} \u00b7 ${shortAddr(msg.address)} \u00b7 ${msg.likes} likes \u00b7 The Permanent Record`,
+      title: isProto ? `${headline} \u2014 Bitcoin OP_RETURN` : `${headline} \u2014 OP_RETURN message`,
+      description: descBits.filter(Boolean).join(' \u00b7 '),
       url: `${origin}/m/${txid}`,
+      canonical: rep && rep !== txid ? `${origin}/m/${rep}` : undefined,
+      noindex: !previewText.trim(),
       image: `${origin}/og/message/${txid}.png`,
       type: 'article',
       jsonLd: { '@context': 'https://schema.org', '@graph': [postSchema, crumbs] },
-      initialHtml: renderMessageSsr(msg, colName),
+      initialHtml: renderMessageSsr(msg, colName, related.msgs, related.names),
     })
   );
 });
@@ -1239,6 +1275,7 @@ app.get('/c/:slug', async (c) => {
   if (wantsMarkdown(c)) {
     return markdownResponse(renderCollectionMarkdown(origin, col, colAddrs), origin);
   }
+  const list = await ssrList(c.env.DB, { collectionId: col.id, kind: 'all', sort: 'hot', limit: 30 });
 
   applyDiscoveryHeaders(c, origin);
   const colSchema = buildCollectionSchema(origin, col);
@@ -1255,7 +1292,7 @@ app.get('/c/:slug', async (c) => {
       url: `${origin}/c/${slug}`,
       image: `${origin}/og/collection/${slug}.png`,
       jsonLd: { '@context': 'https://schema.org', '@graph': [colSchema, crumbs] },
-      initialHtml: renderCollectionSsr(col, colAddrs),
+      initialHtml: renderCollectionSsr(col, colAddrs, list.msgs),
     })
   );
 });
@@ -1292,6 +1329,7 @@ app.get('/c/:slug/chat', async (c) => {
       origin
     );
   }
+  const list = await ssrList(c.env.DB, { collectionId: col.id, kind: 'all', sort: 'new', limit: 30 });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1306,17 +1344,32 @@ app.get('/c/:slug/chat', async (c) => {
       url: `${origin}/c/${slug}/chat`,
       image: `${origin}/og/chat/collection/${slug}.png`,
       jsonLd: crumbs,
-      initialHtml: renderCollectionSsr(col, []),
+      initialHtml: renderCollectionSsr(col, [], list.msgs),
     })
   );
 });
 
-app.get('/a/:address', (c) => {
+/**
+ * Address pages exist for any address ever seen, which is an unbounded URL
+ * space. Only monitored addresses and addresses with a real record are
+ * offered for indexing; the rest stay crawlable but noindex.
+ */
+async function addressPageData(db_inst: D1Database, address: string) {
+  const [list, addrs] = await Promise.all([
+    ssrList(db_inst, { address, kind: 'all', sort: 'new', limit: 30 }),
+    db.listAddresses(db_inst).catch(() => []),
+  ]);
+  const monitored = addrs.find((a) => a.address === address);
+  return { list, monitored, indexable: Boolean(monitored) || list.msgs.length >= 3 };
+}
+
+app.get('/a/:address', async (c) => {
   const address = c.req.param('address');
   const origin = originOf(c);
   if (wantsMarkdown(c)) {
     return markdownResponse(renderAddressMarkdown(origin, address), origin);
   }
+  const { list, monitored, indexable } = await addressPageData(c.env.DB, address);
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1324,17 +1377,18 @@ app.get('/a/:address', (c) => {
   ]);
   return c.html(
     renderIndex({
-      title: `Address record \u2014 ${address}`,
-      description: `Every archived OP_RETURN message sent to ${address}.`,
+      title: monitored?.label ? `${monitored.label} \u2014 ${shortAddr(address)} OP_RETURN record` : `Address record \u2014 ${address}`,
+      description: `${list.msgs.length ? list.msgs.length + '+' : 'Every'} archived OP_RETURN message${monitored?.label ? ' involving ' + monitored.label : ''} sent to or from ${address}.`,
       url: `${origin}/a/${address}`,
       image: `${origin}/og/address/${encodeURIComponent(address)}.png`,
+      noindex: !indexable,
       jsonLd: crumbs,
-      initialHtml: renderAddressSsr(address),
+      initialHtml: renderAddressSsr(address, list.msgs, list.names),
     })
   );
 });
 
-app.get('/a/:address/chat', (c) => {
+app.get('/a/:address/chat', async (c) => {
   const address = c.req.param('address');
   const origin = originOf(c);
   if (wantsMarkdown(c)) {
@@ -1343,6 +1397,7 @@ app.get('/a/:address/chat', (c) => {
       origin
     );
   }
+  const { list, indexable } = await addressPageData(c.env.DB, address);
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1355,8 +1410,9 @@ app.get('/a/:address/chat', (c) => {
       description: `The whole on-chain conversation around ${address}, oldest to newest.`,
       url: `${origin}/a/${address}/chat`,
       image: `${origin}/og/chat/address/${encodeURIComponent(address)}.png`,
+      noindex: !indexable,
       jsonLd: crumbs,
-      initialHtml: renderAddressSsr(address),
+      initialHtml: renderAddressSsr(address, list.msgs, list.names),
     })
   );
 });
@@ -1369,6 +1425,7 @@ app.get('/p/:protocol', async (c) => {
   const stats = await db.listProtocols(c.env.DB).catch(() => []);
   const count = stats.find((s) => s.protocol === protocol)?.count ?? 0;
   if (wantsMarkdown(c)) return markdownResponse(renderProtocolMarkdown(origin, protocol, label, count), origin);
+  const list = await ssrList(c.env.DB, { protocol, sort: 'new', limit: 30 });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1382,7 +1439,8 @@ app.get('/p/:protocol', async (c) => {
       url: `${origin}/p/${protocol}`,
       image: `${origin}/og/protocol/${protocol}.png`,
       jsonLd: crumbs,
-      initialHtml: renderProtocolSsr(protocol, label, count),
+      noindex: count === 0,
+      initialHtml: renderProtocolSsr(protocol, label, count, list.msgs, list.names),
     })
   );
 });
@@ -1396,6 +1454,7 @@ app.get('/tick/:tick', async (c) => {
   const count = mine.reduce((n, s) => n + s.count, 0);
   const protocols = mine.map((s) => s.protocol);
   if (wantsMarkdown(c)) return markdownResponse(renderTickMarkdown(origin, tick, count), origin);
+  const list = await ssrList(c.env.DB, { tick, sort: 'new', limit: 30 });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1409,7 +1468,8 @@ app.get('/tick/:tick', async (c) => {
       url: `${origin}/tick/${encodeURIComponent(tick)}`,
       image: `${origin}/og/tick/${encodeURIComponent(tick)}.png`,
       jsonLd: crumbs,
-      initialHtml: renderTickSsr(tick, protocols, count),
+      noindex: count === 0,
+      initialHtml: renderTickSsr(tick, protocols, count, list.msgs, list.names),
     })
   );
 });
@@ -1438,6 +1498,7 @@ app.get('/block/:height', async (c) => {
     );
   }
   if (wantsMarkdown(c)) return markdownResponse(renderBlockMarkdown(origin, block), origin);
+  const list = await ssrList(c.env.DB, { blockHeight: height, kind: 'all', sort: 'new', limit: 50 });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1451,7 +1512,7 @@ app.get('/block/:height', async (c) => {
       url: `${origin}/block/${height}`,
       image: `${origin}/og/default.png`,
       jsonLd: crumbs,
-      initialHtml: renderBlockSsr(block),
+      initialHtml: renderBlockSsr(block, list.msgs, list.names),
     })
   );
 });
@@ -1488,6 +1549,7 @@ app.get('/cat/:slug', async (c) => {
   if (wantsMarkdown(c)) {
     return markdownResponse(renderCategoryMarkdown(origin, cat, count), origin);
   }
+  const list = await ssrList(c.env.DB, { category: cat, sort: 'hot', limit: 30 });
 
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
@@ -1502,7 +1564,7 @@ app.get('/cat/:slug', async (c) => {
       url: `${origin}/cat/${slug}`,
       image: `${origin}/og/category/${slug}.png`,
       jsonLd: crumbs,
-      initialHtml: renderCategorySsr(cat, count),
+      initialHtml: renderCategorySsr(cat, count, list.msgs, list.names),
     })
   );
 });

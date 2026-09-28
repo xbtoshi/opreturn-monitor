@@ -1455,7 +1455,76 @@ export function renderCollectionsSsr(collections: CollectionWithStats[]): string
   return h;
 }
 
-export function renderCollectionSsr(col: CollectionWithStats, addresses: Address[]): string {
+// ---------------------------------------------------------------------------
+// Server-rendered message lists. Crawlers get the real records, with links to
+// every /m/ page, instead of an empty shell that only fills in after four
+// API round-trips in the browser. The SPA replaces <main> once it boots.
+// ---------------------------------------------------------------------------
+
+export function messageExcerpt(msg: Message, max = 280): string {
+  const preview = cleanCryptoPreview(msg.content) || stripDataUris(msg.content);
+  const s = String(preview || '').replace(/\s+/g, ' ').trim();
+  return s.length > max ? s.slice(0, max - 1).trimEnd() + '\u2026' : s;
+}
+
+/** Short human headline for a message: the text itself, or a protocol summary. */
+export function messageHeadline(msg: Message, max = 64): string {
+  const p = msg.protocol || 'text';
+  if (p !== 'text') {
+    const op = (msg.ops || []).find((o) => o.protocol === p) || (msg.ops || [])[0];
+    const parts = [protocolLabel(p)];
+    if (op?.op) parts.push(op.op);
+    if (op?.amount) parts.push(op.amount);
+    if (op?.tick) parts.push(`$${op.tick}`);
+    if (!op?.op && !op?.tick) parts.push('transaction');
+    return parts.join(' ');
+  }
+  const ex = messageExcerpt(msg, max);
+  return ex ? `\u201c${ex}\u201d` : 'OP_RETURN message';
+}
+
+function fmtDate(msg: Message): string {
+  const ts = msg.block_time ? msg.block_time * 1000 : Date.parse(msg.created_at.replace(' ', 'T') + 'Z');
+  return Number.isFinite(ts) ? new Date(ts).toISOString().slice(0, 10) : '';
+}
+
+export function renderMessageListSsr(
+  msgs: Message[],
+  colNames: Map<number, string> = new Map(),
+  opts: { heading?: string; emptyText?: string } = {}
+): string {
+  let h = '<div style="margin-top:28px">';
+  if (opts.heading) h += `<div class="kicker" style="margin-bottom:14px">\u25c6 ${escHtml(opts.heading)}</div>`;
+  h += '<div class="feed-list">';
+  if (!msgs.length) h += `<div class="empty">${escHtml(opts.emptyText || 'No messages archived yet.')}</div>`;
+  for (const m of msgs) {
+    const proto = m.protocol || 'text';
+    const isProto = proto !== 'text';
+    const colName = m.collection_id != null ? colNames.get(m.collection_id) : undefined;
+    h += '<article class="msg"><div class="body"><div class="head">';
+    h += isProto
+      ? `<a class="cat proto" href="/p/${escHtml(proto)}">${escHtml(protocolLabel(proto))}</a>`
+      : m.category
+        ? `<a class="cat" href="/cat/${escHtml(categorySlug(m.category))}">${escHtml(m.category)}</a>`
+        : '<span class="cat">Message</span>';
+    h += `<span class="st ${m.is_mempool ? 'mem' : 'conf'}">${m.is_mempool ? '\u25f7 IN MEMPOOL' : '\u2713 CONFIRMED'}</span>`;
+    if ((m.dup_count || 1) > 1) h += `<span class="fee">\u00d7${m.dup_count} txs</span>`;
+    h += `<span class="time">${escHtml(fmtDate(m))}</span></div>`;
+    h += `<a href="/m/${escHtml(m.txid)}" style="text-decoration:none;color:inherit"><h3 class="content${isProto ? ' proto' : ''}" style="margin:0;font-weight:500">${escHtml(isProto ? messageHeadline(m) : messageExcerpt(m))}</h3>`;
+    if (isProto) h += `<p class="content proto" style="margin-top:8px">${escHtml(messageExcerpt(m, 200))}</p>`;
+    h += '</a>';
+    h += '<div class="foot">';
+    if (colName && m.collection_id != null) h += `<span>\u21b3 <a href="/c/${escHtml(String(m.collection_id))}">${escHtml(colName)}</a></span>`;
+    if (m.block_height != null) h += `<a href="/block/${m.block_height}">#${m.block_height.toLocaleString()}</a>`;
+    if (m.address) h += `<a href="/a/${escHtml(m.address)}">${escHtml(shortAddr(m.address))}</a>`;
+    h += `<a href="/m/${escHtml(m.txid)}">permalink \u2192</a>`;
+    h += '</div></div></article>';
+  }
+  h += '</div></div>';
+  return h;
+}
+
+export function renderCollectionSsr(col: CollectionWithStats, addresses: Address[], msgs: Message[] = []): string {
   const slug = col.slug || String(col.id);
   let h = '<section class="wrap wrap-narrow">';
   h += `<div class="kicker">\u25c6 COLLECTION ARCHIVE</div>`;
@@ -1481,11 +1550,12 @@ export function renderCollectionSsr(col: CollectionWithStats, addresses: Address
     h += '</div></div>';
   }
 
+  h += renderMessageListSsr(msgs, new Map([[col.id, col.name]]), { heading: 'LATEST TRANSMISSIONS' });
   h += '</section>';
   return h;
 }
 
-export function renderAddressSsr(address: string): string {
+export function renderAddressSsr(address: string, msgs: Message[] = [], colNames?: Map<number, string>): string {
   let h = '<section class="wrap wrap-narrow">';
   h += '<div class="kicker">\u25c6 BITCOIN ADDRESS RECORD</div>';
   h += `<h2 class="title" style="font-size:clamp(24px,3.5vw,36px);overflow-wrap:anywhere">${escHtml(address)}</h2>`;
@@ -1494,6 +1564,7 @@ export function renderAddressSsr(address: string): string {
   h += `<a class="btn btn-primary" href="/a/${escHtml(address)}/chat">View on-chain chat \ud83d\udcac</a>`;
   h += `<a class="btn" href="https://mempool.space/address/${escHtml(address)}" target="_blank" rel="noopener">Inspect on mempool.space \u2197</a>`;
   h += '</div>';
+  h += renderMessageListSsr(msgs, colNames, { heading: 'TRANSMISSIONS INVOLVING THIS ADDRESS' });
   h += '</section>';
   return h;
 }
@@ -1536,7 +1607,7 @@ export function cleanCryptoPreview(content?: string | null): string {
   return content;
 }
 
-export function renderMessageSsr(msg: Message, colName?: string): string {
+export function renderMessageSsr(msg: Message, colName?: string, related: Message[] = [], colNames?: Map<number, string>): string {
   let h = '<section class="wrap wrap-card">';
   h += '<a class="back" href="/feed">\u2190 Back to transmissions</a>';
   h += '<div class="artifact"><div class="bar"><span>\u25c6 OP_RETURN \u00b7 IMMUTABLE RECORD</span>';
@@ -1573,11 +1644,20 @@ export function renderMessageSsr(msg: Message, colName?: string): string {
   }
   h += '</div></div>';
   h += '<p class="caption">Etched into the Bitcoin blockchain. It cannot be deleted, edited, or taken down.</p>';
+  if (msg.ops && msg.ops.length) {
+    h += '<div style="margin-top:28px"><div class="kicker">\u25c6 DECODED OP_RETURN OUTPUTS</div><ul style="margin:12px 0 0 18px;font-family:\'Martian Mono\',monospace;font-size:12px;color:var(--fg3)">';
+    for (const o of msg.ops) {
+      h += `<li>vout ${o.vout}: <a href="/p/${escHtml(o.protocol)}">${escHtml(protocolLabel(o.protocol))}</a>${o.op ? ' ' + escHtml(o.op) : ''}${o.amount ? ' ' + escHtml(o.amount) : ''}${o.tick ? ` <a href="/tick/${escHtml(encodeURIComponent(o.tick))}">$${escHtml(o.tick)}</a>` : ''}</li>`;
+    }
+    h += '</ul></div>';
+  }
+  const others = related.filter((r) => r.txid !== msg.txid);
+  if (others.length) h += renderMessageListSsr(others, colNames, { heading: `MORE INVOLVING ${shortAddr(msg.address).toUpperCase()}` });
   h += '</section>';
   return h;
 }
 
-export function renderCategorySsr(categoryName: string, count: number): string {
+export function renderCategorySsr(categoryName: string, count: number, msgs: Message[] = [], colNames?: Map<number, string>): string {
   let h = '<section class="wrap wrap-narrow">';
   h += '<div class="kicker">\u25c6 CATEGORY ARCHIVE</div>';
   h += `<h2 class="title">${escHtml(categoryName)}</h2>`;
@@ -1585,11 +1665,12 @@ export function renderCategorySsr(categoryName: string, count: number): string {
   h += '<div class="cta" style="margin-top:20px">';
   h += '<a class="btn btn-primary" href="/feed">Explore all transmissions \u2192</a>';
   h += '</div>';
+  h += renderMessageListSsr(msgs, colNames, { heading: 'MOST UPVOTED IN THIS CATEGORY' });
   h += '</section>';
   return h;
 }
 
-export function renderFeedSsr(): string {
+export function renderFeedSsr(msgs: Message[] = [], colNames?: Map<number, string>): string {
   let h = '<section class="wrap wrap-narrow">';
   h += '<div class="kicker">\u25c6 EVERY BLOCK \u00b7 EVERY OP_RETURN</div>';
   h += '<h2 class="title">All transmissions</h2>';
@@ -1598,6 +1679,7 @@ export function renderFeedSsr(): string {
   h += '<a class="btn" href="/collections">Browse collections</a>';
   h += '<a class="btn" href="/guide">Etch manual \u2192</a>';
   h += '</div>';
+  h += renderMessageListSsr(msgs, colNames, { heading: 'LATEST HUMAN MESSAGES FROM THE CHAIN' });
   h += '</section>';
   return h;
 }
@@ -1691,31 +1773,34 @@ export function protocolBlurb(protocol: string): string {
   }
 }
 
-export function renderProtocolSsr(protocol: string, label: string, count: number): string {
+export function renderProtocolSsr(protocol: string, label: string, count: number, msgs: Message[] = [], colNames?: Map<number, string>): string {
   let h = '<section class="wrap wrap-narrow">';
   h += '<div class="kicker">\u25c6 OP_RETURN PROTOCOL</div>';
   h += `<h2 class="title">${escHtml(label)} <span class="mono" style="font-size:.5em;color:var(--fg4)">${escHtml(protocol)}</span></h2>`;
   h += `<p class="lede" style="margin-top:12px">${count.toLocaleString()} transactions carrying ${escHtml(label)} OP_RETURN outputs, decoded from every scanned block.</p>`;
   h += '<div class="cta" style="margin-top:20px"><a class="btn btn-primary" href="/feed?kind=all">All protocols \u2192</a></div>';
+  h += renderMessageListSsr(msgs, colNames, { heading: `LATEST ${label.toUpperCase()} TRANSACTIONS` });
   h += '</section>';
   return h;
 }
 
-export function renderTickSsr(tick: string, protocols: string[], count: number): string {
+export function renderTickSsr(tick: string, protocols: string[], count: number, msgs: Message[] = [], colNames?: Map<number, string>): string {
   let h = '<section class="wrap wrap-narrow">';
   h += '<div class="kicker">\u25c6 TOKEN TICKER</div>';
   h += `<h2 class="title">$${escHtml(tick)}</h2>`;
   h += `<p class="lede" style="margin-top:12px">${count.toLocaleString()} on-chain operations for ${escHtml(tick)}${protocols.length ? ' via ' + escHtml(protocols.join(', ')) : ''}.</p>`;
+  h += renderMessageListSsr(msgs, colNames, { heading: `LATEST $${tick.toUpperCase()} OPERATIONS` });
   h += '</section>';
   return h;
 }
 
-export function renderBlockSsr(block: { height: number; hash: string; time: number; tx_count: number; opreturn_count: number; runes_count: number; stored_count: number }): string {
+export function renderBlockSsr(block: { height: number; hash: string; time: number; tx_count: number; opreturn_count: number; runes_count: number; stored_count: number }, msgs: Message[] = [], colNames?: Map<number, string>): string {
   let h = '<section class="wrap wrap-narrow">';
   h += '<div class="kicker">\u25c6 BLOCK CENSUS</div>';
   h += `<h2 class="title">Block ${block.height.toLocaleString()}</h2>`;
   h += `<p class="lede" style="margin-top:12px">${block.tx_count.toLocaleString()} transactions, ${block.opreturn_count.toLocaleString()} OP_RETURN outputs (${block.runes_count.toLocaleString()} Runes), ${block.stored_count.toLocaleString()} decoded and archived.</p>`;
   h += `<p class="mono" style="font-size:12px;color:var(--fg4);overflow-wrap:anywhere">${escHtml(block.hash)}</p>`;
+  h += renderMessageListSsr(msgs, colNames, { heading: 'OP_RETURN TRANSACTIONS IN THIS BLOCK' });
   h += '</section>';
   return h;
 }

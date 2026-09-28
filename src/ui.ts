@@ -11,6 +11,8 @@ export interface PageMeta {
   description?: string;
   image?: string;
   url?: string;
+  /** Canonical URL when it differs from `url` (duplicate rows point at their representative). */
+  canonical?: string;
   type?: string;
   noindex?: boolean;
   keywords?: string;
@@ -60,7 +62,7 @@ export function renderIndex(meta?: PageMeta): string {
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="${esc(ogTitle)}" />
 <meta name="twitter:description" content="${esc(ogDesc)}" />
-<link rel="canonical" href="${esc(ogUrl)}" />
+<link rel="canonical" href="${esc(m.canonical || ogUrl)}" />
 <link rel="alternate" type="text/markdown" href="/llms.txt" title="LLM Context (llms.txt)" />
 <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
 <link rel="api-catalog" type="application/linkset+json" href="/.well-known/api-catalog" />
