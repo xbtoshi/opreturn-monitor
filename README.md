@@ -3,8 +3,13 @@
 *opreturn.xyz* — Serverless OP_RETURN explorer for Bitcoin. Built on
 **Cloudflare Workers + Hono + TypeScript + D1**, with a protocol registry that
 decodes every OP_RETURN output, AI classification of the human messages, and a
-single-page web UI (landing, feed, collections, protocol / ticker / block pages,
-message detail, chat rooms and an "Etch" field manual).
+single-page web UI in the "Ledger" layout: a persistent sidebar with search,
+nav and feed filters, a right rail with the chain census, message rows, a
+message detail card with the on-chain record, collection and protocol tables,
+chat rooms, a field manual with a live encoder, a mobile tab bar with a filter
+sheet, and a dark mode toggle. The UI is one no-build file (`src/ui.ts`:
+one `<style>` block and one inline script); crawlers get server-rendered
+shells from `src/seo.ts` that use the same row markup.
 
 - **Full-chain ingestion** (`src/ingest.ts`): every cron run downloads new raw
   blocks from an Esplora-style API (`btc.tx.taxi` by default, mempool.space and

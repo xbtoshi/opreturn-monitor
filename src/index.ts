@@ -65,6 +65,7 @@ import {
   renderProtocolMarkdown,
   renderProtocolsSsr,
   renderProtocolsMarkdown,
+  renderRoomsSsr,
   renderTickSsr,
   renderTickMarkdown,
   renderBlockSsr,
@@ -73,7 +74,42 @@ import {
 import { ensureSeeded, slugify } from './seed';
 import type { ChatCardData } from './og';
 import type { ChatMessage, CollectionWithStats, Env } from './types';
-import { renderIndex } from './ui';
+import { renderIndex, type ShellData } from './ui';
+
+// ---------------------------------------------------------------------------
+// App shell data (sidebar collection rows + chain tip). Cached per isolate and
+// refreshed in the background so page routes stay free of extra awaits.
+// ---------------------------------------------------------------------------
+let shellCache: { at: number; data: ShellData } | null = null;
+let shellRefreshing: Promise<void> | null = null;
+
+function shellFor(c: Context<Bindings>): ShellData {
+  const fresh = shellCache && Date.now() - shellCache.at < 60000;
+  if (!fresh && !shellRefreshing) {
+    shellRefreshing = (async () => {
+      try {
+        const [cols, stats] = await Promise.all([db.listCollections(c.env.DB), db.getChainStats(c.env.DB)]);
+        shellCache = {
+          at: Date.now(),
+          data: {
+            collections: cols.map((col) => ({ slug: col.slug || String(col.id), name: col.name, count: col.message_count })),
+            tip: stats.highest_height,
+          },
+        };
+      } catch {
+        // keep whatever we had
+      } finally {
+        shellRefreshing = null;
+      }
+    })();
+    try {
+      c.executionCtx.waitUntil(shellRefreshing);
+    } catch {
+      // no execution context (tests); the promise still runs
+    }
+  }
+  return shellCache ? shellCache.data : {};
+}
 
 type Bindings = { Bindings: Env };
 
@@ -1075,7 +1111,7 @@ app.get('/', async (c) => {
       image: origin + '/og/default.png',
       jsonLd: { '@context': 'https://schema.org', '@graph': graph },
       initialHtml,
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1099,7 +1135,7 @@ app.get('/feed', async (c) => {
       image: origin + '/og/default.png',
       jsonLd: crumbs,
       initialHtml: renderFeedSsr(list.msgs, list.names),
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1123,7 +1159,35 @@ app.get('/collections', async (c) => {
       image: origin + '/og/default.png',
       jsonLd: crumbs,
       initialHtml: renderCollectionsSsr(finalCols),
-    })
+    }, shellFor(c))
+  );
+});
+
+app.get('/rooms', async (c) => {
+  const origin = originOf(c);
+  const cols = await db.listCollections(c.env.DB).catch(() => []);
+  const best = cols.slice().sort((a, b) => b.message_count - a.message_count)[0];
+  if (wantsMarkdown(c)) {
+    return markdownResponse(
+      `# Chat rooms\n\nEvery collection is also a chat room: the on-chain conversation between monitored addresses and everyone writing to them.\n\n${cols.map((col) => `- [${col.name}](${origin}/c/${col.slug || col.id}/chat) (${col.message_count} messages)`).join('\n')}\n`,
+      origin
+    );
+  }
+  const list = best ? await ssrList(c.env.DB, { collectionId: best.id, kind: 'all', sort: 'new', limit: 30 }) : { msgs: [], names: new Map<number, string>() };
+  applyDiscoveryHeaders(c, origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Chat rooms', path: '/rooms' },
+  ]);
+  return c.html(
+    renderIndex({
+      title: 'Chat rooms \u2014 The Permanent Record',
+      description: 'Every collection is a chat room: the on-chain OP_RETURN conversation between monitored addresses and everyone writing to them.',
+      url: origin + '/rooms',
+      image: origin + '/og/default.png',
+      jsonLd: crumbs,
+      initialHtml: renderRoomsSsr(cols, best ?? null, list.msgs),
+    }, shellFor(c))
   );
 });
 
@@ -1148,7 +1212,7 @@ app.get('/protocols', async (c) => {
       image: origin + '/og/default.png',
       jsonLd: crumbs,
       initialHtml: renderProtocolsSsr(protocols, ticks, chain),
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1171,7 +1235,7 @@ app.get('/guide', (c) => {
       image: origin + '/og/default.png',
       jsonLd: { '@context': 'https://schema.org', '@graph': [howTo, crumbs] },
       initialHtml: renderGuideSsr(),
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1197,7 +1261,7 @@ app.get('/m/:txid', async (c) => {
           'Message not found',
           `Transaction ${txid} was not found in the monitored archive.`
         ),
-      }),
+      }, shellFor(c)),
       404
     );
   }
@@ -1239,7 +1303,7 @@ app.get('/m/:txid', async (c) => {
       type: 'article',
       jsonLd: { '@context': 'https://schema.org', '@graph': [postSchema, crumbs] },
       initialHtml: renderMessageSsr(msg, colName, related.msgs, related.names),
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1265,7 +1329,7 @@ app.get('/c/:slug', async (c) => {
           'Collection not found',
           `The collection slug \u201c${slug}\u201d does not exist in the archive.`
         ),
-      }),
+      }, shellFor(c)),
       404
     );
   }
@@ -1293,7 +1357,7 @@ app.get('/c/:slug', async (c) => {
       image: `${origin}/og/collection/${slug}.png`,
       jsonLd: { '@context': 'https://schema.org', '@graph': [colSchema, crumbs] },
       initialHtml: renderCollectionSsr(col, colAddrs, list.msgs),
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1319,7 +1383,7 @@ app.get('/c/:slug/chat', async (c) => {
           'Collection not found',
           `The collection slug \u201c${slug}\u201d does not exist in the archive.`
         ),
-      }),
+      }, shellFor(c)),
       404
     );
   }
@@ -1345,7 +1409,7 @@ app.get('/c/:slug/chat', async (c) => {
       image: `${origin}/og/chat/collection/${slug}.png`,
       jsonLd: crumbs,
       initialHtml: renderCollectionSsr(col, [], list.msgs),
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1384,7 +1448,7 @@ app.get('/a/:address', async (c) => {
       noindex: !indexable,
       jsonLd: crumbs,
       initialHtml: renderAddressSsr(address, list.msgs, list.names),
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1413,7 +1477,7 @@ app.get('/a/:address/chat', async (c) => {
       noindex: !indexable,
       jsonLd: crumbs,
       initialHtml: renderAddressSsr(address, list.msgs, list.names),
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1441,7 +1505,7 @@ app.get('/p/:protocol', async (c) => {
       jsonLd: crumbs,
       noindex: count === 0,
       initialHtml: renderProtocolSsr(protocol, label, count, list.msgs, list.names),
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1470,7 +1534,7 @@ app.get('/tick/:tick', async (c) => {
       jsonLd: crumbs,
       noindex: count === 0,
       initialHtml: renderTickSsr(tick, protocols, count, list.msgs, list.names),
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1493,7 +1557,7 @@ app.get('/block/:height', async (c) => {
         image: `${origin}/og/default.png`,
         noindex: true,
         initialHtml: renderNotFoundSsr('Block not scanned', `Block ${height} has not been scanned by the explorer yet.`),
-      }),
+      }, shellFor(c)),
       404
     );
   }
@@ -1513,7 +1577,7 @@ app.get('/block/:height', async (c) => {
       image: `${origin}/og/default.png`,
       jsonLd: crumbs,
       initialHtml: renderBlockSsr(block, list.msgs, list.names),
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1539,7 +1603,7 @@ app.get('/cat/:slug', async (c) => {
           'Category not found',
           `Category slug \u201c${slug}\u201d does not exist in the taxonomy.`
         ),
-      }),
+      }, shellFor(c)),
       404
     );
   }
@@ -1565,7 +1629,7 @@ app.get('/cat/:slug', async (c) => {
       image: `${origin}/og/category/${slug}.png`,
       jsonLd: crumbs,
       initialHtml: renderCategorySsr(cat, count, list.msgs, list.names),
-    })
+    }, shellFor(c))
   );
 });
 
@@ -1699,7 +1763,7 @@ app.get('*', (c) => {
         'Page not found',
         `The requested route \u201c${c.req.path}\u201d was not found.`
       ),
-    }),
+    }, shellFor(c)),
     404
   );
 });

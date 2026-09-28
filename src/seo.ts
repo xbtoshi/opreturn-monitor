@@ -1,5 +1,7 @@
 import { CATEGORIES, categorySlug } from './classify';
 import { protocolLabel } from './protocols';
+
+const HOSTILE_CATEGORIES = new Set(['Prompt Injection', 'Threats / Hostility', 'Laundry / Service Ads']);
 import type { Address, CollectionWithStats, Message } from './types';
 
 // ---------------------------------------------------------------------------
@@ -323,6 +325,7 @@ export function generateSitemapXml(
   urls.push({ loc: `${siteUrl}/collections`, lastmod: today, changefreq: 'daily', priority: '0.9' });
   urls.push({ loc: `${siteUrl}/guide`, lastmod: today, changefreq: 'monthly', priority: '0.8' });
   urls.push({ loc: `${siteUrl}/protocols`, lastmod: today, changefreq: 'hourly', priority: '0.9' });
+  urls.push({ loc: `${siteUrl}/rooms`, lastmod: today, changefreq: 'hourly', priority: '0.8' });
 
   // Collections & Chat
   for (const col of collections) {
@@ -1493,32 +1496,38 @@ export function renderMessageListSsr(
   colNames: Map<number, string> = new Map(),
   opts: { heading?: string; emptyText?: string } = {}
 ): string {
-  let h = '<div style="margin-top:28px">';
-  if (opts.heading) h += `<div class="kicker" style="margin-bottom:14px">\u25c6 ${escHtml(opts.heading)}</div>`;
-  h += '<div class="feed-list">';
+  // Same row contract as the client renderer (rowHTML in ui.ts): .list > .row
+  // with a meta line, optional op line, content, and a chain footer.
+  let h = '<div style="display:flex;flex-direction:column;gap:14px;margin-top:10px">';
+  if (opts.heading) h += `<span class="slabel">${escHtml(opts.heading)}</span>`;
+  h += '<div class="list">';
   if (!msgs.length) h += `<div class="empty">${escHtml(opts.emptyText || 'No messages archived yet.')}</div>`;
   for (const m of msgs) {
     const proto = m.protocol || 'text';
     const isProto = proto !== 'text';
+    const hostile = HOSTILE_CATEGORIES.has(m.category || '');
     const colName = m.collection_id != null ? colNames.get(m.collection_id) : undefined;
-    h += '<article class="msg"><div class="body"><div class="head">';
+    const op = (m.ops || []).find((o) => o.protocol === proto);
+    h += '<article class="row"><div class="meta">';
+    h += `<span class="dot ${isProto ? 'tok' : hostile ? 'sig' : m.category && m.category !== 'Other' ? '' : 'mute'}"></span>`;
     h += isProto
-      ? `<a class="cat proto" href="/p/${escHtml(proto)}">${escHtml(protocolLabel(proto))}</a>`
+      ? `<a class="cat tok" href="/p/${escHtml(proto)}">${escHtml(protocolLabel(proto))}</a>`
       : m.category
-        ? `<a class="cat" href="/cat/${escHtml(categorySlug(m.category))}">${escHtml(m.category)}</a>`
-        : '<span class="cat">Message</span>';
-    h += `<span class="st ${m.is_mempool ? 'mem' : 'conf'}">${m.is_mempool ? '\u25f7 IN MEMPOOL' : '\u2713 CONFIRMED'}</span>`;
-    if ((m.dup_count || 1) > 1) h += `<span class="fee">\u00d7${m.dup_count} txs</span>`;
-    h += `<span class="time">${escHtml(fmtDate(m))}</span></div>`;
-    h += `<a href="/m/${escHtml(m.txid)}" style="text-decoration:none;color:inherit"><h3 class="content${isProto ? ' proto' : ''}" style="margin:0;font-weight:500">${escHtml(isProto ? messageHeadline(m) : messageExcerpt(m))}</h3>`;
-    if (isProto) h += `<p class="content proto" style="margin-top:8px">${escHtml(messageExcerpt(m, 200))}</p>`;
-    h += '</a>';
-    h += '<div class="foot">';
-    if (colName && m.collection_id != null) h += `<span>\u21b3 <a href="/c/${escHtml(String(m.collection_id))}">${escHtml(colName)}</a></span>`;
-    if (m.block_height != null) h += `<a href="/block/${m.block_height}">#${m.block_height.toLocaleString()}</a>`;
-    if (m.address) h += `<a href="/a/${escHtml(m.address)}">${escHtml(shortAddr(m.address))}</a>`;
-    h += `<a href="/m/${escHtml(m.txid)}">permalink \u2192</a>`;
-    h += '</div></div></article>';
+        ? `<a class="cat${hostile ? ' sig' : ''}" href="/cat/${escHtml(categorySlug(m.category))}">${escHtml(m.category)}</a>`
+        : '<span class="cat">Unclassified</span>';
+    h += '<span class="sep">\u00b7</span>';
+    h += colName && m.collection_id != null ? `<a class="col" href="/c/${escHtml(String(m.collection_id))}">${escHtml(colName)}</a>` : '<span class="col">Unmonitored</span>';
+    if ((m.dup_count || 1) > 1) h += `<span class="badge">\u00d7${m.dup_count}</span>`;
+    h += `<span class="when${m.is_mempool ? ' mem' : ''}">${m.is_mempool ? '\u25f7 mempool' : escHtml(fmtDate(m))}</span></div>`;
+    if (isProto && op && (op.op || op.amount || op.tick)) {
+      h += '<div class="opline">' + (op.op ? `<span>${escHtml(op.op)}</span>` : '') + (op.amount ? `<span class="amt">${escHtml(op.amount)}</span>` : '') + (op.tick ? `<a class="tk" href="/tick/${escHtml(encodeURIComponent(op.tick))}">$${escHtml(op.tick)}</a>` : '') + '</div>';
+    }
+    h += `<a href="/m/${escHtml(m.txid)}" style="text-decoration:none;color:inherit"><p class="content${isProto ? ' proto' : ''}">${escHtml(isProto ? messageExcerpt(m, 200) : messageExcerpt(m))}</p></a>`;
+    h += '<div class="foot"><span class="chain">';
+    h += m.block_height != null ? `<a href="/block/${m.block_height}">#${m.block_height.toLocaleString('en-US')}</a>` : 'unconfirmed';
+    if (m.address) h += ` \u00b7 <a href="/a/${escHtml(m.address)}">${escHtml(shortAddr(m.address))}</a>`;
+    if (m.fee_rate != null) h += ` \u00b7 ${m.fee_rate} sat/vB`;
+    h += `</span><a class="open" href="/m/${escHtml(m.txid)}">Open \u2192</a></div></article>`;
   }
   h += '</div></div>';
   return h;
@@ -1681,6 +1690,17 @@ export function renderFeedSsr(msgs: Message[] = [], colNames?: Map<number, strin
   h += '</div>';
   h += renderMessageListSsr(msgs, colNames, { heading: 'LATEST HUMAN MESSAGES FROM THE CHAIN' });
   h += '</section>';
+  return h;
+}
+
+export function renderRoomsSsr(cols: CollectionWithStats[], best: CollectionWithStats | null, msgs: Message[]): string {
+  let h = '<main class="page narrow"><div class="tt"><span class="kicker">CHAT ROOMS</span><h2 class="title">' + escHtml(best ? best.name : 'Chat rooms') + '</h2>';
+  h += '<p class="lede">Every collection is also a chat room: the on-chain conversation between monitored addresses and everyone writing to them, oldest to newest.</p></div>';
+  h += '<div class="chips">';
+  for (const c of cols) h += `<a class="chip${best && c.id === best.id ? ' active' : ''}" href="/c/${escHtml(c.slug || String(c.id))}/chat">${escHtml(c.name)} <span style="opacity:.55">${c.message_count.toLocaleString('en-US')}</span></a>`;
+  h += '</div>';
+  h += renderMessageListSsr(msgs, new Map(cols.map((c) => [c.id, c.name])), { heading: best ? `LATEST IN ${best.name.toUpperCase()}` : 'LATEST' });
+  h += '</main>';
   return h;
 }
 
