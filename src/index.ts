@@ -205,9 +205,10 @@ async function cachedJson(
   return res;
 }
 
-/** Aggregation windows are quantised so the cache has a handful of keys, not one per query string. */
+/** Aggregation windows are quantised so the cache has a handful of keys, not one per query string. 0 = all time (default). */
 function daysParam(raw: string | undefined): number {
-  const n = Number(raw) || 30;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
   return [1, 7, 30, 90, 365].reduce((best, d) => (Math.abs(d - n) < Math.abs(best - n) ? d : best), 30);
 }
 
@@ -605,8 +606,8 @@ app.get('/sitemap.xml', async (c) => {
     db.listCollections(c.env.DB).catch(() => []),
     db.listAddresses(c.env.DB).catch(() => []),
     db.getMessages(c.env.DB, { sort: 'hot', limit: 100, kind: 'text' }).catch(() => ({ messages: [] })),
-    db.listProtocols(c.env.DB, 30).catch(() => []),
-    db.listTicks(c.env.DB, undefined, 30, 200).catch(() => []),
+    db.listProtocols(c.env.DB).catch(() => []),
+    db.listTicks(c.env.DB, undefined, 0, 200).catch(() => []),
   ]);
   const finalCols = cols.length ? cols : (seedCollections as unknown as CollectionWithStats[]);
   const topMsgs = feedRes.messages.map((m) => ({
@@ -958,8 +959,8 @@ app.all('/mcp', async (c) => {
 
       if (toolName === 'get_protocols') {
         const [protocols, ticks, chain] = await Promise.all([
-          db.listProtocols(c.env.DB, 30).catch(() => []),
-          db.listTicks(c.env.DB, undefined, 30, 50).catch(() => []),
+          db.listProtocols(c.env.DB).catch(() => []),
+          db.listTicks(c.env.DB, undefined, 0, 50).catch(() => []),
           db.getChainStats(c.env.DB).catch(() => null),
         ]);
         return c.json({
@@ -1107,8 +1108,8 @@ app.get('/collections', async (c) => {
 app.get('/protocols', async (c) => {
   const origin = originOf(c);
   const [protocols, ticks, chain] = await Promise.all([
-    db.listProtocols(c.env.DB, 30).catch(() => []),
-    db.listTicks(c.env.DB, undefined, 30, 40).catch(() => []),
+    db.listProtocols(c.env.DB).catch(() => []),
+    db.listTicks(c.env.DB, undefined, 0, 40).catch(() => []),
     db.getChainStats(c.env.DB).catch(() => null),
   ]);
   if (wantsMarkdown(c)) return markdownResponse(renderProtocolsMarkdown(origin, protocols, ticks), origin);
@@ -1365,7 +1366,7 @@ app.get('/p/:protocol', async (c) => {
   const origin = originOf(c);
   if (!protocol) return c.notFound();
   const label = protocolLabel(protocol);
-  const stats = await db.listProtocols(c.env.DB, 30).catch(() => []);
+  const stats = await db.listProtocols(c.env.DB).catch(() => []);
   const count = stats.find((s) => s.protocol === protocol)?.count ?? 0;
   if (wantsMarkdown(c)) return markdownResponse(renderProtocolMarkdown(origin, protocol, label, count), origin);
   applyDiscoveryHeaders(c, origin);
@@ -1377,7 +1378,7 @@ app.get('/p/:protocol', async (c) => {
   return c.html(
     renderIndex({
       title: `${label} OP_RETURN transactions \u2014 The Permanent Record`,
-      description: `${count} Bitcoin transactions carrying ${label} (${protocol}) OP_RETURN outputs in the last 30 days, decoded from every block.`,
+      description: `${count} Bitcoin transactions carrying ${label} (${protocol}) OP_RETURN outputs, decoded from every scanned block.`,
       url: `${origin}/p/${protocol}`,
       image: `${origin}/og/protocol/${protocol}.png`,
       jsonLd: crumbs,
@@ -1390,7 +1391,7 @@ app.get('/tick/:tick', async (c) => {
   const tick = tickParam(c.req.param('tick'));
   const origin = originOf(c);
   if (!tick) return c.notFound();
-  const stats = await db.listTicks(c.env.DB, undefined, 30, 500).catch(() => []);
+  const stats = await db.listTicks(c.env.DB, undefined, 0, 500).catch(() => []);
   const mine = stats.filter((s) => s.tick === tick);
   const count = mine.reduce((n, s) => n + s.count, 0);
   const protocols = mine.map((s) => s.protocol);
@@ -1404,7 +1405,7 @@ app.get('/tick/:tick', async (c) => {
   return c.html(
     renderIndex({
       title: `$${tick} on Bitcoin OP_RETURN \u2014 The Permanent Record`,
-      description: `${count} ${tick} token operations${protocols.length ? ' via ' + protocols.join(', ') : ''} in the last 30 days, decoded from every Bitcoin block.`,
+      description: `${count} ${tick} token operations${protocols.length ? ' via ' + protocols.join(', ') : ''}, decoded from every scanned Bitcoin block.`,
       url: `${origin}/tick/${encodeURIComponent(tick)}`,
       image: `${origin}/og/tick/${encodeURIComponent(tick)}.png`,
       jsonLd: crumbs,
@@ -1603,7 +1604,7 @@ app.get('/og/category/:slug', async (c) => {
 app.get('/og/protocol/:protocol', async (c) => {
   const protocol = slugParam(c.req.param('protocol').replace(/\.png$/, ''));
   if (!protocol) return c.notFound();
-  const stats = await db.listProtocols(c.env.DB, 30).catch(() => []);
+  const stats = await db.listProtocols(c.env.DB).catch(() => []);
   const count = stats.find((s) => s.protocol === protocol)?.count ?? 0;
   return pngResponse(await svgToPng(categoryCardSvg(protocolLabel(protocol), count)));
 });
@@ -1611,7 +1612,7 @@ app.get('/og/protocol/:protocol', async (c) => {
 app.get('/og/tick/:tick', async (c) => {
   const tick = tickParam(decodeURIComponent(c.req.param('tick')).replace(/\.png$/, ''));
   if (!tick) return c.notFound();
-  const stats = await db.listTicks(c.env.DB, undefined, 30, 500).catch(() => []);
+  const stats = await db.listTicks(c.env.DB, undefined, 0, 500).catch(() => []);
   const count = stats.filter((s) => s.tick === tick).reduce((n, s) => n + s.count, 0);
   return pngResponse(await svgToPng(categoryCardSvg(`$${tick}`, count)));
 });

@@ -125,9 +125,9 @@ export async function getCollection(db: D1Database, id: number): Promise<Collect
 // Protocol / tick statistics
 // ---------------------------------------------------------------------------
 
-/** Distinct txs per protocol seen in the last `days` days (ops index scan). */
-export async function listProtocols(db: D1Database, days = 30): Promise<ProtocolStat[]> {
-  const since = nowSeconds() - days * 86400;
+/** Distinct txs per protocol; `days` = 0 means all time (the default for the explorer index). */
+export async function listProtocols(db: D1Database, days = 0): Promise<ProtocolStat[]> {
+  const since = days > 0 ? nowSeconds() - days * 86400 : 0;
   const { results } = await db
     .prepare(
       `SELECT protocol, COUNT(DISTINCT txid) AS count
@@ -141,8 +141,8 @@ export async function listProtocols(db: D1Database, days = 30): Promise<Protocol
   return results.map((r) => ({ protocol: str(r, 'protocol'), count: num(r, 'count') }));
 }
 
-export async function listTicks(db: D1Database, protocol?: string, days = 30, limit = 100): Promise<TickStat[]> {
-  const since = nowSeconds() - days * 86400;
+export async function listTicks(db: D1Database, protocol?: string, days = 0, limit = 100): Promise<TickStat[]> {
+  const since = days > 0 ? nowSeconds() - days * 86400 : 0;
   const params: unknown[] = [since];
   let where = 'WHERE ts >= ? AND tick IS NOT NULL';
   if (protocol) {

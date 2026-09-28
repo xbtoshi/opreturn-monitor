@@ -728,7 +728,7 @@ ${ogMeta}
   function protoBlurb(p){return PROTO_BLURB[p]||(/-20$/.test(p)?'JSON token operations.':'Structured protocol data decoded from the OP_RETURN payload.');}
   function renderProtocols(){
     var h='<section class="wrap"><div class="kicker">\u25c6 PROTOCOL INDEX</div><h2 class="title">Protocols</h2>';
-    h+='<p class="lede" style="margin-top:12px;font-size:17px">Every OP_RETURN output of every block is decoded before it reaches the feed. These are the protocols seen in the last 30 days; Runes and opaque payloads are counted per block but never shown.</p>';
+    h+='<p class="lede" style="margin-top:12px;font-size:17px">Every OP_RETURN output of every block is decoded before it reaches the feed. These are the protocols found in every scanned block; Runes and opaque payloads are counted per block but never shown.</p>';
     if(state.chain&&state.chain.blocks){var ch=state.chain;h+='<div class="stats" style="margin-top:28px">';
       h+=stat(Number(ch.blocks).toLocaleString(),'Blocks scanned');
       h+=stat(Number(ch.opreturn_outputs).toLocaleString(),'OP_RETURN outputs seen');
@@ -741,10 +741,10 @@ ${ogMeta}
       h+='<a class="col-card" href="/p/'+encodeURIComponent(p.protocol)+'"><div class="top"><span class="code">'+esc(p.protocol)+'</span>'+(isTokenProto(p.protocol)?'<span class="hot">TOKEN</span>':'')+'</div>';
       h+='<div class="name">'+esc(p.label||protoLabel(p.protocol))+'</div>';
       h+='<div class="desc">'+esc(protoBlurb(p.protocol))+'</div>';
-      h+='<div class="foot"><span>'+Number(p.count).toLocaleString()+' txs / 30d</span><span class="read">browse \u2192</span></div></a>';
+      h+='<div class="foot"><span>'+Number(p.count).toLocaleString()+' txs</span><span class="read">browse \u2192</span></div></a>';
     });
     h+='</div>';
-    if(state.ticks.length){h+='<div class="kicker" style="margin-top:40px">\u25c6 MOST ACTIVE TICKERS \u00b7 30 DAYS</div><div class="chips" style="border-bottom:none">';
+    if(state.ticks.length){h+='<div class="kicker" style="margin-top:40px">\u25c6 MOST ACTIVE TICKERS</div><div class="chips" style="border-bottom:none">';
       state.ticks.forEach(function(t){h+='<a class="chip" href="/tick/'+encodeURIComponent(t.tick)+'" title="'+attr(t.protocol)+'">$'+esc(t.tick)+' <span style="opacity:.55">'+Number(t.count).toLocaleString()+'</span></a>';});
       h+='</div>';}
     h+='</section>';
@@ -821,7 +821,7 @@ ${ogMeta}
     state.collections.forEach(function(c){h+='<a class="chip'+(state.filter===c.id&&!state.address&&!state.category?' active':'')+'" href="/c/'+attr(colSlug(c))+'">'+esc(c.name)+'</a>';});
     h+='</div>';
     if(state.protocols.length){h+='<div class="chips" style="margin-top:8px;padding-top:0;border-bottom:none;margin-bottom:8px">';
-    state.protocols.slice(0,14).forEach(function(p){h+='<a class="chip'+(state.protocol===p.protocol?' active':'')+'" href="/p/'+encodeURIComponent(p.protocol)+'" title="'+p.count+' txs / 30d">'+esc(p.label||protoLabel(p.protocol))+' <span style="opacity:.55">'+Number(p.count).toLocaleString()+'</span></a>';});
+    state.protocols.slice(0,14).forEach(function(p){h+='<a class="chip'+(state.protocol===p.protocol?' active':'')+'" href="/p/'+encodeURIComponent(p.protocol)+'" title="'+p.count+' txs">'+esc(p.label||protoLabel(p.protocol))+' <span style="opacity:.55">'+Number(p.count).toLocaleString()+'</span></a>';});
     h+='<a class="chip" href="/protocols" style="color:var(--sig);border-color:var(--sig)">All protocols \u2192</a>';
     h+='</div>';}
     if(state.categories.length&&!state.protocol&&!state.tick&&!state.block){h+='<div class="chips" style="margin-top:8px">';

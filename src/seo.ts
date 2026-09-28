@@ -149,8 +149,8 @@ Transmissions are classified into seven discrete categories:
 
 - \`GET ${siteUrl}/api/collections\` — All collections with address & message counts.
 - \`GET ${siteUrl}/api/messages?sort=hot|new&limit=50&collection_id=&address=&category=&protocol=&tick=&kind=text|all\` — Filtered transmission feed (global feed defaults to human text; kind=all includes every protocol).
-- \`GET ${siteUrl}/api/protocols?days=30\` — Distinct transactions per protocol.
-- \`GET ${siteUrl}/api/ticks?protocol=&days=30\` — Token tickers by activity.
+- \`GET ${siteUrl}/api/protocols?days=\` — Distinct transactions per protocol (all time by default; days = 1/7/30/90/365).
+- \`GET ${siteUrl}/api/ticks?protocol=&days=\` — Token tickers by activity (all time by default).
 - \`GET ${siteUrl}/api/chain\` — Block census: blocks scanned, OP_RETURN outputs, Runes share, recent blocks.
 - \`GET ${siteUrl}/api/block/:height\` — One scanned block's OP_RETURN census.
 - \`GET ${siteUrl}/api/chat?collection_id=&address=\` — Chronological conversation stream.
@@ -493,7 +493,7 @@ export function generateOpenApiJson(siteUrl: string): Record<string, unknown> {
         get: {
           summary: 'Distinct transactions per OP_RETURN protocol',
           operationId: 'listProtocols',
-          parameters: [{ name: 'days', in: 'query', schema: { type: 'integer', default: 30 } }],
+          parameters: [{ name: 'days', in: 'query', schema: { type: 'integer', default: 0 }, description: '0 = all time; else 1/7/30/90/365' }],
           responses: { '200': { description: 'Protocol slugs with counts and labels' } },
         },
       },
@@ -503,7 +503,7 @@ export function generateOpenApiJson(siteUrl: string): Record<string, unknown> {
           operationId: 'listTicks',
           parameters: [
             { name: 'protocol', in: 'query', schema: { type: 'string' } },
-            { name: 'days', in: 'query', schema: { type: 'integer', default: 30 } },
+            { name: 'days', in: 'query', schema: { type: 'integer', default: 0 }, description: '0 = all time' },
             { name: 'limit', in: 'query', schema: { type: 'integer', default: 100 } },
           ],
           responses: { '200': { description: 'Tickers with protocol and counts' } },
@@ -897,7 +897,7 @@ export function generateMcpServerCardJson(siteUrl: string): Record<string, unkno
       },
       {
         name: 'get_protocols',
-        description: 'Protocol census of the last 30 days: transactions per OP_RETURN protocol, most active token tickers, and block-scanner statistics (Runes share etc.)',
+        description: 'Protocol census across every scanned block: transactions per OP_RETURN protocol, most active token tickers, and block-scanner statistics (Runes share etc.)',
         inputSchema: { type: 'object', properties: {} },
       },
       {
@@ -1608,7 +1608,7 @@ export function renderProtocolsSsr(
   chain: { blocks: number; opreturn_outputs: number; runes_outputs: number; stored_txs: number } | null
 ): string {
   let h = '<section class="wrap"><div class="kicker">\u25c6 PROTOCOL INDEX</div><h2 class="title">Protocols</h2>';
-  h += '<p class="lede" style="margin-top:12px;font-size:17px">Every OP_RETURN output of every block is decoded before it reaches the feed. These are the protocols seen in the last 30 days; Runes and opaque payloads are counted per block but never shown.</p>';
+  h += '<p class="lede" style="margin-top:12px;font-size:17px">Every OP_RETURN output of every block is decoded before it reaches the feed. These are the protocols found in every scanned block; Runes and opaque payloads are counted per block but never shown.</p>';
   if (chain && chain.blocks) {
     const pct = chain.opreturn_outputs ? Math.round((chain.runes_outputs / chain.opreturn_outputs) * 100) : 0;
     h += '<div class="stats" style="margin-top:28px">';
@@ -1624,11 +1624,11 @@ export function renderProtocolsSsr(
     h += `<a class="col-card" href="/p/${escHtml(p.protocol)}"><div class="top"><span class="code">${escHtml(p.protocol)}</span></div>`;
     h += `<div class="name">${escHtml(protocolLabel(p.protocol))}</div>`;
     h += `<div class="desc">${escHtml(protocolBlurb(p.protocol))}</div>`;
-    h += `<div class="foot"><span>${p.count.toLocaleString()} txs / 30d</span><span class="read">browse \u2192</span></div></a>`;
+    h += `<div class="foot"><span>${p.count.toLocaleString()} txs</span><span class="read">browse \u2192</span></div></a>`;
   }
   h += '</div>';
   if (ticks.length) {
-    h += '<div class="kicker" style="margin-top:40px">\u25c6 MOST ACTIVE TICKERS \u00b7 30 DAYS</div><div class="chips" style="border-bottom:none">';
+    h += '<div class="kicker" style="margin-top:40px">\u25c6 MOST ACTIVE TICKERS</div><div class="chips" style="border-bottom:none">';
     for (const t of ticks) h += `<a class="chip" href="/tick/${escHtml(encodeURIComponent(t.tick))}">$${escHtml(t.tick)} <span style="opacity:.55">${t.count.toLocaleString()}</span></a>`;
     h += '</div>';
   }
@@ -1641,7 +1641,7 @@ export function renderProtocolsMarkdown(
   protocols: Array<{ protocol: string; count: number }>,
   ticks: Array<{ protocol: string; tick: string; count: number }>
 ): string {
-  let md = `# OP_RETURN Protocols — The Permanent Record\n\nTransactions per decoded protocol in the last 30 days (Runes and opaque payloads are counted per block, not stored).\n\n`;
+  let md = `# OP_RETURN Protocols — The Permanent Record\n\nTransactions per decoded protocol across every scanned block (Runes and opaque payloads are counted per block, not stored).\n\n`;
   for (const p of protocols) {
     if (p.protocol === 'text') continue;
     md += `- [${protocolLabel(p.protocol)}](${siteUrl}/p/${p.protocol}) (\`${p.protocol}\`): ${p.count}\n`;
@@ -1695,7 +1695,7 @@ export function renderProtocolSsr(protocol: string, label: string, count: number
   let h = '<section class="wrap wrap-narrow">';
   h += '<div class="kicker">\u25c6 OP_RETURN PROTOCOL</div>';
   h += `<h2 class="title">${escHtml(label)} <span class="mono" style="font-size:.5em;color:var(--fg4)">${escHtml(protocol)}</span></h2>`;
-  h += `<p class="lede" style="margin-top:12px">${count.toLocaleString()} transactions carrying ${escHtml(label)} OP_RETURN outputs in the last 30 days, decoded from every block.</p>`;
+  h += `<p class="lede" style="margin-top:12px">${count.toLocaleString()} transactions carrying ${escHtml(label)} OP_RETURN outputs, decoded from every scanned block.</p>`;
   h += '<div class="cta" style="margin-top:20px"><a class="btn btn-primary" href="/feed?kind=all">All protocols \u2192</a></div>';
   h += '</section>';
   return h;
@@ -1705,7 +1705,7 @@ export function renderTickSsr(tick: string, protocols: string[], count: number):
   let h = '<section class="wrap wrap-narrow">';
   h += '<div class="kicker">\u25c6 TOKEN TICKER</div>';
   h += `<h2 class="title">$${escHtml(tick)}</h2>`;
-  h += `<p class="lede" style="margin-top:12px">${count.toLocaleString()} on-chain operations for ${escHtml(tick)} in the last 30 days${protocols.length ? ' via ' + escHtml(protocols.join(', ')) : ''}.</p>`;
+  h += `<p class="lede" style="margin-top:12px">${count.toLocaleString()} on-chain operations for ${escHtml(tick)}${protocols.length ? ' via ' + escHtml(protocols.join(', ')) : ''}.</p>`;
   h += '</section>';
   return h;
 }
@@ -1721,11 +1721,11 @@ export function renderBlockSsr(block: { height: number; hash: string; time: numb
 }
 
 export function renderProtocolMarkdown(siteUrl: string, protocol: string, label: string, count: number): string {
-  return `# Protocol: ${label} (${protocol})\n\n${count} transactions carrying ${label} OP_RETURN outputs in the last 30 days.\n\n- Feed API: ${siteUrl}/api/messages?protocol=${encodeURIComponent(protocol)}\n- [All protocols](${siteUrl}/api/protocols)\n`;
+  return `# Protocol: ${label} (${protocol})\n\n${count} transactions carrying ${label} OP_RETURN outputs across every scanned block.\n\n- Feed API: ${siteUrl}/api/messages?protocol=${encodeURIComponent(protocol)}\n- [All protocols](${siteUrl}/api/protocols)\n`;
 }
 
 export function renderTickMarkdown(siteUrl: string, tick: string, count: number): string {
-  return `# Ticker: ${tick}\n\n${count} on-chain operations in the last 30 days.\n\n- Feed API: ${siteUrl}/api/messages?tick=${encodeURIComponent(tick)}\n`;
+  return `# Ticker: ${tick}\n\n${count} on-chain operations across every scanned block.\n\n- Feed API: ${siteUrl}/api/messages?tick=${encodeURIComponent(tick)}\n`;
 }
 
 export function renderBlockMarkdown(siteUrl: string, block: { height: number; hash: string; time: number; tx_count: number; opreturn_count: number; runes_count: number; binary_count: number; stored_count: number }): string {
