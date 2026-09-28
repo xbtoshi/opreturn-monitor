@@ -156,7 +156,7 @@ node scripts/loadtest-seed.mjs 400000      # seed local D1 with synthetic explor
 ## Rollout of the explorer (migrations 0007/0008)
 
 1. `npm run db:migrate:remote` — additive columns + `ops`, `blocks`, `ingest_state`.
-2. `npm run deploy` (ships with `INGEST_FORWARD=1`, `INGEST_BACKFILL=0`), then run
+2. `npm run deploy` (ships with `INGEST_FORWARD=1`, `INGEST_BACKFILL=1`), then run
    `curl -X POST -H 'x-admin-key: …' https://opreturn.xyz/api/admin/reparse?max=2000`
    so every legacy row gets its protocol immediately (the cron would do it in
    500-row steps anyway). The cron fills sender/fee/recipient (40/run) over the
