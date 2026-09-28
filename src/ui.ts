@@ -228,6 +228,20 @@ ${ogMeta}
   .msg .head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px}
   .cat{display:inline-flex;align-items:center;gap:7px;font-family:'Martian Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:4px 9px;border:1px solid var(--fg);color:var(--fg)}
   .cat.sig{color:var(--sig);border-color:var(--sig)}
+  .cat.proto{border-style:dashed;color:var(--fg3);border-color:var(--fg4)}
+  .cat.proto.tok{border-style:solid;color:#0f766e;border-color:#0f766e}
+  .opline{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;margin:-6px 0 12px;font-family:'Martian Mono',monospace;font-size:12px;color:var(--fg3)}
+  .opline .amt{font-size:clamp(18px,2.4vw,23px);font-weight:600;letter-spacing:-.01em;color:var(--fg);font-family:'Space Grotesk',sans-serif}
+  .opline .tk{color:#0f766e;font-weight:600}
+  .opline .arrow{color:var(--fg5)}
+  .msg .content.proto{font-family:'Martian Mono',monospace;font-size:13px;line-height:1.5;color:var(--fg3);font-weight:400}
+  .ops{margin:14px 0 0;border-top:1px solid var(--line3);padding-top:12px}
+  .ops .op{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line3);font-family:'Martian Mono',monospace;font-size:12px;color:var(--fg3)}
+  .ops .op code{color:var(--fg);font-size:11px;word-break:break-all}
+  .ops .op .hex{color:var(--fg5);font-size:10px;word-break:break-all;flex-basis:100%}
+  .artifact blockquote.proto{font-family:'Martian Mono',monospace;font-size:14px;line-height:1.5;font-style:normal}
+  .chain{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4);margin:-10px 0 18px}
+  .chain b{color:var(--fg);font-weight:600}
   .st{font-family:'Martian Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.06em}
   .st.mem{color:var(--amber)}
   .st.conf{color:var(--green)}
@@ -494,7 +508,7 @@ ${ogMeta}
 <script>
 
 (function(){
-  var state={screen:'landing',filter:null,address:null,category:null,sort:'hot',liked:{},voted:{},mining:{},collections:[],categories:[],feed:[],nextBefore:null,detailTx:null,from:null,cache:{},chat:{messages:[],participants:[],nextBefore:null},chatScroll:null};
+  var state={screen:'landing',filter:null,address:null,category:null,protocol:null,tick:null,block:null,kind:'text',protocols:[],chain:null,sort:'hot',liked:{},voted:{},mining:{},collections:[],categories:[],feed:[],nextBefore:null,detailTx:null,from:null,cache:{},chat:{messages:[],participants:[],nextBefore:null},chatScroll:null};
   var POW_BITS=16;
   var _inApp=0;
   try{state.liked=JSON.parse(localStorage.getItem('opreturn_liked')||'{}');}catch(e){}
@@ -519,23 +533,59 @@ ${ogMeta}
   function colBySlug(s){for(var i=0;i<state.collections.length;i++){if(state.collections[i].slug&&state.collections[i].slug.toLowerCase()===String(s).toLowerCase())return state.collections[i];}return null;}
   function colSlug(c){return c&&(c.slug||String(c.id))||'';}
   function catSlug(c){return String(c||'').toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').replace(/--+/g,'-');}
+  var PROTO_LABEL={text:'Message',binary:'Binary',runes:'Runes',omni:'Omni Layer',thorchain:'THORChain','bridge-memo':'Bridge memo','evm-hash':'EVM hash','witness-commitment':'Witness commitment',rootstock:'Rootstock','core-dao':'Core DAO',exsat:'exSat',stacks:'Stacks',syscoin:'Syscoin',lifi:'LI.FI'};
+  var TOKEN_PROTO=/-20$|^src-|^orc-|^brc|^drc-|^ltc-/;
+  function protoLabel(p){p=String(p||'');return PROTO_LABEL[p]||p.toUpperCase();}
+  function isTokenProto(p){return TOKEN_PROTO.test(String(p||''));}
+  function fmtAmt(a){if(a==null||a==='')return '';var n=Number(a);if(!isFinite(n))return String(a);if(Math.abs(n)>=1)return n.toLocaleString(undefined,{maximumFractionDigits:8});return String(a);}
+  /* First structured op of a row: parsed from the JSON content client-side so the feed needs no extra request */
+  function primaryOp(m){
+    if(!m||!m.protocol||m.protocol==='text'||m.protocol==='binary')return null;
+    var ops=m.ops;
+    if(!ops){ops=[];String(m.content||'').split('\\n').forEach(function(line,i){line=line.trim();if(line.charAt(0)!=='{')return;try{var j=JSON.parse(line);if(j&&typeof j.p==='string')ops.push({vout:i,protocol:String(j.p).toLowerCase(),op:j.op||null,tick:j.tick||null,amount:j.amt||j.amount||null});}catch(e){}});}
+    for(var i=0;i<ops.length;i++){if(ops[i].protocol===m.protocol)return ops[i];}
+    return ops[0]||{protocol:m.protocol,op:null,tick:null,amount:null};
+  }
+  function protoBadge(m,extra){
+    var p=m.protocol;if(!p||p==='text')return '';
+    var tok=isTokenProto(p);
+    return '<a class="cat proto'+(tok?' tok':'')+(extra||'')+'" href="/p/'+encodeURIComponent(p)+'" title="OP_RETURN protocol">'+esc(protoLabel(p))+'</a>';
+  }
+  function opLine(m){
+    var o=primaryOp(m);if(!o)return '';
+    var h='<div class="opline">';
+    if(o.op)h+='<span>'+esc(String(o.op).toLowerCase())+'</span>';
+    if(o.amount)h+='<span class="amt">'+esc(fmtAmt(o.amount))+'</span>';
+    if(o.tick)h+='<a class="tk" href="/tick/'+encodeURIComponent(o.tick)+'">$'+esc(o.tick)+'</a>';
+    var to=m.recipient||(m.monitored_address&&m.monitored_address!==m.sender?m.monitored_address:null);
+    if(to)h+='<span class="arrow">\u2192</span><a href="/a/'+attr(to)+'">'+esc(shortAddr(to))+'</a>';
+    h+='</div>';
+    return h;
+  }
   function catName(slug){for(var i=0;i<state.categories.length;i++){if(catSlug(state.categories[i].category)===String(slug).toLowerCase())return state.categories[i].category;}return null;}
 
   function fetchJSON(u,o){return fetch(u,o).then(function(r){return r.json().then(function(d){return {status:r.status,d:d};});});}
 
-  function loadCollections(){return fetchJSON('/api/collections').then(function(r){state.collections=r.d||[];});}
-  function loadCategories(){return fetchJSON('/api/categories').then(function(r){state.categories=r.d||[];});}
+  function loadCollections(){return fetchJSON('/api/collections').then(function(r){state.collections=Array.isArray(r.d)?r.d:[];}).catch(function(){});}
+  function loadCategories(){return fetchJSON('/api/categories').then(function(r){state.categories=Array.isArray(r.d)?r.d:[];}).catch(function(){});}
+  function loadProtocols(){return fetchJSON('/api/protocols').then(function(r){state.protocols=(Array.isArray(r.d)?r.d:[]).filter(function(p){return p.protocol!=='text';});}).catch(function(){});}
+  function loadChain(){return fetchJSON('/api/chain').then(function(r){state.chain=r.d&&r.d.blocks!=null?r.d:null;}).catch(function(){});}
   function loadFeed(append){
     var q='/api/messages?sort='+state.sort+'&limit=50';
     if(state.filter)q+='&collection_id='+state.filter;
     if(state.address)q+='&address='+encodeURIComponent(state.address);
     if(state.category)q+='&category='+encodeURIComponent(catSlug(state.category));
+    if(state.protocol)q+='&protocol='+encodeURIComponent(state.protocol);
+    if(state.tick)q+='&tick='+encodeURIComponent(state.tick);
+    if(state.block)q+='&block='+state.block;
+    if(state.kind==='all')q+='&kind=all';
     if(append&&state.nextBefore)q+='&before='+encodeURIComponent(state.nextBefore);
     return fetchJSON(q).then(function(r){
       var msgs=(r.d&&r.d.messages)||[];cacheMsgs(msgs);
       state.feed=append?state.feed.concat(msgs):msgs;
       state.nextBefore=r.d?r.d.next_before:null;
-    });
+      state.feedError=r.status>=400?('feed unavailable (HTTP '+r.status+')'):null;
+    }).catch(function(){state.feedError='feed unavailable';if(!append){state.feed=[];state.nextBefore=null;}});
   }
 
   var _chatSeq=0;
@@ -553,7 +603,7 @@ ${ogMeta}
       state.chat.messages=prepend?msgs.concat(state.chat.messages):msgs;
       state.chat.participants=d.participants||state.chat.participants||[];
       state.chat.nextBefore=d.next_before||null;
-    });
+    }).catch(function(){});
   }
 
   function totalArchived(){var t=0;state.collections.forEach(function(c){t+=c.message_count||0;});return t;}
@@ -561,7 +611,7 @@ ${ogMeta}
 
   function setNav(){
     var r=currentRoute().name;
-    var nav=(r==='c'||r==='a'||r==='cat'||r==='feed'||r==='m')?'feed':(r==='collections'?'collections':(r==='guide'?'guide':'landing'));
+    var nav=(r==='c'||r==='a'||r==='cat'||r==='feed'||r==='m'||r==='p'||r==='tick'||r==='block')?'feed':(r==='collections'?'collections':(r==='guide'?'guide':'landing'));
     var b=document.querySelectorAll('[data-nav]');
     for(var i=0;i<b.length;i++){b[i].classList.toggle('active',b[i].getAttribute('data-nav')===nav);}
   }
@@ -577,9 +627,9 @@ ${ogMeta}
     var feat=null;var all=Object.keys(state.cache).map(function(k){return state.cache[k];});
     all.forEach(function(m){if(!feat||m.likes>feat.likes)feat=m;});
     var h='<section class="wrap" style="padding-bottom:clamp(30px,4vw,56px)">';
-    h+='<div class="pill"><span class="dot"></span>'+totalArchived().toLocaleString()+' MESSAGES ARCHIVED \\u00b7 UPDATING EVERY BLOCK</div>';
+    h+='<div class="pill"><span class="dot"></span>'+(state.chain&&state.chain.stored_txs?Number(state.chain.stored_txs).toLocaleString()+' OP_RETURN TXS DECODED':totalArchived().toLocaleString()+' MESSAGES ARCHIVED')+' \\u00b7 UPDATING EVERY BLOCK</div>';
     h+='<h1 class="hero">People are leaving messages inside Bitcoin. Forever.</h1>';
-    h+='<p class="lede">Every one of these was etched into an <span class="mono" style="font-size:.85em">OP_RETURN</span> output on the blockchain \\u2014 threats, confessions, prayers, ads, haiku. Immutable. Unstoppable. We monitor the strangest addresses on the network and archive what shows up.</p>';
+    h+='<p class="lede">Every one of these was etched into an <span class="mono" style="font-size:.85em">OP_RETURN</span> output on the blockchain \\u2014 threats, confessions, prayers, ads, haiku. Immutable. Unstoppable. We scan every block, decode every OP_RETURN protocol, and keep the human messages front and centre.</p>';
     h+='<div class="cta"><button class="btn btn-primary" data-action="feed">Enter the feed \\u2192</button><button class="btn" data-action="collections">Browse collections</button></div>';
     h+='<p class="mono" style="margin-top:20px;font-size:13px;color:var(--fg4)">Want to leave your own mark? <button data-action="guide" style="background:none;border:none;color:var(--sig);font:inherit;cursor:pointer;padding:0;text-decoration:underline">Read the field manual \\u2192</button></p>';
     h+='</section>';
@@ -590,10 +640,17 @@ ${ogMeta}
       h+='</div></section>';
     }
     h+='<section class="wrap" style="padding-top:clamp(32px,5vw,64px)"><div class="stats">';
-    h+=stat(String(state.collections.length),'Collections tracked');
-    h+=stat(totalAddresses()+'','Addresses monitored');
-    h+=stat('~3min','Fresh every poll');
-    h+=stat('\\u221e','Years it stays online');
+    if(state.chain&&state.chain.blocks){var ch=state.chain;
+      h+=stat(Number(ch.blocks).toLocaleString(),'Blocks scanned');
+      h+=stat(Number(ch.opreturn_outputs).toLocaleString(),'OP_RETURN outputs seen');
+      h+=stat((ch.opreturn_outputs?Math.round(ch.runes_outputs/ch.opreturn_outputs*100):0)+'%','Runes (counted, not shown)');
+      h+=stat(String(state.protocols.length),'Protocols decoded');
+    }else{
+      h+=stat(String(state.collections.length),'Collections tracked');
+      h+=stat(totalAddresses()+'','Addresses monitored');
+      h+=stat('~3min','Fresh every poll');
+      h+=stat('\\u221e','Years it stays online');
+    }
     h+='</div>';
     h+=renderChart();
     h+='<div class="faq-wrap">';
@@ -646,7 +703,9 @@ ${ogMeta}
     h+='<span class="lc'+(voted?' liked':'')+'" data-lc="'+m.id+'">'+(m.likes||0)+'</span>';
     h+='<button class="likebtn down'+(voted==='down'?' liked':'')+'" data-action="vote" data-dir="down" data-id="'+m.id+'" title="Downvote">▼</button></div>';
     h+='<div class="body"><div class="head">';
-    h+=(m.category?'<a class="cat'+(hostile?' sig':'')+'" href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a>':'<span class="cat'+(hostile?' sig':'')+'">Unclassified</span>');
+    var isProto=m.protocol&&m.protocol!=='text';
+    if(isProto)h+=protoBadge(m);
+    else h+=(m.category?'<a class="cat'+(hostile?' sig':'')+'" href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a>':'<span class="cat'+(hostile?' sig':'')+'">Unclassified</span>');
     if(env){
       if(env.isSigned)h+='<span class="cat" style="border-color:#16a34a;color:#16a34a">🛡️ PGP Signed</span>';
       else if(env.type==='bie1')h+='<span class="cat" style="border-color:#eab308;color:#ca8a04">⚡ BIE1 ECIES</span>';
@@ -662,9 +721,11 @@ ${ogMeta}
       else if(env.type==='bie1')displayText='[Electrum BIE1 ECIES encrypted payload to '+shortAddr(m.address)+']';
       else if(env.type==='pgp-encrypted')displayText='[OpenPGP encrypted transmission to Blockstream Security (BB332D31CBA44EDF)]';
     }
-    h+='<button class="content-btn" data-action="open-msg" data-txid="'+attr(m.txid)+'"><p class="content">'+esc(displayText)+'</p>'+(displayText.length>280?'<div class="readmore">\\u2026 read full message \\u2192</div>':'')+'</button>';
+    if(isProto)h+=opLine(m);
+    h+='<button class="content-btn" data-action="open-msg" data-txid="'+attr(m.txid)+'"><p class="content'+(isProto?' proto':'')+'">'+esc(displayText)+'</p>'+(displayText.length>280?'<div class="readmore">\\u2026 read full message \\u2192</div>':'')+'</button>';
     h+='<div class="foot">';
     if(m.collection_id){h+='<span>\u21b3 <a href="/c/'+attr(colSlug(colById(m.collection_id)))+'">'+esc(colName(m.collection_id))+'</a></span>';}
+    if(m.block_height!=null)h+='<a href="/block/'+m.block_height+'" title="block height">#'+Number(m.block_height).toLocaleString()+'</a>';
     h+='<a href="/a/'+attr(m.address)+'">'+esc(shortAddr(m.address))+'</a>';
     h+='<button class="copy" data-action="copy" data-copy="'+attr(m.address)+'">\u29c9</button>';
     h+='<a href="https://mempool.space/tx/'+attr(m.txid)+'" target="_blank" rel="noopener">txid \u2197</a></div>';
@@ -673,20 +734,26 @@ ${ogMeta}
   }
 
   function renderFeed(){
-    var title=state.address?state.address:(state.filter?colName(state.filter):(state.category?state.category:'All transmissions'));
-    var kick=state.address?'\u25c6 ADDRESS RECORD':(state.filter?('\u25c6 '+catCode(colIndex(state.filter)+1)):(state.category?('\u25c6 '+catSlug(state.category).toUpperCase().replace(/-/g,' ')):'\u25c6 EVERY MONITORED ADDRESS'));
+    var title=state.address?state.address:(state.filter?colName(state.filter):(state.category?state.category:(state.protocol?protoLabel(state.protocol):(state.tick?'$'+state.tick:(state.block?'Block '+Number(state.block).toLocaleString():'All transmissions')))));
+    var kick=state.address?'\u25c6 ADDRESS RECORD':(state.filter?('\u25c6 '+catCode(colIndex(state.filter)+1)):(state.category?('\u25c6 '+catSlug(state.category).toUpperCase().replace(/-/g,' ')):(state.protocol?'\u25c6 OP_RETURN PROTOCOL \u00b7 '+state.protocol.toUpperCase():(state.tick?'\u25c6 TOKEN TICKER':(state.block?'\u25c6 BLOCK CENSUS':(state.kind==='all'?'\u25c6 EVERY BLOCK \u00b7 EVERY PROTOCOL':'\u25c6 EVERY BLOCK \u00b7 HUMAN MESSAGES'))))));
     var h='<section class="wrap wrap-narrow"><div class="feed-head"><div><div class="kicker" style="margin-bottom:6px">'+kick+'</div><h2 class="title" style="font-size:clamp(26px,4vw,40px);overflow-wrap:anywhere">'+esc(title)+'</h2></div>';
     h+='<div class="head-ctl">'+viewToggle('feed')+'<div class="seg"><button data-action="sort" data-sort="hot" class="'+(state.sort==='hot'?'active':'')+'">\ud83d\udd25 Hottest</button><button data-action="sort" data-sort="new" class="'+(state.sort==='new'?'active':'')+'">\u25f7 Newest</button></div></div></div>';
-    h+='<div class="chips"><a class="chip'+(state.filter==null&&!state.address&&!state.category?' active':'')+'" href="/feed">All transmissions</a>';
+    var plain=!state.filter&&!state.address&&!state.category&&!state.protocol&&!state.tick&&!state.block;
+    if(plain&&state.chain){var ch=state.chain;h+='<div class="chain"><span><b>'+Number(ch.blocks).toLocaleString()+'</b> blocks scanned</span><span><b>'+Number(ch.opreturn_outputs).toLocaleString()+'</b> OP_RETURN outputs</span><span><b>'+(ch.opreturn_outputs?Math.round(ch.runes_outputs/ch.opreturn_outputs*100):0)+'%</b> Runes</span><span><b>'+Number(ch.stored_txs).toLocaleString()+'</b> decoded</span>'+(ch.highest_height!=null?'<a href="/block/'+ch.highest_height+'">latest #'+Number(ch.highest_height).toLocaleString()+'</a>':'')+'</div>';}
+    h+='<div class="chips"><a class="chip'+(plain&&state.kind!=='all'?' active':'')+'" href="/feed">Human messages</a>';
+    h+='<a class="chip'+(plain&&state.kind==='all'?' active':'')+'" href="/feed?kind=all">All protocols</a>';
     state.collections.forEach(function(c){h+='<a class="chip'+(state.filter===c.id&&!state.address&&!state.category?' active':'')+'" href="/c/'+attr(colSlug(c))+'">'+esc(c.name)+'</a>';});
     h+='</div>';
-    if(state.categories.length){h+='<div class="chips" style="margin-top:8px">';
+    if(state.protocols.length){h+='<div class="chips" style="margin-top:8px;padding-top:0;border-bottom:none;margin-bottom:8px">';
+    state.protocols.slice(0,14).forEach(function(p){h+='<a class="chip'+(state.protocol===p.protocol?' active':'')+'" href="/p/'+encodeURIComponent(p.protocol)+'" title="'+p.count+' txs / 30d">'+esc(p.label||protoLabel(p.protocol))+' <span style="opacity:.55">'+Number(p.count).toLocaleString()+'</span></a>';});
+    h+='</div>';}
+    if(state.categories.length&&!state.protocol&&!state.tick&&!state.block){h+='<div class="chips" style="margin-top:8px">';
     h+='<a class="chip'+(state.category==null&&!state.address?' active':'')+'" href="/feed">All categories</a>';
     state.categories.forEach(function(c){h+='<a class="chip'+(state.category===c.category&&!state.address?' active':'')+'" href="/cat/'+encodeURIComponent(c.slug)+'">'+esc(c.category)+'</a>';});
     h+='</div>';}
     h+='<div class="suggest-bar"><button class="btn-sm" data-action="suggest-open" data-col="'+(state.filter||'')+'">+ Suggest an address'+(state.filter?' for this collection':'')+'</button></div>';
     h+='<div class="feed-list" id="feed-list">';
-    if(!state.feed.length){h+='<div class="empty">No messages yet \\u2014 waiting for the next poll.</div>';}
+    if(!state.feed.length){h+='<div class="empty">'+(state.feedError?esc(state.feedError)+' \\u2014 retry in a moment.':'No messages yet \\u2014 waiting for the next poll.')+'</div>';}
     else{state.feed.forEach(function(m,i){h+=msgHTML(m,state.sort==='hot'?i:null);});}
     h+='</div>';
     if(state.nextBefore){h+='<button class="btn-more" data-action="more">Load more \\u2193</button>';}
@@ -707,7 +774,7 @@ ${ogMeta}
   function shortLabel(l){return String(l||'').split(' (')[0];}
   function partyName(p,addr){return p&&p.label?shortLabel(p.label):shortAddr(addr);}
   function viewToggle(active){
-    if(state.category||(!state.filter&&!state.address))return '';
+    if(state.category||state.protocol||state.tick||state.block||(!state.filter&&!state.address))return '';
     return '<div class="seg"><button data-action="view" data-view="feed" class="'+(active==='feed'?'active':'')+'">\u2261 Feed</button><button data-action="view" data-view="chat" class="'+(active==='chat'?'active':'')+'">\ud83d\udcac Chat</button></div>';
   }
   function chatPath(){return state.address?'/a/'+encodeURIComponent(state.address)+'/chat':'/c/'+colSlug(colById(state.filter))+'/chat';}
@@ -930,7 +997,8 @@ ${ogMeta}
     var env=parseCryptoEnvelope(m.content);
     var h='<section class="wrap wrap-card"><button class="back" data-action="back">\u2190 back</button>';
     h+='<div class="artifact"><div class="bar"><span>\u25c6 OP_RETURN \u00b7 IMMUTABLE RECORD</span><span class="bar-right"><span class="st '+(m.is_mempool?'mem':'conf')+'">'+(m.is_mempool?'\u25f7 IN MEMPOOL':'\u2713 CONFIRMED')+'</span><button class="bar-x" data-action="back" aria-label="close" title="close">\u2715</button></span></div>';
-    h+='<div class="pad"><span class="cat'+(hostile?' sig':'')+'">'+esc(m.category||'Unclassified')+'</span>';
+    var isProto=m.protocol&&m.protocol!=='text';
+    h+='<div class="pad">'+(isProto?protoBadge(m):'<span class="cat'+(hostile?' sig':'')+'">'+esc(m.category||'Unclassified')+'</span>');
     if(env){
       if(env.isSigned)h+='<span class="cat" style="margin-left:6px;border-color:#16a34a;color:#16a34a">🛡️ PGP Signed</span>';
       else if(env.type==='bie1')h+='<span class="cat" style="margin-left:6px;border-color:#eab308;color:#ca8a04">⚡ BIE1 ECIES</span>';
@@ -941,7 +1009,11 @@ ${ogMeta}
     }
     var qtext=(env&&env.leadText)?env.leadText:m.content;
     var qlen=(qtext||'').length;var qcls=qlen>600?' long':(qlen>240?' med':'');
-    h+='<blockquote class="'+qcls.trim()+'">\u201c'+esc(qtext)+'\u201d</blockquote>';
+    if(isProto)h+='<div style="margin-top:14px">'+opLine(m)+'</div>';
+    h+='<blockquote class="'+qcls.trim()+(isProto?' proto':'')+'"'+'>'+(isProto?esc(qtext):'\u201c'+esc(qtext)+'\u201d')+'</blockquote>';
+    if(m.ops&&m.ops.length){h+='<div class="ops"><div class="kicker" style="margin-bottom:4px">\u25c6 DECODED OP_RETURN OUTPUTS \u00b7 '+m.ops.length+'</div>';
+      m.ops.forEach(function(o){h+='<div class="op"><span>vout '+(o.vout<0?'?':o.vout)+'</span><a class="cat proto'+(isTokenProto(o.protocol)?' tok':'')+'" href="/p/'+encodeURIComponent(o.protocol)+'">'+esc(protoLabel(o.protocol))+'</a>'+(o.op?'<span>'+esc(o.op)+'</span>':'')+(o.amount?'<code>'+esc(fmtAmt(o.amount))+'</code>':'')+(o.tick?'<a href="/tick/'+encodeURIComponent(o.tick)+'" style="color:#0f766e;font-weight:600">$'+esc(o.tick)+'</a>':'')+(o.payload_hex?'<span class="hex">'+esc(o.payload_hex.length>200?o.payload_hex.slice(0,200)+'\u2026':o.payload_hex)+'</span>':'')+'</div>';});
+      h+='</div>';}
 
     if(env){
       if(env.type==='bie1'){
@@ -972,15 +1044,18 @@ ${ogMeta}
     h+='<div class="metagrid">';
     if(m.collection_id){h+='<div class="cell full"><div class="k">Collection</div><div class="v single"><a href="/c/'+attr(colSlug(colById(m.collection_id)))+'">'+esc(colName(m.collection_id))+'</a></div></div>';}
     h+=cellCopy('Address',m.address);
+    if(m.sender&&m.sender!==m.address)h+=cellCopy('Sender',m.sender);
+    if(m.recipient&&m.recipient!==m.address)h+=cellCopy('Recipient',m.recipient);
     h+=cellCopy('Transaction',m.txid);
     h+=cell('Status',m.is_mempool?'pending':'confirmed');
     h+=cell('Fee',feeText(m)||'\\u2014');
     h+=cell('Size',(function(){try{return new TextEncoder().encode(m.content||'').length+' bytes';}catch(e){return (m.content||'').length+' chars';}})());
     h+=cell('Time',timeAgo(msgTime(m)));
-    h+=(m.category?'<div class="cell"><div class="k">Category</div><div class="v single"><a href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a></div></div>':cell('Category','unclassified'));
+    if(isProto)h+='<div class="cell"><div class="k">Protocol</div><div class="v single"><a href="/p/'+encodeURIComponent(m.protocol)+'">'+esc(protoLabel(m.protocol))+'</a></div></div>';
+    else h+=(m.category?'<div class="cell"><div class="k">Category</div><div class="v single"><a href="/cat/'+encodeURIComponent(catSlug(m.category))+'">'+esc(m.category)+'</a></div></div>':cell('Category','unclassified'));
     // Total fee cell carries an async fiat span (filled from mempool historical-price)
     h+='<div class="cell"><div class="k">Total fee</div><div class="v">'+(m.fee_sats!=null?('<span style="white-space:nowrap" title="'+m.fee_sats.toLocaleString()+' sats">'+fmtSats(m.fee_sats)+' sats</span> <span id="feeusd" style="color:var(--fg4);white-space:nowrap;font-size:11px"></span>'):'\\u2014')+'</div></div>';
-    h+=cell('Block',m.is_mempool?'in mempool':(m.block_time!=null?new Date(m.block_time*1000).toISOString().slice(0,10):'\\u2014'));
+    h+=(m.block_height!=null?'<div class="cell"><div class="k">Block</div><div class="v single"><a href="/block/'+m.block_height+'">#'+Number(m.block_height).toLocaleString()+'</a> \u00b7 '+(m.block_time!=null?new Date(m.block_time*1000).toISOString().slice(0,10):'')+'</div></div>':cell('Block',m.is_mempool?'in mempool':(m.block_time!=null?new Date(m.block_time*1000).toISOString().slice(0,10):'\\u2014')));
     h+='</div></div>';
     h+='<div class="actions">';
     h+='<button class="act act-vote act-up'+(voted==='up'?' voted':'')+'" data-action="vote" data-dir="up" data-id="'+m.id+'" title="Upvote (mines PoW nonce)">▲ Upvote <span data-lc="'+m.id+'">'+(m.likes||0)+'</span></button>';
@@ -1070,12 +1145,13 @@ ${ogMeta}
     return {name:parts[0]||'landing',param:decodeURIComponent(parts.slice(1).join('/'))||null,chat:chat};
   }
   /* /feed defaults to newest; collection / category / address views default to hottest */
-  function defaultSort(r){return r.name==='feed'?'new':'hot';}
+  function defaultSort(r){return r.name==='feed'||r.name==='p'||r.name==='tick'||r.name==='block'?'new':'hot';}
   function route(){
     var r=currentRoute();
     var sp=new URLSearchParams(location.search).get('sort');
     var sort=sp==='new'||sp==='hot'?sp:defaultSort(r);
-    state.filter=null;state.address=null;state.category=null;
+    state.filter=null;state.address=null;state.category=null;state.protocol=null;state.tick=null;state.block=null;
+    state.kind=new URLSearchParams(location.search).get('kind')==='all'?'all':'text';
     if(r.name==='collections'){state.screen='collections';return render();}
     if(r.name==='guide'){state.screen='guide';return render();}
     if(r.name==='feed'){state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
@@ -1092,6 +1168,15 @@ ${ogMeta}
       var cn=catName(r.param);
       if(cn){state.screen='feed';state.category=cn;state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
       state.screen='notfound';return render();
+    }
+    if(r.name==='p'&&r.param){
+      state.protocol=String(r.param).toLowerCase();state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);
+    }
+    if(r.name==='tick'&&r.param){
+      state.tick=r.param;state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);
+    }
+    if(r.name==='block'&&r.param&&/^\\d+$/.test(r.param)){
+      state.block=Number(r.param);state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);
     }
     if(r.name==='a'&&r.param){
       state.address=r.param;
@@ -1154,7 +1239,7 @@ ${ogMeta}
     if(a==='open-collection')return go('colfeed',t.getAttribute('data-id'));
     if(a==='filter')return go('colfeed',t.getAttribute('data-id'));
     if(a==='filter-all')return go('feed');
-    if(a==='sort'){var s=t.getAttribute('data-sort');history.replaceState({},'',location.pathname+(s===defaultSort(currentRoute())?'':'?sort='+s));route();return;}
+    if(a==='sort'){var s=t.getAttribute('data-sort');var qs=new URLSearchParams(location.search);if(s===defaultSort(currentRoute()))qs.delete('sort');else qs.set('sort',s);var q=qs.toString();history.replaceState({},'',location.pathname+(q?'?'+q:''));route();return;}
     if(a==='more'){loadFeed(true).then(render);return;}
     if(a==='view'){navigate(t.getAttribute('data-view')==='chat'?chatPath():feedPath());return;}
     if(a==='chat-earlier'){var log=document.getElementById('room-log');state.chatScroll={keep:log?log.scrollHeight-log.scrollTop:0};loadChat(true).then(render);return;}
@@ -1451,6 +1536,9 @@ ${ogMeta}
             sort: { type: "string", enum: ["hot", "new"], description: "Sort by hottest or newest" },
             collection_id: { type: "number", description: "Filter by collection ID" },
             category: { type: "string", description: "Filter by category slug" },
+            protocol: { type: "string", description: "Filter by OP_RETURN protocol slug (ico-20, crc-20, thorchain, omni, ...)" },
+            tick: { type: "string", description: "Filter by token ticker, e.g. LEAF" },
+            kind: { type: "string", enum: ["text", "all"], description: "text = human messages only (default); all = every decoded protocol" },
             limit: { type: "number", description: "Max results to return (1-50)" }
           }
         },
@@ -1458,6 +1546,9 @@ ${ogMeta}
           var q = '/api/messages?sort=' + (params.sort || 'hot') + '&limit=' + (params.limit || 20);
           if (params.collection_id) q += '&collection_id=' + params.collection_id;
           if (params.category) q += '&category=' + encodeURIComponent(params.category);
+          if (params.protocol) q += '&protocol=' + encodeURIComponent(params.protocol);
+          if (params.tick) q += '&tick=' + encodeURIComponent(params.tick);
+          if (params.kind === 'all') q += '&kind=all';
           var r = await fetch(q);
           var data = await r.json();
           return { content: [{ type: "text", text: JSON.stringify(data.messages || data) }] };
@@ -1512,9 +1603,7 @@ ${ogMeta}
 
   /* ---- boot ---- */
   initWebMcp();
-  loadCollections().then(function(){
-    return loadCategories();
-  }).then(function(){
+  Promise.all([loadCollections(),loadCategories(),loadProtocols(),loadChain()]).then(function(){
     route();
     window.addEventListener('popstate',route);
   });

@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && wrangler deploy --dry-run --outdir=dist",
     "db:migrate:local": "wrangler d1 migrations apply opreturn-monitor --local",
-    "db:migrate:remote": "wrangler d1 migrations apply opreturn-monitor --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply opreturn-monitor --remote",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@cf-wasm/resvg": "^0.4.0",
@@ -18,6 +20,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260804.1",
     "typescript": "^5.7.2",
+    "vitest": "^3.2.7",
     "wrangler": "^4.118.0"
   }
 }

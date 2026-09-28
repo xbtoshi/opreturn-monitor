@@ -19,9 +19,23 @@ export interface Address {
   created_at: string;
 }
 
+/** One decoded OP_RETURN output of a stored transaction. */
+export interface MessageOp {
+  vout: number;
+  protocol: string;
+  op: string | null;
+  tick: string | null;
+  amount: string | null;
+  payload_hex: string | null;
+}
+
 export interface Message {
   id: number;
   txid: string;
+  /**
+   * The address this row is filed under: the monitored address for rows the
+   * address poller found, else the tx's recipient. Never rewritten.
+   */
   address: string;
   content: string | null;
   category: string | null;
@@ -34,10 +48,19 @@ export interface Message {
   fee_sats: number | null;
   fee_rate: number | null;
   collection_id: number | null;
-  /** How many txs on this address carry this exact content (feed queries only). */
+  /** How many txs on this address carry this exact content. */
   dup_count?: number;
   /** Address behind the tx's first input, i.e. who wrote it. NULL until backfilled. */
   sender?: string | null;
+  /** Primary protocol slug (text, ico-20, thorchain, ...). NULL until parsed. */
+  protocol?: string | null;
+  /** Address of the first non-OP_RETURN output. */
+  recipient?: string | null;
+  /** Monitored address this row is attributed to, if any. */
+  monitored_address?: string | null;
+  block_height?: number | null;
+  /** Decoded OP_RETURN outputs (detail queries only). */
+  ops?: MessageOp[];
 }
 
 /** One bubble in the chat view: a feed message plus who wrote it. */
@@ -51,6 +74,17 @@ export interface ChatParticipant {
   label: string | null;
 }
 
+export interface ProtocolStat {
+  protocol: string;
+  count: number;
+}
+
+export interface TickStat {
+  protocol: string;
+  tick: string;
+  count: number;
+}
+
 export interface Env {
   DB: D1Database;
   SITE_URL?: string;
@@ -58,11 +92,20 @@ export interface Env {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   MEMPOOL_BASE_URL?: string;
+  /** Comma-separated Esplora-style hosts tried when the primary fails. */
+  MEMPOOL_FALLBACKS?: string;
   CRON_SECRET?: string;
   ADMIN_KEY?: string;
   AI_MAX_PER_RUN?: string;
   AI_DELAY_MS?: string;
   AI_BATCH_SIZE?: string;
+  /** "1" enables forward block ingestion (full-chain OP_RETURN feed). */
+  INGEST_FORWARD?: string;
+  /** "1" enables backwards historical backfill once the tip is caught up. */
+  INGEST_BACKFILL?: string;
+  INGEST_MAX_BLOCKS_PER_RUN?: string;
+  INGEST_TIME_BUDGET_MS?: string;
+  BACKFILL_DAYS?: string;
 }
 
 export interface RunSummary {
@@ -71,7 +114,13 @@ export interface RunSummary {
   classified: number;
   failed_fetches: number;
   skipped: number;
-  /** Older rows whose sender column was filled in this run. */
-  senders_backfilled: number;
+  /** Legacy rows whose protocol/ops were derived from stored text this run. */
+  reparsed: number;
+  /** Rows whose sender/fee/recipient were filled from a tx-detail fetch this run. */
+  details_filled: number;
+  /** Blocks ingested by the full-chain scanner this run (forward + backfill). */
+  blocks_ingested: number;
   took_ms: number;
+  /** Wall-clock per pipeline phase, for tuning the cron budget. */
+  phase_ms: Record<string, number>;
 }

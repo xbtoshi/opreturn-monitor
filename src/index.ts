@@ -5,7 +5,10 @@ import { categoryFromSlug, categorySlug } from './classify';
 import { classifyOnePass } from './cron';
 import { runCron } from './cron';
 import * as db from './db';
-import { fetchHistoricalPriceUsd } from './mempool';
+import { fetchHistoricalPriceUsd, mempoolHosts } from './mempool';
+import { ingestOne, ingestStatus, resetIngestCursors } from './ingest';
+import { backfillDetails, reparseLegacy } from './cron';
+import { protocolLabel } from './protocols';
 import {
   addressCardSvg,
   categoryCardSvg,
@@ -56,6 +59,12 @@ import {
   renderMessageMarkdown,
   renderMessageSsr,
   renderNotFoundSsr,
+  renderProtocolSsr,
+  renderProtocolMarkdown,
+  renderTickSsr,
+  renderTickMarkdown,
+  renderBlockSsr,
+  renderBlockMarkdown,
   cleanCryptoPreview,
 } from './seo';
 import { ensureSeeded, slugify } from './seed';
@@ -110,7 +119,7 @@ app.get('/api/price', async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const raw = Number(c.req.query('ts'));
   const ts = Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), now) : now;
-  const usd = await fetchHistoricalPriceUsd(c.env.MEMPOOL_BASE_URL || 'https://mempool.space', ts);
+  const usd = await fetchHistoricalPriceUsd(mempoolHosts(c.env), ts);
   // Past-day prices never change; today's price can drift.
   const maxAge = usd == null ? 60 : now - ts > 86400 ? 86400 : 600;
   return c.json({ usd }, 200, { 'cache-control': `public, max-age=${maxAge}` });
@@ -129,16 +138,107 @@ app.get('/api/messages', async (c) => {
   const sort = c.req.query('sort') === 'hot' ? ('hot' as const) : ('new' as const);
   const limit = Math.min(Math.max(Number(c.req.query('limit')) || 50, 1), 100);
   const before = c.req.query('before') || undefined;
+  const protocol = slugParam(c.req.query('protocol'));
+  const tick = tickParam(c.req.query('tick'));
+  const rawBlock = Number(c.req.query('block'));
+  const blockHeight = Number.isInteger(rawBlock) && rawBlock > 0 ? rawBlock : undefined;
+  // The global feed shows human messages unless asked for every protocol;
+  // collection / address / protocol / tick / block views always show everything.
+  const scoped = Boolean(collectionId || address || category || protocol || tick || blockHeight);
+  const kind = c.req.query('kind') === 'all' || scoped ? ('all' as const) : ('text' as const);
 
   const data = await db.getMessages(c.env.DB, {
     collectionId,
     address,
     category,
+    protocol,
+    tick,
+    kind,
+    blockHeight,
     sort,
     limit,
     before,
   });
   return c.json(data);
+});
+
+/** Protocol slugs are lowercase [a-z0-9._-]; anything else is not a protocol. */
+function slugParam(raw: string | undefined): string | undefined {
+  const s = String(raw ?? '').trim().toLowerCase();
+  return /^[a-z0-9._-]{1,32}$/.test(s) ? s : undefined;
+}
+
+/** Tickers are stored as written on-chain (case preserved), bounded in length. */
+function tickParam(raw: string | undefined): string | undefined {
+  const s = String(raw ?? '').trim();
+  return s.length >= 1 && s.length <= 64 ? s : undefined;
+}
+
+/**
+ * Aggregations over the ops/blocks tables are the only queries that touch
+ * every row; serve them from the edge cache for a few minutes. Workers do not
+ * cache their own responses unless asked, hence the explicit Cache API use.
+ */
+async function cachedJson(
+  c: Context<Bindings>,
+  ttlSeconds: number,
+  cacheKey: string,
+  compute: () => Promise<unknown>
+): Promise<Response> {
+  const cache = (caches as unknown as { default: Cache }).default;
+  // Key on a normalised name, not the raw query string, so callers cannot
+  // mint unlimited cache misses by varying parameters.
+  const key = new Request(`${new URL(c.req.url).origin}/__cache/${cacheKey}`, { method: 'GET' });
+  const hit = await cache.match(key).catch(() => undefined);
+  if (hit) return hit;
+  const body = JSON.stringify(await compute());
+  const res = new Response(body, {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`,
+      'access-control-allow-origin': '*',
+    },
+  });
+  c.executionCtx.waitUntil(cache.put(key, res.clone()).catch(() => {}));
+  return res;
+}
+
+/** Aggregation windows are quantised so the cache has a handful of keys, not one per query string. */
+function daysParam(raw: string | undefined): number {
+  const n = Number(raw) || 30;
+  return [1, 7, 30, 90, 365].reduce((best, d) => (Math.abs(d - n) < Math.abs(best - n) ? d : best), 30);
+}
+
+app.get('/api/protocols', (c) => {
+  const days = daysParam(c.req.query('days'));
+  return cachedJson(c, 300, `protocols:${days}`, async () => {
+    const stats = await db.listProtocols(c.env.DB, days);
+    return stats.map((s) => ({ ...s, label: protocolLabel(s.protocol) }));
+  });
+});
+
+app.get('/api/ticks', (c) => {
+  const days = daysParam(c.req.query('days'));
+  const protocol = slugParam(c.req.query('protocol'));
+  const limit = Number(c.req.query('limit')) > 100 ? 500 : 100;
+  return cachedJson(c, 300, `ticks:${days}:${protocol ?? ''}:${limit}`, () =>
+    db.listTicks(c.env.DB, protocol, days, limit)
+  );
+});
+
+app.get('/api/chain', (c) =>
+  cachedJson(c, 60, 'chain', async () => {
+    const [stats, recent] = await Promise.all([db.getChainStats(c.env.DB), db.listRecentBlocks(c.env.DB, 20)]);
+    return { ...stats, recent };
+  })
+);
+
+app.get('/api/block/:height', async (c) => {
+  const height = Number(c.req.param('height'));
+  if (!Number.isInteger(height) || height < 0) return jsonError('invalid height', 400);
+  const block = await db.getBlock(c.env.DB, height);
+  if (!block) return jsonError('block not scanned', 404);
+  return c.json(block, 200, { 'cache-control': 'public, max-age=300' });
 });
 
 app.get('/api/chat', async (c) => {
@@ -367,6 +467,51 @@ app.post('/api/admin/ai-test', adminGuard, async (c) => {
   return c.json({ ok: true, info });
 });
 
+/** Re-derive protocol/ops for legacy rows now instead of waiting for the cron. */
+app.post('/api/admin/reparse', adminGuard, async (c) => {
+  const max = Math.min(Math.max(Number(c.req.query('max')) || 500, 1), 2000);
+  let total = 0;
+  while (total < max) {
+    const n = await reparseLegacy(c.env.DB, Math.min(200, max - total));
+    total += n;
+    if (n === 0) break;
+  }
+  return c.json({ ok: true, reparsed: total });
+});
+
+app.post('/api/admin/details', adminGuard, async (c) => {
+  const max = Math.min(Math.max(Number(c.req.query('max')) || 40, 1), 200);
+  const filled = await backfillDetails(c.env.DB, mempoolHosts(c.env), max);
+  return c.json({ ok: true, filled });
+});
+
+app.get('/api/admin/ingest/status', adminGuard, async (c) => {
+  return c.json(await ingestStatus(c.env, mempoolHosts(c.env)));
+});
+
+/** Point the cursors at a height: { "height": 968900, "floor": 968000 }. */
+app.post('/api/admin/ingest/reset', adminGuard, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { height?: unknown; floor?: unknown } | null;
+  const height = Number(body?.height);
+  if (!Number.isInteger(height) || height <= 0) return jsonError('height required', 400);
+  const floor = Number.isInteger(Number(body?.floor)) ? Number(body?.floor) : undefined;
+  await resetIngestCursors(c.env, height, floor);
+  return c.json({ ok: true, height, floor });
+});
+
+/** Ingest one specific block right now (does not move the cursors). */
+app.post('/api/admin/ingest/block/:height', adminGuard, async (c) => {
+  const height = Number(c.req.param('height'));
+  if (!Number.isInteger(height) || height <= 0) return jsonError('invalid height', 400);
+  try {
+    const census = await ingestOne(c.env, mempoolHosts(c.env), height, {});
+    return c.json({ ok: true, height, ...census });
+  } catch (e) {
+    console.error('ingest block failed', height, e);
+    return jsonError('ingest failed; see worker logs', 502);
+  }
+});
+
 app.post('/api/admin/seed-likes', adminGuard, async (c) => {
   const seeded = await db.seedInitialLikes(c.env.DB);
   return c.json({ ok: true, seeded });
@@ -454,10 +599,12 @@ app.get('/llms-full.txt', async (c) => {
 
 app.get('/sitemap.xml', async (c) => {
   const origin = originOf(c);
-  const [cols, addrs, feedRes] = await Promise.all([
+  const [cols, addrs, feedRes, protocols, ticks] = await Promise.all([
     db.listCollections(c.env.DB).catch(() => []),
     db.listAddresses(c.env.DB).catch(() => []),
-    db.getMessages(c.env.DB, { sort: 'hot', limit: 100 }).catch(() => ({ messages: [] })),
+    db.getMessages(c.env.DB, { sort: 'hot', limit: 100, kind: 'text' }).catch(() => ({ messages: [] })),
+    db.listProtocols(c.env.DB, 30).catch(() => []),
+    db.listTicks(c.env.DB, undefined, 30, 200).catch(() => []),
   ]);
   const finalCols = cols.length ? cols : (seedCollections as unknown as CollectionWithStats[]);
   const topMsgs = feedRes.messages.map((m) => ({
@@ -465,7 +612,7 @@ app.get('/sitemap.xml', async (c) => {
     block_time: m.block_time,
     created_at: m.created_at,
   }));
-  const xml = generateSitemapXml(origin, finalCols, addrs, topMsgs);
+  const xml = generateSitemapXml(origin, finalCols, addrs, topMsgs, protocols.map((p) => p.protocol), ticks);
   return new Response(xml, {
     headers: {
       'content-type': 'application/xml; charset=utf-8',
@@ -773,10 +920,15 @@ app.all('/mcp', async (c) => {
       }
 
       if (toolName === 'search_messages') {
+        const protocol = slugParam(args.protocol ? String(args.protocol) : undefined);
+        const tick = tickParam(args.tick ? String(args.tick) : undefined);
         const res = await db.getMessages(c.env.DB, {
           collectionId: args.collection_id ? Number(args.collection_id) : undefined,
           address: args.address ? String(args.address) : undefined,
           category: args.category ? String(args.category) : undefined,
+          protocol,
+          tick,
+          kind: args.kind === 'all' || protocol || tick || args.collection_id || args.address ? 'all' : 'text',
           sort: args.sort === 'new' ? 'new' : 'hot',
           limit: Math.min(Number(args.limit) || 20, 100),
         }).catch(() => ({ messages: [] }));
@@ -798,6 +950,37 @@ app.all('/mcp', async (c) => {
           result: {
             content: [{ type: 'text', text: msg ? JSON.stringify(msg, null, 2) : 'Message not found' }],
             isError: !msg,
+          },
+        });
+      }
+
+      if (toolName === 'get_protocols') {
+        const [protocols, ticks, chain] = await Promise.all([
+          db.listProtocols(c.env.DB, 30).catch(() => []),
+          db.listTicks(c.env.DB, undefined, 30, 50).catch(() => []),
+          db.getChainStats(c.env.DB).catch(() => null),
+        ]);
+        return c.json({
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [{ type: 'text', text: JSON.stringify({ protocols, ticks, chain }, null, 2) }],
+          },
+        });
+      }
+
+      if (toolName === 'get_block') {
+        const height = Number(args.height);
+        const block = Number.isInteger(height) ? await db.getBlock(c.env.DB, height).catch(() => null) : null;
+        const msgs = block
+          ? await db.getMessages(c.env.DB, { sort: 'new', limit: 100, kind: 'all', blockHeight: height }).catch(() => ({ messages: [] }))
+          : { messages: [] };
+        return c.json({
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [{ type: 'text', text: block ? JSON.stringify({ block, messages: msgs.messages }, null, 2) : 'Block not scanned' }],
+            isError: !block,
           },
         });
       }
@@ -839,7 +1022,7 @@ app.get('/', async (c) => {
   const [cols, addrs, feedRes] = await Promise.all([
     db.listCollections(c.env.DB).catch(() => []),
     db.listAddresses(c.env.DB).catch(() => []),
-    db.getMessages(c.env.DB, { sort: 'hot', limit: 1 }).catch(() => ({ messages: [] })),
+    db.getMessages(c.env.DB, { sort: 'hot', limit: 1, kind: 'text' }).catch(() => ({ messages: [] })),
   ]);
   const colsCount = cols.length || seedCollections.length;
   const addrsCount =
@@ -1150,6 +1333,101 @@ app.get('/a/:address/chat', (c) => {
   );
 });
 
+app.get('/p/:protocol', async (c) => {
+  const protocol = slugParam(c.req.param('protocol'));
+  const origin = originOf(c);
+  if (!protocol) return c.notFound();
+  const label = protocolLabel(protocol);
+  const stats = await db.listProtocols(c.env.DB, 30).catch(() => []);
+  const count = stats.find((s) => s.protocol === protocol)?.count ?? 0;
+  if (wantsMarkdown(c)) return markdownResponse(renderProtocolMarkdown(origin, protocol, label, count), origin);
+  applyDiscoveryHeaders(c, origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Protocols', path: '/feed?kind=all' },
+    { name: label, path: `/p/${protocol}` },
+  ]);
+  return c.html(
+    renderIndex({
+      title: `${label} OP_RETURN transactions \u2014 The Permanent Record`,
+      description: `${count} Bitcoin transactions carrying ${label} (${protocol}) OP_RETURN outputs in the last 30 days, decoded from every block.`,
+      url: `${origin}/p/${protocol}`,
+      image: `${origin}/og/protocol/${protocol}.png`,
+      jsonLd: crumbs,
+      initialHtml: renderProtocolSsr(protocol, label, count),
+    })
+  );
+});
+
+app.get('/tick/:tick', async (c) => {
+  const tick = tickParam(c.req.param('tick'));
+  const origin = originOf(c);
+  if (!tick) return c.notFound();
+  const stats = await db.listTicks(c.env.DB, undefined, 30, 500).catch(() => []);
+  const mine = stats.filter((s) => s.tick === tick);
+  const count = mine.reduce((n, s) => n + s.count, 0);
+  const protocols = mine.map((s) => s.protocol);
+  if (wantsMarkdown(c)) return markdownResponse(renderTickMarkdown(origin, tick, count), origin);
+  applyDiscoveryHeaders(c, origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Tickers', path: '/feed?kind=all' },
+    { name: `$${tick}`, path: `/tick/${encodeURIComponent(tick)}` },
+  ]);
+  return c.html(
+    renderIndex({
+      title: `$${tick} on Bitcoin OP_RETURN \u2014 The Permanent Record`,
+      description: `${count} ${tick} token operations${protocols.length ? ' via ' + protocols.join(', ') : ''} in the last 30 days, decoded from every Bitcoin block.`,
+      url: `${origin}/tick/${encodeURIComponent(tick)}`,
+      image: `${origin}/og/tick/${encodeURIComponent(tick)}.png`,
+      jsonLd: crumbs,
+      initialHtml: renderTickSsr(tick, protocols, count),
+    })
+  );
+});
+
+app.get('/block/:height', async (c) => {
+  const height = Number(c.req.param('height'));
+  const origin = originOf(c);
+  const block = Number.isInteger(height) && height > 0 ? await db.getBlock(c.env.DB, height).catch(() => null) : null;
+  if (!block) {
+    if (wantsMarkdown(c)) {
+      return new Response(`# Block Not Scanned\n\nBlock ${height} has not been scanned by the explorer yet.`, {
+        status: 404,
+        headers: { 'content-type': 'text/markdown; charset=utf-8', Vary: 'Accept' },
+      });
+    }
+    return c.html(
+      renderIndex({
+        title: 'Block not scanned \u2014 The Permanent Record',
+        description: 'This block has not been scanned yet.',
+        url: `${origin}/block/${height}`,
+        image: `${origin}/og/default.png`,
+        noindex: true,
+        initialHtml: renderNotFoundSsr('Block not scanned', `Block ${height} has not been scanned by the explorer yet.`),
+      }),
+      404
+    );
+  }
+  if (wantsMarkdown(c)) return markdownResponse(renderBlockMarkdown(origin, block), origin);
+  applyDiscoveryHeaders(c, origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Blocks', path: '/feed?kind=all' },
+    { name: `Block ${height}`, path: `/block/${height}` },
+  ]);
+  return c.html(
+    renderIndex({
+      title: `Block ${height.toLocaleString()} OP_RETURN census \u2014 The Permanent Record`,
+      description: `${block.tx_count} transactions, ${block.opreturn_count} OP_RETURN outputs (${block.runes_count} Runes), ${block.stored_count} decoded and archived.`,
+      url: `${origin}/block/${height}`,
+      image: `${origin}/og/default.png`,
+      jsonLd: crumbs,
+      initialHtml: renderBlockSsr(block),
+    })
+  );
+});
+
 app.get('/cat/:slug', async (c) => {
   const slug = c.req.param('slug')!;
   const cat = categoryFromSlug(slug);
@@ -1293,6 +1571,22 @@ app.get('/og/category/:slug', async (c) => {
   const stats = await db.listCategories(c.env.DB);
   const count = stats.find((s) => categorySlug(s.category) === slug)?.count ?? 0;
   return pngResponse(await svgToPng(categoryCardSvg(cat, count)));
+});
+
+app.get('/og/protocol/:protocol', async (c) => {
+  const protocol = slugParam(c.req.param('protocol').replace(/\.png$/, ''));
+  if (!protocol) return c.notFound();
+  const stats = await db.listProtocols(c.env.DB, 30).catch(() => []);
+  const count = stats.find((s) => s.protocol === protocol)?.count ?? 0;
+  return pngResponse(await svgToPng(categoryCardSvg(protocolLabel(protocol), count)));
+});
+
+app.get('/og/tick/:tick', async (c) => {
+  const tick = tickParam(decodeURIComponent(c.req.param('tick')).replace(/\.png$/, ''));
+  if (!tick) return c.notFound();
+  const stats = await db.listTicks(c.env.DB, undefined, 30, 500).catch(() => []);
+  const count = stats.filter((s) => s.tick === tick).reduce((n, s) => n + s.count, 0);
+  return pngResponse(await svgToPng(categoryCardSvg(`$${tick}`, count)));
 });
 
 app.get('/og/address/:address', async (c) => {

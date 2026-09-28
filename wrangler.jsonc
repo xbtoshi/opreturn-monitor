@@ -36,10 +36,23 @@
     "SITE_URL": "https://opreturn.xyz",
     "OPENAI_MODEL": "deepseek-v4-flash",
     "OPENAI_API_BASE": "https://opencode.ai/zen/go/v1",
-    "MEMPOOL_BASE_URL": "https://mempool.space",
+    // Esplora-style API. btc.tx.taxi is a full mempool-electrs instance that
+    // serves raw blocks 2-3x faster than mempool.space; the fallbacks are
+    // tried in order when it fails.
+    "MEMPOOL_BASE_URL": "https://btc.tx.taxi",
+    "MEMPOOL_FALLBACKS": "https://mempool.space,https://blockstream.info",
     "AI_MAX_PER_RUN": "20",
     "AI_DELAY_MS": "50",
-    "AI_BATCH_SIZE": "10"
+    "AI_BATCH_SIZE": "10",
+    // Full-chain OP_RETURN ingestion. Both flags off = the worker only polls
+    // monitored addresses (the pre-explorer behaviour). Turn INGEST_FORWARD on
+    // first and watch GET /api/admin/ingest/status; enable INGEST_BACKFILL once
+    // the forward cursor keeps up with the tip.
+    "INGEST_FORWARD": "1",
+    "INGEST_BACKFILL": "0",
+    "INGEST_MAX_BLOCKS_PER_RUN": "3",
+    "INGEST_TIME_BUDGET_MS": "60000",
+    "BACKFILL_DAYS": "30"
     // Set these to real values in production, ideally via wrangler secret put.
   },
 

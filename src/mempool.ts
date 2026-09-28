@@ -1,11 +1,27 @@
+import type { Env } from './types';
+
 export interface RawTx {
   txid: string;
   hex?: string;
-  status?: { confirmed?: boolean; block_time?: number };
-  vout?: Array<{ scriptpubkey?: string; scriptpubkey_type?: string }>;
+  status?: { confirmed?: boolean; block_time?: number; block_height?: number };
+  vout?: Array<{
+    scriptpubkey?: string;
+    scriptpubkey_type?: string;
+    scriptpubkey_address?: string;
+    value?: number;
+  }>;
   vin?: Array<{ prevout?: { scriptpubkey_address?: string } | null }>;
   fee?: number;
   weight?: number;
+}
+
+export interface BlockHeader {
+  id: string;
+  height: number;
+  timestamp: number;
+  tx_count: number;
+  size: number;
+  previousblockhash?: string;
 }
 
 export interface TxFee {
@@ -13,10 +29,25 @@ export interface TxFee {
   feeRate: number | null;
 }
 
+const DEFAULT_PRIMARY = 'https://mempool.space';
+const DEFAULT_FALLBACKS = 'https://mempool.space,https://blockstream.info';
+
+/** Ordered list of Esplora-style hosts: configured primary first, then fallbacks. */
+export function mempoolHosts(env: Pick<Env, 'MEMPOOL_BASE_URL' | 'MEMPOOL_FALLBACKS'>): string[] {
+  const primary = (env.MEMPOOL_BASE_URL || DEFAULT_PRIMARY).trim();
+  const fallbacks = (env.MEMPOOL_FALLBACKS || DEFAULT_FALLBACKS).split(',');
+  return [...new Set([primary, ...fallbacks].map((h) => h.trim().replace(/\/+$/, '')).filter(Boolean))];
+}
+
 /** On-chain confirmation time (unix seconds), or null if unconfirmed. */
 export function blockTimeFromTx(tx: RawTx): number | null {
   const t = tx.status?.block_time;
   return typeof t === 'number' && Number.isFinite(t) && t > 0 ? t : null;
+}
+
+export function blockHeightFromTx(tx: RawTx): number | null {
+  const h = tx.status?.block_height;
+  return typeof h === 'number' && Number.isFinite(h) && h > 0 ? h : null;
 }
 
 /**
@@ -37,20 +68,17 @@ export function feeFromTx(tx: RawTx): TxFee {
   const feeRate = fee != null && weight != null ? fee / (weight / 4) : null;
   return { feeSats: fee, feeRate: feeRate != null ? Math.round(feeRate * 10) / 10 : null };
 }
-const FALLBACK_BASES = ['https://www.mempool.space', 'https://blockstream.info'];
 
 let cachedBase: string | null = null;
 
 /**
- * Probe the configured base + fallbacks once (cheap /api/blocks/tip/height
- * call) and remember the first that responds, so subsequent address fetches
- * don't re-burn timeouts on a dead host. Reset on fetch failures.
+ * Probe the hosts once (cheap /api/blocks/tip/height call) and remember the
+ * first that responds, so subsequent address fetches don't re-burn timeouts
+ * on a dead host.
  */
-export async function resolveMempoolBase(baseUrl: string): Promise<string> {
-  if (cachedBase) return cachedBase;
-
-  const bases = [...new Set([baseUrl.replace(/\/+$/, ''), ...FALLBACK_BASES])];
-  for (const base of bases) {
+export async function resolveMempoolBase(hosts: string[]): Promise<string> {
+  if (cachedBase && hosts.includes(cachedBase)) return cachedBase;
+  for (const base of hosts) {
     try {
       const res = await fetchWithTimeout(`${base}/api/blocks/tip/height`, 5000);
       if (res.ok) {
@@ -61,45 +89,101 @@ export async function resolveMempoolBase(baseUrl: string): Promise<string> {
       // try next base
     }
   }
-  return bases[0];
+  return hosts[0];
 }
 
 export function resetMempoolBaseCache(): void {
   cachedBase = null;
 }
 
-async function fetchWithTimeout(url: string, timeoutMs = 8000): Promise<Response> {
+/** Hosts ordered with the last known-good one first. */
+function ordered(hosts: string[]): string[] {
+  return cachedBase && hosts.includes(cachedBase) ? [cachedBase, ...hosts.filter((h) => h !== cachedBase)] : hosts;
+}
+
+async function fetchWithTimeout(url: string, timeoutMs = 8000, init: RequestInit = {}): Promise<Response> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     return await fetch(url, {
       headers: { accept: 'application/json' },
-      signal: ctrl.signal,
       cf: { cacheTtl: 60, cacheEverything: true },
+      ...init,
+      signal: ctrl.signal,
     });
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function fetchJson<T>(url: string): Promise<T | null> {
-  const res = await fetchWithTimeout(url);
+async function fetchJson<T>(url: string, timeoutMs = 8000): Promise<T | null> {
+  const res = await fetchWithTimeout(url, timeoutMs);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()) as T;
 }
 
-/** Fetch a single transaction by txid (detail endpoint includes fee/weight). */
-export async function fetchTxById(baseUrl: string, txid: string): Promise<RawTx | null> {
-  const bases = [...new Set([baseUrl.replace(/\/+$/, ''), ...FALLBACK_BASES])];
-  for (const base of bases) {
+async function fetchText(url: string, timeoutMs = 8000): Promise<string> {
+  const res = await fetchWithTimeout(url, timeoutMs);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.text()).trim();
+}
+
+/** Try each host in turn; null when every host fails. */
+async function firstOk<T>(hosts: string[], fn: (base: string) => Promise<T | null>): Promise<T | null> {
+  for (const base of ordered(hosts)) {
     try {
-      const tx = await fetchJson<RawTx>(`${base}/api/tx/${txid}`);
-      if (tx && tx.txid) return tx;
+      const v = await fn(base);
+      if (v != null) return v;
     } catch {
       // try next base
     }
   }
   return null;
+}
+
+/** Fetch a single transaction by txid (detail endpoint includes fee/weight). */
+export async function fetchTxById(hosts: string[], txid: string): Promise<RawTx | null> {
+  return firstOk(hosts, async (base) => {
+    const tx = await fetchJson<RawTx>(`${base}/api/tx/${txid}`);
+    return tx && tx.txid ? tx : null;
+  });
+}
+
+export async function fetchTipHeight(hosts: string[]): Promise<number | null> {
+  return firstOk(hosts, async (base) => {
+    const n = Number(await fetchText(`${base}/api/blocks/tip/height`, 5000));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  });
+}
+
+export async function fetchBlockHashAt(hosts: string[], height: number): Promise<string | null> {
+  return firstOk(hosts, async (base) => {
+    const h = await fetchText(`${base}/api/block-height/${height}`, 8000);
+    return /^[0-9a-f]{64}$/.test(h) ? h : null;
+  });
+}
+
+export async function fetchBlockHeader(hosts: string[], hash: string): Promise<BlockHeader | null> {
+  return firstOk(hosts, async (base) => {
+    const b = await fetchJson<BlockHeader>(`${base}/api/block/${hash}`);
+    return b && typeof b.height === 'number' ? b : null;
+  });
+}
+
+/**
+ * Raw block bytes. Binary, ~1.5-4 MB, so no JSON accept header, no edge
+ * caching of the body, and a longer timeout than the JSON calls.
+ */
+export async function fetchRawBlock(hosts: string[], hash: string): Promise<Uint8Array | null> {
+  return firstOk(hosts, async (base) => {
+    const res = await fetchWithTimeout(`${base}/api/block/${hash}/raw`, 45000, {
+      headers: { accept: 'application/octet-stream' },
+      cf: { cacheTtl: 0 },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = new Uint8Array(await res.arrayBuffer());
+    return buf.length > 80 ? buf : null;
+  });
 }
 
 /**
@@ -108,12 +192,10 @@ export async function fetchTxById(baseUrl: string, txid: string): Promise<RawTx 
  * Returns [] if every source fails.
  */
 export async function fetchAddressTxs(
-  baseUrl: string,
+  hosts: string[],
   address: string
 ): Promise<{ txs: RawTx[]; ok: boolean; complete: boolean }> {
-  const bases = [...new Set([baseUrl.replace(/\/+$/, ''), ...FALLBACK_BASES])];
-
-  for (const base of bases) {
+  for (const base of ordered(hosts)) {
     const results = await Promise.allSettled([
       fetchJson<RawTx[]>(`${base}/api/address/${address}/txs`),
       fetchJson<RawTx[]>(`${base}/api/address/${address}/txs/mempool`),
@@ -138,103 +220,13 @@ interface HistoricalPrice {
 }
 
 /**
- * USD price at (or nearest to) the given unix timestamp. Blockstream has no
- * price endpoint, so this only tries mempool.space hosts. Null if all fail.
+ * USD price at (or nearest to) the given unix timestamp. Only mempool-style
+ * hosts have this endpoint (blockstream.info does not); failures fall through.
  */
-export async function fetchHistoricalPriceUsd(baseUrl: string, ts: number): Promise<number | null> {
-  const bases = [
-    ...new Set([baseUrl.replace(/\/+$/, ''), 'https://mempool.space', 'https://www.mempool.space']),
-  ];
-  for (const base of bases) {
-    try {
-      const data = await fetchJson<HistoricalPrice>(
-        `${base}/api/v1/historical-price?timestamp=${ts}&currency=USD`
-      );
-      const usd = data?.prices?.[0]?.USD;
-      if (typeof usd === 'number' && Number.isFinite(usd) && usd > 0) return usd;
-    } catch {
-      // try next base
-    }
-  }
-  return null;
-}
-
-/**
- * Decode a raw scriptPubKey hex string that starts with OP_RETURN (0x6a)
- * and return the pushed data as a UTF-8 string. Returns null if the script
- * is not a valid/decodable OP_RETURN.
- */
-export function decodeOpReturn(scriptHex: string): string | null {
-  const buf = hexToBytes(scriptHex);
-  if (buf.length < 2 || buf[0] !== 0x6a) return null;
-
-  let i = 1;
-  let len = 0;
-
-  if (buf[i] === 0x4c) {
-    // OP_PUSHDATA1
-    if (i + 1 >= buf.length) return null;
-    len = buf[i + 1];
-    i += 2;
-  } else if (buf[i] === 0x4d) {
-    // OP_PUSHDATA2
-    if (i + 2 >= buf.length) return null;
-    len = buf[i + 1] | (buf[i + 2] << 8);
-    i += 3;
-  } else if (buf[i] === 0x4e) {
-    // OP_PUSHDATA4
-    if (i + 4 >= buf.length) return null;
-    len = buf[i + 1] | (buf[i + 2] << 8) | (buf[i + 3] << 16) | (buf[i + 4] << 24);
-    i += 5;
-  } else {
-    len = buf[i];
-    i += 1;
-  }
-
-  if (len <= 0 || i >= buf.length) return null;
-  const end = Math.min(i + len, buf.length);
-  return new TextDecoder('utf-8').decode(buf.subarray(i, end));
-}
-
-/**
- * Extract non-empty, readable OP_RETURN texts from a transaction.
- * Multiple OP_RETURN outputs are joined with a newline separator.
- */
-export function extractOpReturnText(tx: RawTx): string | null {
-  if (!tx.vout?.length) return null;
-  const texts: string[] = [];
-
-  for (const out of tx.vout) {
-    if (out.scriptpubkey_type !== 'op_return' || !out.scriptpubkey) continue;
-    try {
-      const text = decodeOpReturn(out.scriptpubkey);
-      if (text && isReadableText(text)) texts.push(text.trim());
-    } catch {
-      // skip malformed scripts
-    }
-  }
-
-  if (texts.length === 0) return null;
-  return [...new Set(texts)].join('\n');
-}
-
-function isReadableText(s: string): boolean {
-  if (s.trim().length === 0) return false;
-  let printable = 0;
-  let replacement = 0;
-  for (const ch of s) {
-    if (ch === '\uFFFD') replacement++;
-    else if (ch >= ' ') printable++;
-  }
-  const n = Math.max(1, s.length);
-  return replacement / n < 0.4 && printable / n >= 0.6;
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const clean = hex.length % 2 ? '0' + hex : hex;
-  const out = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
+export async function fetchHistoricalPriceUsd(hosts: string[], ts: number): Promise<number | null> {
+  return firstOk(hosts, async (base) => {
+    const data = await fetchJson<HistoricalPrice>(`${base}/api/v1/historical-price?timestamp=${ts}&currency=USD`);
+    const usd = data?.prices?.[0]?.USD;
+    return typeof usd === 'number' && Number.isFinite(usd) && usd > 0 ? usd : null;
+  });
 }

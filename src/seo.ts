@@ -122,6 +122,17 @@ The archive focuses on addresses that have evolved into public bulletin boards:
 7. **Cultural Memorials & Digital Graffiti**: Permanent personal tributes, biblical verses, and vanity address communications.
 8. **Historical Hacker Negotiation Boards**: Historic addresses used for public bounty negotiations and victim-attacker dialogue.
 
+## Protocol Registry (full-chain explorer)
+
+Every block's OP_RETURN outputs are scanned, not only monitored addresses. Each output is decoded before any AI sees it:
+- \`text\`: human-readable messages (the only kind sent to the classifier)
+- JSON token ops such as \`ico-20\`, \`crc-20\`, \`brc-20\` (\`{"p":"...","op":"...","tick":"...","amt":"..."}\`) — e.g. $LEAF mints
+- \`omni\` (Omni Layer / Tether simple sends), \`thorchain\` (OUT:/REFUND: and swap memos), \`bridge-memo\` (to:USDT(TRON):... style), \`evm-hash\`, \`lifi\`
+- Merge-mining and sidechain tags: \`rootstock\`, \`stacks\`, \`core-dao\`, \`exsat\`, \`syscoin\`
+- \`runes\` (OP_RETURN OP_13 runestones, ~98% of outputs) and opaque \`binary\` payloads are counted per block, not stored
+
+Protocol pages: ${siteUrl}/p/{protocol} · Ticker pages: ${siteUrl}/tick/{TICK} · Block pages: ${siteUrl}/block/{height}
+
 ## AI Classification Taxonomy
 
 Transmissions are classified into seven discrete categories:
@@ -136,7 +147,11 @@ Transmissions are classified into seven discrete categories:
 ## Public REST API
 
 - \`GET ${siteUrl}/api/collections\` — All collections with address & message counts.
-- \`GET ${siteUrl}/api/messages?sort=hot|new&limit=50&collection_id=&address=&category=\` — Filtered transmission feed.
+- \`GET ${siteUrl}/api/messages?sort=hot|new&limit=50&collection_id=&address=&category=&protocol=&tick=&kind=text|all\` — Filtered transmission feed (global feed defaults to human text; kind=all includes every protocol).
+- \`GET ${siteUrl}/api/protocols?days=30\` — Distinct transactions per protocol.
+- \`GET ${siteUrl}/api/ticks?protocol=&days=30\` — Token tickers by activity.
+- \`GET ${siteUrl}/api/chain\` — Block census: blocks scanned, OP_RETURN outputs, Runes share, recent blocks.
+- \`GET ${siteUrl}/api/block/:height\` — One scanned block's OP_RETURN census.
 - \`GET ${siteUrl}/api/chat?collection_id=&address=\` — Chronological conversation stream.
 - \`GET ${siteUrl}/api/categories\` — Category distribution and counts.
 - \`GET ${siteUrl}/api/message/:key\` — Message lookup by ID or txid.
@@ -293,7 +308,9 @@ export function generateSitemapXml(
   siteUrl: string,
   collections: CollectionWithStats[],
   addresses: Address[],
-  topMessages: SitemapMessage[]
+  topMessages: SitemapMessage[],
+  protocols: string[] = [],
+  ticks: Array<{ tick: string }> = []
 ): string {
   const urls: Array<{ loc: string; lastmod?: string; changefreq: string; priority: string }> = [];
 
@@ -330,6 +347,15 @@ export function generateSitemapXml(
       changefreq: 'daily',
       priority: '0.7',
     });
+  }
+
+  // Protocol & ticker pages (full-chain explorer)
+  for (const p of protocols) {
+    if (p === 'text') continue;
+    urls.push({ loc: `${siteUrl}/p/${encodeURIComponent(p)}`, lastmod: today, changefreq: 'hourly', priority: '0.7' });
+  }
+  for (const t of ticks) {
+    urls.push({ loc: `${siteUrl}/tick/${encodeURIComponent(t.tick)}`, lastmod: today, changefreq: 'daily', priority: '0.6' });
   }
 
   // Monitored Addresses & Chat
@@ -438,10 +464,18 @@ export function generateOpenApiJson(siteUrl: string): Record<string, unknown> {
             { name: 'collection_id', in: 'query', schema: { type: 'integer' } },
             { name: 'address', in: 'query', schema: { type: 'string' } },
             { name: 'category', in: 'query', schema: { type: 'string' } },
+            { name: 'protocol', in: 'query', schema: { type: 'string' }, description: 'Protocol slug, e.g. ico-20, thorchain, omni' },
+            { name: 'tick', in: 'query', schema: { type: 'string' }, description: 'Token ticker, e.g. LEAF' },
+            {
+              name: 'kind',
+              in: 'query',
+              schema: { type: 'string', enum: ['text', 'all'] },
+              description: 'text = human messages only (default for the global feed); all = every stored protocol',
+            },
             {
               name: 'sort',
               in: 'query',
-              schema: { type: 'string', enum: ['hot', 'new'], default: 'hot' },
+              schema: { type: 'string', enum: ['hot', 'new'], default: 'new' },
             },
             { name: 'limit', in: 'query', schema: { type: 'integer', default: 50 } },
             { name: 'before', in: 'query', schema: { type: 'string' } },
@@ -451,6 +485,41 @@ export function generateOpenApiJson(siteUrl: string): Record<string, unknown> {
               description: 'Messages feed with pagination cursor',
             },
           },
+        },
+      },
+      '/api/protocols': {
+        get: {
+          summary: 'Distinct transactions per OP_RETURN protocol',
+          operationId: 'listProtocols',
+          parameters: [{ name: 'days', in: 'query', schema: { type: 'integer', default: 30 } }],
+          responses: { '200': { description: 'Protocol slugs with counts and labels' } },
+        },
+      },
+      '/api/ticks': {
+        get: {
+          summary: 'Token tickers by activity',
+          operationId: 'listTicks',
+          parameters: [
+            { name: 'protocol', in: 'query', schema: { type: 'string' } },
+            { name: 'days', in: 'query', schema: { type: 'integer', default: 30 } },
+            { name: 'limit', in: 'query', schema: { type: 'integer', default: 100 } },
+          ],
+          responses: { '200': { description: 'Tickers with protocol and counts' } },
+        },
+      },
+      '/api/chain': {
+        get: {
+          summary: 'Block census for the full-chain scanner',
+          operationId: 'getChain',
+          responses: { '200': { description: 'Blocks scanned, OP_RETURN / Runes / binary counts, recent blocks' } },
+        },
+      },
+      '/api/block/{height}': {
+        get: {
+          summary: 'OP_RETURN census of one scanned block',
+          operationId: 'getBlock',
+          parameters: [{ name: 'height', in: 'path', required: true, schema: { type: 'integer' } }],
+          responses: { '200': { description: 'Block row' }, '404': { description: 'Block not scanned' } },
         },
       },
       '/api/chat': {
@@ -808,16 +877,34 @@ export function generateMcpServerCardJson(siteUrl: string): Record<string, unkno
     tools: [
       {
         name: 'search_messages',
-        description: 'Search monitored Bitcoin OP_RETURN messages by collection, address, or category',
+        description:
+          'Search Bitcoin OP_RETURN transactions by collection, address, category, protocol (ico-20, crc-20, thorchain, omni, ...) or token ticker. Defaults to human-readable messages; kind=all includes every decoded protocol.',
         inputSchema: {
           type: 'object',
           properties: {
             collection_id: { type: 'number', description: 'Collection ID filter' },
-            address: { type: 'string', description: 'Bitcoin address filter' },
+            address: { type: 'string', description: 'Bitcoin address filter (filed-under, recipient or sender)' },
             category: { type: 'string', description: 'Category slug' },
+            protocol: { type: 'string', description: 'Protocol slug, e.g. ico-20, thorchain, omni' },
+            tick: { type: 'string', description: 'Token ticker, e.g. LEAF' },
+            kind: { type: 'string', enum: ['text', 'all'], description: 'text = human messages only; all = every protocol' },
             sort: { type: 'string', enum: ['hot', 'new'], default: 'hot' },
             limit: { type: 'number', default: 20 },
           },
+        },
+      },
+      {
+        name: 'get_protocols',
+        description: 'Protocol census of the last 30 days: transactions per OP_RETURN protocol, most active token tickers, and block-scanner statistics (Runes share etc.)',
+        inputSchema: { type: 'object', properties: {} },
+      },
+      {
+        name: 'get_block',
+        description: 'OP_RETURN census of one scanned block plus its stored transactions',
+        inputSchema: {
+          type: 'object',
+          properties: { height: { type: 'number', description: 'Block height' } },
+          required: ['height'],
         },
       },
       {
@@ -1268,7 +1355,7 @@ export function renderCategoryMarkdown(
 }
 
 export function renderFeedMarkdown(siteUrl: string): string {
-  return `# All Transmissions — The Permanent Record\n\nEvery monitored OP_RETURN message, live from the Bitcoin chain.\n\n- [Collections](${siteUrl}/collections)\n- [Field Manual](${siteUrl}/guide)\n- [API Specification](${siteUrl}/llms.txt)\n`;
+  return `# All Transmissions — The Permanent Record\n\nHuman messages from every block of the Bitcoin chain, plus decoded token, bridge and sidechain protocols.\n\n- [Collections](${siteUrl}/collections)\n- [Field Manual](${siteUrl}/guide)\n- [API Specification](${siteUrl}/llms.txt)\n- Feed API: ${siteUrl}/api/messages?kind=all\n`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1284,7 +1371,7 @@ export function renderLandingSsr(
   let h = '<section class="wrap" style="padding-bottom:clamp(30px,4vw,56px)">';
   h += '<div class="pill"><span class="dot"></span>LIVE ON-CHAIN \u00b7 IMMUTABLE BITCOIN MONITOR</div>';
   h += '<h1 class="hero">People are leaving messages inside Bitcoin. Forever.</h1>';
-  h += '<p class="lede">Every one of these was etched into an <span class="mono" style="font-size:.85em">OP_RETURN</span> output on the blockchain \u2014 threats, confessions, prayers, ads, haiku. Immutable. Unstoppable. We monitor the strangest addresses on the network and archive what shows up.</p>';
+  h += '<p class="lede">Every one of these was etched into an <span class="mono" style="font-size:.85em">OP_RETURN</span> output on the blockchain \u2014 threats, confessions, prayers, ads, haiku. Immutable. Unstoppable. We scan every block, decode every OP_RETURN protocol, and keep the human messages front and centre.</p>';
   h += '<div class="cta"><a class="btn btn-primary" href="/feed">Enter the feed \u2192</a><a class="btn" href="/collections">Browse collections</a></div>';
   h += '<p class="mono" style="margin-top:20px;font-size:13px;color:var(--fg4)">Want to leave your own mark? <a href="/guide" style="color:var(--sig);text-decoration:underline">Read the field manual \u2192</a></p>';
   h += '</section>';
@@ -1494,15 +1581,56 @@ export function renderCategorySsr(categoryName: string, count: number): string {
 
 export function renderFeedSsr(): string {
   let h = '<section class="wrap wrap-narrow">';
-  h += '<div class="kicker">\u25c6 EVERY MONITORED ADDRESS</div>';
+  h += '<div class="kicker">\u25c6 EVERY BLOCK \u00b7 EVERY OP_RETURN</div>';
   h += '<h2 class="title">All transmissions</h2>';
-  h += '<p class="lede" style="margin-top:12px">Every monitored OP_RETURN message, live from the Bitcoin chain.</p>';
+  h += '<p class="lede" style="margin-top:12px">Human messages from every block of the Bitcoin chain, plus decoded token, bridge and sidechain protocols.</p>';
   h += '<div class="cta" style="margin-top:20px">';
   h += '<a class="btn" href="/collections">Browse collections</a>';
   h += '<a class="btn" href="/guide">Etch manual \u2192</a>';
   h += '</div>';
   h += '</section>';
   return h;
+}
+
+export function renderProtocolSsr(protocol: string, label: string, count: number): string {
+  let h = '<section class="wrap wrap-narrow">';
+  h += '<div class="kicker">\u25c6 OP_RETURN PROTOCOL</div>';
+  h += `<h2 class="title">${escHtml(label)} <span class="mono" style="font-size:.5em;color:var(--fg4)">${escHtml(protocol)}</span></h2>`;
+  h += `<p class="lede" style="margin-top:12px">${count.toLocaleString()} transactions carrying ${escHtml(label)} OP_RETURN outputs in the last 30 days, decoded from every block.</p>`;
+  h += '<div class="cta" style="margin-top:20px"><a class="btn btn-primary" href="/feed?kind=all">All protocols \u2192</a></div>';
+  h += '</section>';
+  return h;
+}
+
+export function renderTickSsr(tick: string, protocols: string[], count: number): string {
+  let h = '<section class="wrap wrap-narrow">';
+  h += '<div class="kicker">\u25c6 TOKEN TICKER</div>';
+  h += `<h2 class="title">$${escHtml(tick)}</h2>`;
+  h += `<p class="lede" style="margin-top:12px">${count.toLocaleString()} on-chain operations for ${escHtml(tick)} in the last 30 days${protocols.length ? ' via ' + escHtml(protocols.join(', ')) : ''}.</p>`;
+  h += '</section>';
+  return h;
+}
+
+export function renderBlockSsr(block: { height: number; hash: string; time: number; tx_count: number; opreturn_count: number; runes_count: number; stored_count: number }): string {
+  let h = '<section class="wrap wrap-narrow">';
+  h += '<div class="kicker">\u25c6 BLOCK CENSUS</div>';
+  h += `<h2 class="title">Block ${block.height.toLocaleString()}</h2>`;
+  h += `<p class="lede" style="margin-top:12px">${block.tx_count.toLocaleString()} transactions, ${block.opreturn_count.toLocaleString()} OP_RETURN outputs (${block.runes_count.toLocaleString()} Runes), ${block.stored_count.toLocaleString()} decoded and archived.</p>`;
+  h += `<p class="mono" style="font-size:12px;color:var(--fg4);overflow-wrap:anywhere">${escHtml(block.hash)}</p>`;
+  h += '</section>';
+  return h;
+}
+
+export function renderProtocolMarkdown(siteUrl: string, protocol: string, label: string, count: number): string {
+  return `# Protocol: ${label} (${protocol})\n\n${count} transactions carrying ${label} OP_RETURN outputs in the last 30 days.\n\n- Feed API: ${siteUrl}/api/messages?protocol=${encodeURIComponent(protocol)}\n- [All protocols](${siteUrl}/api/protocols)\n`;
+}
+
+export function renderTickMarkdown(siteUrl: string, tick: string, count: number): string {
+  return `# Ticker: ${tick}\n\n${count} on-chain operations in the last 30 days.\n\n- Feed API: ${siteUrl}/api/messages?tick=${encodeURIComponent(tick)}\n`;
+}
+
+export function renderBlockMarkdown(siteUrl: string, block: { height: number; hash: string; time: number; tx_count: number; opreturn_count: number; runes_count: number; binary_count: number; stored_count: number }): string {
+  return `# Block ${block.height}\n\n- Hash: \`${block.hash}\`\n- Time: ${new Date(block.time * 1000).toISOString()}\n- Transactions: ${block.tx_count}\n- OP_RETURN outputs: ${block.opreturn_count}\n- Runes: ${block.runes_count}\n- Opaque binary: ${block.binary_count}\n- Archived: ${block.stored_count}\n- Messages API: ${siteUrl}/api/messages?kind=all&block=${block.height}\n`;
 }
 
 export function renderNotFoundSsr(title?: string, message?: string): string {

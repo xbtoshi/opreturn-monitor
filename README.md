@@ -1,32 +1,51 @@
-# The Permanent Record — Bitcoin OP_RETURN Monitor
+# The Permanent Record — Bitcoin OP_RETURN Explorer
 
-*opreturn.xyz* — Serverless monitor for OP_RETURN messages sent to selected
-Bitcoin addresses. Built on **Cloudflare Workers + Hono + TypeScript + D1**,
-with AI classification via any OpenAI-compatible endpoint and a single-page
-web UI (landing, collections, feed, message detail, and an "Etch" field manual).
+*opreturn.xyz* — Serverless OP_RETURN explorer for Bitcoin. Built on
+**Cloudflare Workers + Hono + TypeScript + D1**, with a protocol registry that
+decodes every OP_RETURN output, AI classification of the human messages, and a
+single-page web UI (landing, feed, collections, protocol / ticker / block pages,
+message detail, chat rooms and an "Etch" field manual).
 
-- Polls addresses (confirmed + mempool) every 3 minutes via `mempool.space`
-  (with `www.mempool.space` and `blockstream.info` fallbacks).
-- Decodes OP_RETURN output scripts to UTF-8 and stores unique messages (dedup by txid).
-- Classifies messages into 7 categories with an OpenAI-compatible API (batched).
-- Groups addresses into **Collections**; users can **like** messages and sort by
-  **Hottest** or **Newest**. Likes require a client-mined 16-bit proof-of-work
-  nonce (verified in `src/index.ts`).
-- Seed collections/addresses live in `collections.json`.
+- **Full-chain ingestion** (`src/ingest.ts`): every cron run downloads new raw
+  blocks from an Esplora-style API (`btc.tx.taxi` by default, mempool.space and
+  blockstream.info as fallbacks), parses them in the Worker (`src/blocks.ts`),
+  decodes every OP_RETURN output and stores the transactions whose protocol is
+  worth a row. Runes (~98% of all OP_RETURN outputs) and opaque binary payloads
+  are counted per block, not stored. Reorgs roll back to the fork height; a
+  backwards cursor backfills history to a configurable floor.
+- **Protocol registry** (`src/protocols.ts`): `text`, JSON token ops such as
+  `ico-20` / `crc-20` / `brc-20` (e.g. $LEAF), `omni`, `thorchain`,
+  `bridge-memo`, `evm-hash`, `lifi`, and merge-mining / sidechain tags
+  (`rootstock`, `stacks`, `core-dao`, `exsat`, `syscoin`). Only `text` rows go
+  to the AI classifier.
+- **Address monitor** (the original feature): monitored addresses are still
+  polled every 3 minutes (confirmed + mempool) and grouped into **Collections**;
+  those rows are attributed via `monitored_address`.
+- Feed dedupe ("same content to the same address") is precomputed
+  (`is_dup` / `dup_count`) so every page is a plain keyset query over an index.
+- Users can **like** messages (16-bit proof-of-work nonce, verified in
+  `src/index.ts`) and sort by **Hottest** or **Newest**.
 
 ## Project layout
 
 ```
-├── collections.json        # Seed data (single source of truth)
-├── migrations/0001_init.sql# D1 schema
-├── wrangler.toml           # Worker config + cron trigger
+├── collections.json        # Seed collections/addresses (single source of truth)
+├── migrations/             # D1 schema (0007 = protocols/ops/dedupe, 0008 = blocks/cursors)
+├── wrangler.jsonc          # Worker config, vars, cron trigger
+├── scripts/loadtest-seed.mjs # Seeds 400k synthetic rows into local D1 for query timing
+├── test/                   # vitest: protocol registry, raw block parser, address encoding
 └── src/
-    ├── index.ts            # Hono app: public + admin routes, worker entry
-    ├── cron.ts             # Poll → extract → insert → classify pipeline
+    ├── index.ts            # Hono app: public + admin routes, pages, worker entry
+    ├── cron.ts             # ingest → poll → reparse → reconcile → details → classify
+    ├── ingest.ts           # Full-chain block ingestion, cursors, reorg handling
+    ├── blocks.ts           # Raw block parser (outputs, txids)
+    ├── address.ts          # scriptPubKey → address, sync SHA-256, base58/bech32
+    ├── protocols.ts        # OP_RETURN protocol registry (pure, unit-tested)
     ├── db.ts               # D1 query helpers
-    ├── mempool.ts          # mempool.space client + OP_RETURN decoder
+    ├── mempool.ts          # Esplora-style API client (hosts, fallbacks, raw blocks)
     ├── classify.ts         # OpenAI-compatible chat/completions wrapper
     ├── seed.ts             # ensureSeeded() using collections.json
+    ├── seo.ts              # SSR shells, sitemap, llms.txt, OpenAPI, MCP card
     ├── ui.ts               # Single-page web UI (served at GET /)
     └── types.ts
 ```
@@ -45,9 +64,18 @@ npm run db:migrate:local
 
 ### Environment variables
 
-`wrangler.toml` holds non-secret vars (`OPENAI_MODEL`, `OPENAI_API_BASE`,
-`MEMPOOL_BASE_URL`, `AI_MAX_PER_RUN`, `AI_DELAY_MS`, `AI_BATCH_SIZE`,
-`CRON_SECRET`, `ADMIN_KEY`).
+`wrangler.jsonc` holds non-secret vars:
+
+| Var | Purpose |
+|-----|---------|
+| `MEMPOOL_BASE_URL` | Primary Esplora-style API (default `https://btc.tx.taxi`) |
+| `MEMPOOL_FALLBACKS` | Comma-separated fallback hosts |
+| `INGEST_FORWARD` | `1` = scan new blocks every cron run (full-chain feed) |
+| `INGEST_BACKFILL` | `1` = once caught up, walk backwards to `BACKFILL_DAYS` |
+| `INGEST_MAX_BLOCKS_PER_RUN`, `INGEST_TIME_BUDGET_MS`, `BACKFILL_DAYS` | Ingestion limits |
+| `OPENAI_MODEL`, `OPENAI_API_BASE`, `AI_MAX_PER_RUN`, `AI_DELAY_MS`, `AI_BATCH_SIZE` | Classifier |
+
+Both ingest flags off restores the pre-explorer behaviour (address polling only).
 
 Set secrets in production with `wrangler secret put`:
 
@@ -97,7 +125,12 @@ npm run deploy              # push worker + cron trigger
 | GET | `/.well-known/mcp/server-card.json` | – | Model Context Protocol (MCP SEP-1649) Server Card |
 | ALL | `/mcp` | – | MCP JSON-RPC 2.0 tool execution endpoint (`search_messages`, `get_collections`, `get_message`, `get_etch_guide`) |
 | GET | `/api/collections` | – | Collections with address/message counts |
-| GET | `/api/messages?collection_id=&sort=hot\|new&limit=&before=` | – | Message feed |
+| GET | `/api/messages?collection_id=&address=&category=&protocol=&tick=&block=&kind=text\|all&sort=hot\|new&limit=&before=` | – | Feed. Global feed defaults to `kind=text` (human messages); `kind=all` includes every decoded protocol |
+| GET | `/api/protocols?days=30` | – | Distinct txs per protocol |
+| GET | `/api/ticks?protocol=&days=30` | – | Token tickers by activity |
+| GET | `/api/chain` | – | Block census (blocks scanned, OP_RETURN / Runes counts, recent blocks) |
+| GET | `/api/block/:height` | – | One scanned block |
+| GET | `/p/:protocol`, `/tick/:tick`, `/block/:height` | – | Explorer pages (SSR + markdown via `Accept: text/markdown`) |
 | POST | `/api/like` | – | `{ "message_id": 1, "nonce": <mined> }` — requires a 16-bit PoW nonce + one vote per visitor |
 | GET | `/api/health` | – | Health check |
 | POST | `/api/admin/collections` | `X-Admin-Key` | Create collection |
@@ -106,7 +139,31 @@ npm run deploy              # push worker + cron trigger
 | DELETE | `/api/admin/addresses/:id` | `X-Admin-Key` | Remove address |
 | DELETE | `/api/admin/collections/:id` | `X-Admin-Key` | Remove collection |
 | POST | `/api/admin/seed` | `X-Admin-Key` | (Re)seed from `collections.json` |
+| POST | `/api/admin/reparse?max=` | `X-Admin-Key` | Re-derive protocol/ops for legacy rows now (the cron does this anyway) |
+| POST | `/api/admin/details?max=` | `X-Admin-Key` | Fill sender/fee/recipient by txid for rows missing them |
+| GET | `/api/admin/ingest/status` | `X-Admin-Key` | Cursors, tip, last error, block census |
+| POST | `/api/admin/ingest/reset` | `X-Admin-Key` | `{ "height": 968900, "floor": 968000 }` — point the cursors |
+| POST | `/api/admin/ingest/block/:height` | `X-Admin-Key` | Ingest one block now (cursors untouched) |
 | POST | `/api/cron/run` | `x-cron-secret` | Manual poll (same as scheduled cron) |
+
+## Tests & load test
+
+```bash
+npm test                                   # vitest: protocols, raw block parser, addresses
+node scripts/loadtest-seed.mjs 400000      # seed local D1 with synthetic explorer rows
+```
+
+## Rollout of the explorer (migrations 0007/0008)
+
+1. `npm run db:migrate:remote` — additive columns + `ops`, `blocks`, `ingest_state`.
+2. `npm run deploy` (ships with `INGEST_FORWARD=1`, `INGEST_BACKFILL=0`), then run
+   `curl -X POST -H 'x-admin-key: …' https://opreturn.xyz/api/admin/reparse?max=2000`
+   so every legacy row gets its protocol immediately (the cron would do it in
+   500-row steps anyway). The cron fills sender/fee/recipient (40/run) over the
+   following hour; feed and collections keep working throughout.
+3. Watch `GET /api/admin/ingest/status` (cursor should track the tip; `last_error` empty).
+4. Set `INGEST_BACKFILL=1` and redeploy to walk back `BACKFILL_DAYS` (~1,000 blocks
+   per week of history at 3 blocks per cron run, i.e. roughly a day per 30 days).
 
 ## Notes
 
@@ -117,5 +174,5 @@ npm run deploy              # push worker + cron trigger
 - Likes require a client-mined proof-of-work nonce (16 leading zero bits of
   `sha256(message_id:nonce)`, verified server-side in `src/index.ts`), plus a
   voter fingerprint (hashed `CF-Connecting-IP` + User-Agent) that dedupes votes.
-- Cron runs every 3 minutes (`*/3 * * * *` in `wrangler.toml`). Minimum
+- Cron runs every 3 minutes (`*/3 * * * *` in `wrangler.jsonc`). Minimum
   supported interval on the Workers free tier is 1 minute.
