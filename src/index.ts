@@ -83,33 +83,43 @@ import { renderIndex, type ShellData } from './ui';
 let shellCache: { at: number; data: ShellData } | null = null;
 let shellRefreshing: Promise<void> | null = null;
 
-function shellFor(c: Context<Bindings>): ShellData {
-  const fresh = shellCache && Date.now() - shellCache.at < 60000;
-  if (!fresh && !shellRefreshing) {
-    shellRefreshing = (async () => {
-      try {
-        const [cols, stats] = await Promise.all([db.listCollections(c.env.DB), db.getChainStats(c.env.DB)]);
-        shellCache = {
-          at: Date.now(),
-          data: {
-            collections: cols.map((col) => ({ slug: col.slug || String(col.id), name: col.name, count: col.message_count })),
-            tip: stats.highest_height,
-          },
-        };
-      } catch {
-        // Keep whatever we had, but don't retry on every request during a DB blip.
-        shellCache = { at: Date.now() - 45000, data: shellCache ? shellCache.data : {} };
-      } finally {
-        shellRefreshing = null;
-      }
-    })();
-    try {
-      c.executionCtx.waitUntil(shellRefreshing);
-    } catch {
-      // no execution context (tests); the promise still runs
-    }
+async function refreshShell(d1: D1Database): Promise<void> {
+  try {
+    const [cols, stats] = await Promise.all([db.listCollections(d1), db.getChainStats(d1)]);
+    shellCache = {
+      at: Date.now(),
+      data: {
+        collections: cols.map((col) => ({ slug: col.slug || String(col.id), name: col.name, count: col.message_count })),
+        tip: stats.highest_height,
+      },
+    };
+  } catch {
+    // Keep whatever we had, but don't retry on every request during a DB blip.
+    shellCache = { at: Date.now() - 45000, data: shellCache ? shellCache.data : {} };
+  } finally {
+    shellRefreshing = null;
   }
-  return shellCache ? shellCache.data : {};
+}
+
+/**
+ * A cold isolate waits for the two small queries once (so crawlers always get
+ * the sidebar links); afterwards pages read the cache and refresh it in the
+ * background every minute.
+ */
+async function shellFor(c: Context<Bindings>): Promise<ShellData> {
+  const fresh = shellCache && Date.now() - shellCache.at < 60000;
+  if (fresh) return shellCache!.data;
+  if (!shellRefreshing) shellRefreshing = refreshShell(c.env.DB);
+  if (!shellCache) {
+    await shellRefreshing;
+    return shellCache ? (shellCache as { data: ShellData }).data : {};
+  }
+  try {
+    c.executionCtx.waitUntil(shellRefreshing);
+  } catch {
+    // no execution context (tests); the promise still runs
+  }
+  return shellCache.data;
 }
 
 type Bindings = { Bindings: Env };
@@ -1112,7 +1122,7 @@ app.get('/', async (c) => {
       image: origin + '/og/default.png',
       jsonLd: { '@context': 'https://schema.org', '@graph': graph },
       initialHtml,
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1136,7 +1146,7 @@ app.get('/feed', async (c) => {
       image: origin + '/og/default.png',
       jsonLd: crumbs,
       initialHtml: renderFeedSsr(list.msgs, list.names),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1160,7 +1170,7 @@ app.get('/collections', async (c) => {
       image: origin + '/og/default.png',
       jsonLd: crumbs,
       initialHtml: renderCollectionsSsr(finalCols),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1188,7 +1198,7 @@ app.get('/rooms', async (c) => {
       image: origin + '/og/default.png',
       jsonLd: crumbs,
       initialHtml: renderRoomsSsr(cols, best ?? null, list.msgs),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1213,11 +1223,11 @@ app.get('/protocols', async (c) => {
       image: origin + '/og/default.png',
       jsonLd: crumbs,
       initialHtml: renderProtocolsSsr(protocols, ticks, chain),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
-app.get('/guide', (c) => {
+app.get('/guide', async (c) => {
   const origin = originOf(c);
   if (wantsMarkdown(c)) {
     return markdownResponse(renderGuideMarkdown(origin), origin);
@@ -1236,7 +1246,7 @@ app.get('/guide', (c) => {
       image: origin + '/og/default.png',
       jsonLd: { '@context': 'https://schema.org', '@graph': [howTo, crumbs] },
       initialHtml: renderGuideSsr(),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1262,7 +1272,7 @@ app.get('/m/:txid', async (c) => {
           'Message not found',
           `Transaction ${txid} was not found in the monitored archive.`
         ),
-      }, shellFor(c)),
+      }, await shellFor(c)),
       404
     );
   }
@@ -1304,7 +1314,7 @@ app.get('/m/:txid', async (c) => {
       type: 'article',
       jsonLd: { '@context': 'https://schema.org', '@graph': [postSchema, crumbs] },
       initialHtml: renderMessageSsr(msg, colName, related.msgs, related.names),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1330,7 +1340,7 @@ app.get('/c/:slug', async (c) => {
           'Collection not found',
           `The collection slug \u201c${slug}\u201d does not exist in the archive.`
         ),
-      }, shellFor(c)),
+      }, await shellFor(c)),
       404
     );
   }
@@ -1358,7 +1368,7 @@ app.get('/c/:slug', async (c) => {
       image: `${origin}/og/collection/${slug}.png`,
       jsonLd: { '@context': 'https://schema.org', '@graph': [colSchema, crumbs] },
       initialHtml: renderCollectionSsr(col, colAddrs, list.msgs),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1384,7 +1394,7 @@ app.get('/c/:slug/chat', async (c) => {
           'Collection not found',
           `The collection slug \u201c${slug}\u201d does not exist in the archive.`
         ),
-      }, shellFor(c)),
+      }, await shellFor(c)),
       404
     );
   }
@@ -1410,7 +1420,7 @@ app.get('/c/:slug/chat', async (c) => {
       image: `${origin}/og/chat/collection/${slug}.png`,
       jsonLd: crumbs,
       initialHtml: renderCollectionSsr(col, [], list.msgs),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1449,7 +1459,7 @@ app.get('/a/:address', async (c) => {
       noindex: !indexable,
       jsonLd: crumbs,
       initialHtml: renderAddressSsr(address, list.msgs, list.names),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1478,7 +1488,7 @@ app.get('/a/:address/chat', async (c) => {
       noindex: !indexable,
       jsonLd: crumbs,
       initialHtml: renderAddressSsr(address, list.msgs, list.names),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1506,7 +1516,7 @@ app.get('/p/:protocol', async (c) => {
       jsonLd: crumbs,
       noindex: count === 0,
       initialHtml: renderProtocolSsr(protocol, label, count, list.msgs, list.names),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1535,7 +1545,7 @@ app.get('/tick/:tick', async (c) => {
       jsonLd: crumbs,
       noindex: count === 0,
       initialHtml: renderTickSsr(tick, protocols, count, list.msgs, list.names),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1558,7 +1568,7 @@ app.get('/block/:height', async (c) => {
         image: `${origin}/og/default.png`,
         noindex: true,
         initialHtml: renderNotFoundSsr('Block not scanned', `Block ${height} has not been scanned by the explorer yet.`),
-      }, shellFor(c)),
+      }, await shellFor(c)),
       404
     );
   }
@@ -1578,7 +1588,7 @@ app.get('/block/:height', async (c) => {
       image: `${origin}/og/default.png`,
       jsonLd: crumbs,
       initialHtml: renderBlockSsr(block, list.msgs, list.names),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1604,7 +1614,7 @@ app.get('/cat/:slug', async (c) => {
           'Category not found',
           `Category slug \u201c${slug}\u201d does not exist in the taxonomy.`
         ),
-      }, shellFor(c)),
+      }, await shellFor(c)),
       404
     );
   }
@@ -1630,7 +1640,7 @@ app.get('/cat/:slug', async (c) => {
       image: `${origin}/og/category/${slug}.png`,
       jsonLd: crumbs,
       initialHtml: renderCategorySsr(cat, count, list.msgs, list.names),
-    }, shellFor(c))
+    }, await shellFor(c))
   );
 });
 
@@ -1750,7 +1760,7 @@ app.get('/og/address/:address', async (c) => {
 });
 
 // Unmatched routes: return genuine HTTP 404 with noindex to prevent soft-404 index bloat.
-app.get('*', (c) => {
+app.get('*', async (c) => {
   if (c.req.path.startsWith('/api')) return jsonError('not found', 404);
   const origin = originOf(c);
   return c.html(
@@ -1764,7 +1774,7 @@ app.get('*', (c) => {
         'Page not found',
         `The requested route \u201c${c.req.path}\u201d was not found.`
       ),
-    }, shellFor(c)),
+    }, await shellFor(c)),
     404
   );
 });
