@@ -61,6 +61,8 @@ import {
   renderNotFoundSsr,
   renderProtocolSsr,
   renderProtocolMarkdown,
+  renderProtocolsSsr,
+  renderProtocolsMarkdown,
   renderTickSsr,
   renderTickMarkdown,
   renderBlockSsr,
@@ -1098,6 +1100,31 @@ app.get('/collections', async (c) => {
       image: origin + '/og/default.png',
       jsonLd: crumbs,
       initialHtml: renderCollectionsSsr(finalCols),
+    })
+  );
+});
+
+app.get('/protocols', async (c) => {
+  const origin = originOf(c);
+  const [protocols, ticks, chain] = await Promise.all([
+    db.listProtocols(c.env.DB, 30).catch(() => []),
+    db.listTicks(c.env.DB, undefined, 30, 40).catch(() => []),
+    db.getChainStats(c.env.DB).catch(() => null),
+  ]);
+  if (wantsMarkdown(c)) return markdownResponse(renderProtocolsMarkdown(origin, protocols, ticks), origin);
+  applyDiscoveryHeaders(c, origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Protocols', path: '/protocols' },
+  ]);
+  return c.html(
+    renderIndex({
+      title: 'OP_RETURN protocols \u2014 The Permanent Record',
+      description: `${protocols.filter((p) => p.protocol !== 'text').length} protocols decoded from every Bitcoin block: token ops, bridges, sidechain tags and more.`,
+      url: origin + '/protocols',
+      image: origin + '/og/default.png',
+      jsonLd: crumbs,
+      initialHtml: renderProtocolsSsr(protocols, ticks, chain),
     })
   );
 });

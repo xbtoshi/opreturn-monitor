@@ -1,4 +1,5 @@
 import { CATEGORIES, categorySlug } from './classify';
+import { protocolLabel } from './protocols';
 import type { Address, CollectionWithStats, Message } from './types';
 
 // ---------------------------------------------------------------------------
@@ -321,6 +322,7 @@ export function generateSitemapXml(
   urls.push({ loc: `${siteUrl}/feed`, lastmod: today, changefreq: 'hourly', priority: '0.9' });
   urls.push({ loc: `${siteUrl}/collections`, lastmod: today, changefreq: 'daily', priority: '0.9' });
   urls.push({ loc: `${siteUrl}/guide`, lastmod: today, changefreq: 'monthly', priority: '0.8' });
+  urls.push({ loc: `${siteUrl}/protocols`, lastmod: today, changefreq: 'hourly', priority: '0.9' });
 
   // Collections & Chat
   for (const col of collections) {
@@ -1590,6 +1592,95 @@ export function renderFeedSsr(): string {
   h += '</div>';
   h += '</section>';
   return h;
+}
+
+export function renderProtocolsSsr(
+  protocols: Array<{ protocol: string; count: number }>,
+  ticks: Array<{ protocol: string; tick: string; count: number }>,
+  chain: { blocks: number; opreturn_outputs: number; runes_outputs: number; stored_txs: number } | null
+): string {
+  let h = '<section class="wrap"><div class="kicker">\u25c6 PROTOCOL INDEX</div><h2 class="title">Protocols</h2>';
+  h += '<p class="lede" style="margin-top:12px;font-size:17px">Every OP_RETURN output of every block is decoded before it reaches the feed. These are the protocols seen in the last 30 days; Runes and opaque payloads are counted per block but never shown.</p>';
+  if (chain && chain.blocks) {
+    const pct = chain.opreturn_outputs ? Math.round((chain.runes_outputs / chain.opreturn_outputs) * 100) : 0;
+    h += '<div class="stats" style="margin-top:28px">';
+    h += `<div class="stat"><div class="v">${chain.blocks.toLocaleString()}</div><div class="l">Blocks scanned</div></div>`;
+    h += `<div class="stat"><div class="v">${chain.opreturn_outputs.toLocaleString()}</div><div class="l">OP_RETURN outputs seen</div></div>`;
+    h += `<div class="stat"><div class="v">${pct}%</div><div class="l">Runes (counted, not shown)</div></div>`;
+    h += `<div class="stat"><div class="v">${chain.stored_txs.toLocaleString()}</div><div class="l">Transactions decoded</div></div>`;
+    h += '</div>';
+  }
+  h += '<div class="col-grid" style="margin-top:34px">';
+  for (const p of protocols) {
+    if (p.protocol === 'text') continue;
+    h += `<a class="col-card" href="/p/${escHtml(p.protocol)}"><div class="top"><span class="code">${escHtml(p.protocol)}</span></div>`;
+    h += `<div class="name">${escHtml(protocolLabel(p.protocol))}</div>`;
+    h += `<div class="desc">${escHtml(protocolBlurb(p.protocol))}</div>`;
+    h += `<div class="foot"><span>${p.count.toLocaleString()} txs / 30d</span><span class="read">browse \u2192</span></div></a>`;
+  }
+  h += '</div>';
+  if (ticks.length) {
+    h += '<div class="kicker" style="margin-top:40px">\u25c6 MOST ACTIVE TICKERS \u00b7 30 DAYS</div><div class="chips" style="border-bottom:none">';
+    for (const t of ticks) h += `<a class="chip" href="/tick/${escHtml(encodeURIComponent(t.tick))}">$${escHtml(t.tick)} <span style="opacity:.55">${t.count.toLocaleString()}</span></a>`;
+    h += '</div>';
+  }
+  h += '</section>';
+  return h;
+}
+
+export function renderProtocolsMarkdown(
+  siteUrl: string,
+  protocols: Array<{ protocol: string; count: number }>,
+  ticks: Array<{ protocol: string; tick: string; count: number }>
+): string {
+  let md = `# OP_RETURN Protocols — The Permanent Record\n\nTransactions per decoded protocol in the last 30 days (Runes and opaque payloads are counted per block, not stored).\n\n`;
+  for (const p of protocols) {
+    if (p.protocol === 'text') continue;
+    md += `- [${protocolLabel(p.protocol)}](${siteUrl}/p/${p.protocol}) (\`${p.protocol}\`): ${p.count}\n`;
+  }
+  if (ticks.length) {
+    md += `\n## Most active tickers\n\n`;
+    for (const t of ticks) md += `- [$${t.tick}](${siteUrl}/tick/${encodeURIComponent(t.tick)}) via ${t.protocol}: ${t.count}\n`;
+  }
+  md += `\n- API: ${siteUrl}/api/protocols · ${siteUrl}/api/ticks · ${siteUrl}/api/chain\n`;
+  return md;
+}
+
+/** One line per protocol for the index page. */
+export function protocolBlurb(protocol: string): string {
+  switch (protocol) {
+    case 'ico-20':
+    case 'crc-20':
+    case 'brc-20':
+      return 'JSON token operations ({"p":"…","op":"…","tick":"…"}) such as the $LEAF mints sent to the Genesis address.';
+    case 'omni':
+      return 'Omni Layer transfers, mostly Tether (USDT) simple sends.';
+    case 'thorchain':
+      return 'THORChain outbound (OUT:) and refund memos plus swap instructions.';
+    case 'bridge-memo':
+      return 'Cross-chain bridge memos naming the destination asset and address.';
+    case 'evm-hash':
+      return 'Bare 32-byte EVM transaction or commitment hashes.';
+    case 'lifi':
+      return 'LI.FI bridge routing markers.';
+    case 'rootstock':
+      return 'Rootstock merge-mining commitments (RSKBLOCK:).';
+    case 'stacks':
+      return 'Stacks block commits, leader keys and STX operations.';
+    case 'core-dao':
+      return 'Core DAO validator delegation tags.';
+    case 'exsat':
+      return 'exSat data-availability tags.';
+    case 'syscoin':
+      return 'Syscoin merge-mining commitments.';
+    case 'satflow':
+    case 'brc20-prog':
+    case 'dio':
+    case 'alpn':
+      return 'Bare protocol marker with no readable payload.';
+    default:
+      return protocol.endsWith('-20') ? 'JSON token operations.' : 'Structured protocol data decoded from the OP_RETURN payload.';
+  }
 }
 
 export function renderProtocolSsr(protocol: string, label: string, count: number): string {

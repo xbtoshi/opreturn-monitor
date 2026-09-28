@@ -448,6 +448,7 @@ ${ogMeta}
   </button>
   <nav>
     <button class="navbtn" data-action="feed" data-nav="feed">Feed</button>
+    <button class="navbtn" data-action="protocols" data-nav="protocols">Protocols</button>
     <button class="navbtn" data-action="collections" data-nav="collections">Collections</button>
     <button class="navbtn" data-action="guide" data-nav="guide">Etch</button>
     <button class="navbtn active" data-action="home" data-nav="landing">About</button>
@@ -508,7 +509,7 @@ ${ogMeta}
 <script>
 
 (function(){
-  var state={screen:'landing',filter:null,address:null,category:null,protocol:null,tick:null,block:null,kind:'text',protocols:[],chain:null,sort:'hot',liked:{},voted:{},mining:{},collections:[],categories:[],feed:[],nextBefore:null,detailTx:null,from:null,cache:{},chat:{messages:[],participants:[],nextBefore:null},chatScroll:null};
+  var state={screen:'landing',filter:null,address:null,category:null,protocol:null,tick:null,block:null,kind:'text',protocols:[],ticks:[],chain:null,sort:'hot',liked:{},voted:{},mining:{},collections:[],categories:[],feed:[],nextBefore:null,detailTx:null,from:null,cache:{},chat:{messages:[],participants:[],nextBefore:null},chatScroll:null};
   var POW_BITS=16;
   var _inApp=0;
   try{state.liked=JSON.parse(localStorage.getItem('opreturn_liked')||'{}');}catch(e){}
@@ -569,6 +570,7 @@ ${ogMeta}
   function loadCollections(){return fetchJSON('/api/collections').then(function(r){state.collections=Array.isArray(r.d)?r.d:[];}).catch(function(){});}
   function loadCategories(){return fetchJSON('/api/categories').then(function(r){state.categories=Array.isArray(r.d)?r.d:[];}).catch(function(){});}
   function loadProtocols(){return fetchJSON('/api/protocols').then(function(r){state.protocols=(Array.isArray(r.d)?r.d:[]).filter(function(p){return p.protocol!=='text';});}).catch(function(){});}
+  function loadTicks(){return fetchJSON('/api/ticks?limit=40').then(function(r){state.ticks=Array.isArray(r.d)?r.d:[];}).catch(function(){});}
   function loadChain(){return fetchJSON('/api/chain').then(function(r){state.chain=r.d&&r.d.blocks!=null?r.d:null;}).catch(function(){});}
   function loadFeed(append){
     var q='/api/messages?sort='+state.sort+'&limit=50';
@@ -611,7 +613,7 @@ ${ogMeta}
 
   function setNav(){
     var r=currentRoute().name;
-    var nav=(r==='c'||r==='a'||r==='cat'||r==='feed'||r==='m'||r==='p'||r==='tick'||r==='block')?'feed':(r==='collections'?'collections':(r==='guide'?'guide':'landing'));
+    var nav=(r==='c'||r==='a'||r==='cat'||r==='feed'||r==='m'||r==='tick'||r==='block')?'feed':(r==='collections'?'collections':(r==='p'||r==='protocols'?'protocols':(r==='guide'?'guide':'landing')));
     var b=document.querySelectorAll('[data-nav]');
     for(var i=0;i<b.length;i++){b[i].classList.toggle('active',b[i].getAttribute('data-nav')===nav);}
   }
@@ -644,7 +646,7 @@ ${ogMeta}
       h+=stat(Number(ch.blocks).toLocaleString(),'Blocks scanned');
       h+=stat(Number(ch.opreturn_outputs).toLocaleString(),'OP_RETURN outputs seen');
       h+=stat((ch.opreturn_outputs?Math.round(ch.runes_outputs/ch.opreturn_outputs*100):0)+'%','Runes (counted, not shown)');
-      h+=stat(String(state.protocols.length),'Protocols decoded');
+      h+='<a class="stat" href="/protocols" style="text-decoration:none"><div class="v">'+state.protocols.length+'</div><div class="l">Protocols decoded \u2192</div></a>';
     }else{
       h+=stat(String(state.collections.length),'Collections tracked');
       h+=stat(totalAddresses()+'','Addresses monitored');
@@ -676,6 +678,32 @@ ${ogMeta}
   function categoryTally(){var counts={};var all=Object.keys(state.cache).map(function(k){return state.cache[k];});all.forEach(function(m){var c=m.category||'Other';counts[c]=(counts[c]||0)+1;});var arr=Object.keys(counts).map(function(k){return {cat:k,n:counts[k]};});arr.sort(function(a,b){return b.n-a.n;});return arr;}
   function renderChart(){var arr=categoryTally();if(!arr.length)return '';var max=arr[0].n||1;var h='<div class="chart"><div class="kicker" style="margin-bottom:16px">\u25c6 WHAT THEY\u2019RE SAYING \u00b7 BY CATEGORY</div>';arr.forEach(function(r){var hostile=HOSTILE[r.cat];var pct=Math.max(5,Math.round(r.n/max*100));h+='<div class="chart-row"><div class="chart-label">'+esc(r.cat)+'</div><div class="chart-track"><div class="chart-fill'+(hostile?' sig':'')+'" style="width:'+pct+'%"></div></div><div class="chart-num">'+r.n+'</div></div>';});h+='</div>';return h;}
 
+  var PROTO_BLURB={'ico-20':'JSON token operations such as the $LEAF mints sent to the Genesis address.','crc-20':'JSON token operations such as the $LEAF mints sent to the Genesis address.','brc-20':'JSON token operations.',omni:'Omni Layer transfers, mostly Tether (USDT) simple sends.',thorchain:'THORChain outbound (OUT:) and refund memos plus swap instructions.','bridge-memo':'Cross-chain bridge memos naming the destination asset and address.','evm-hash':'Bare 32-byte EVM transaction or commitment hashes.',lifi:'LI.FI bridge routing markers.',rootstock:'Rootstock merge-mining commitments (RSKBLOCK:).',stacks:'Stacks block commits, leader keys and STX operations.','core-dao':'Core DAO validator delegation tags.',exsat:'exSat data-availability tags.',syscoin:'Syscoin merge-mining commitments.',satflow:'Bare protocol marker with no readable payload.','brc20-prog':'Bare protocol marker with no readable payload.',dio:'Bare protocol marker with no readable payload.',alpn:'Bare protocol marker with no readable payload.'};
+  function protoBlurb(p){return PROTO_BLURB[p]||(/-20$/.test(p)?'JSON token operations.':'Structured protocol data decoded from the OP_RETURN payload.');}
+  function renderProtocols(){
+    var h='<section class="wrap"><div class="kicker">\u25c6 PROTOCOL INDEX</div><h2 class="title">Protocols</h2>';
+    h+='<p class="lede" style="margin-top:12px;font-size:17px">Every OP_RETURN output of every block is decoded before it reaches the feed. These are the protocols seen in the last 30 days; Runes and opaque payloads are counted per block but never shown.</p>';
+    if(state.chain&&state.chain.blocks){var ch=state.chain;h+='<div class="stats" style="margin-top:28px">';
+      h+=stat(Number(ch.blocks).toLocaleString(),'Blocks scanned');
+      h+=stat(Number(ch.opreturn_outputs).toLocaleString(),'OP_RETURN outputs seen');
+      h+=stat((ch.opreturn_outputs?Math.round(ch.runes_outputs/ch.opreturn_outputs*100):0)+'%','Runes (counted, not shown)');
+      h+=stat(Number(ch.stored_txs).toLocaleString(),'Transactions decoded');
+      h+='</div>';}
+    h+='<div class="col-grid" style="margin-top:34px">';
+    if(!state.protocols.length)h+='<div class="empty">No protocol data yet \u2014 the scanner has not finished a block.</div>';
+    state.protocols.forEach(function(p){
+      h+='<a class="col-card" href="/p/'+encodeURIComponent(p.protocol)+'"><div class="top"><span class="code">'+esc(p.protocol)+'</span>'+(isTokenProto(p.protocol)?'<span class="hot">TOKEN</span>':'')+'</div>';
+      h+='<div class="name">'+esc(p.label||protoLabel(p.protocol))+'</div>';
+      h+='<div class="desc">'+esc(protoBlurb(p.protocol))+'</div>';
+      h+='<div class="foot"><span>'+Number(p.count).toLocaleString()+' txs / 30d</span><span class="read">browse \u2192</span></div></a>';
+    });
+    h+='</div>';
+    if(state.ticks.length){h+='<div class="kicker" style="margin-top:40px">\u25c6 MOST ACTIVE TICKERS \u00b7 30 DAYS</div><div class="chips" style="border-bottom:none">';
+      state.ticks.forEach(function(t){h+='<a class="chip" href="/tick/'+encodeURIComponent(t.tick)+'" title="'+attr(t.protocol)+'">$'+esc(t.tick)+' <span style="opacity:.55">'+Number(t.count).toLocaleString()+'</span></a>';});
+      h+='</div>';}
+    h+='</section>';
+    app.innerHTML=h;
+  }
   function renderCollections(){
     var h='<section class="wrap"><div class="kicker">\u25c6 ARCHIVE INDEX</div><h2 class="title">Collections</h2>';
     h+='<p class="lede" style="margin-top:12px;font-size:17px">Addresses grouped by the phenomenon behind them. Each collection is a running record of a specific pattern we\u2019ve watched unfold on-chain.</p>';
@@ -746,6 +774,7 @@ ${ogMeta}
     h+='</div>';
     if(state.protocols.length){h+='<div class="chips" style="margin-top:8px;padding-top:0;border-bottom:none;margin-bottom:8px">';
     state.protocols.slice(0,14).forEach(function(p){h+='<a class="chip'+(state.protocol===p.protocol?' active':'')+'" href="/p/'+encodeURIComponent(p.protocol)+'" title="'+p.count+' txs / 30d">'+esc(p.label||protoLabel(p.protocol))+' <span style="opacity:.55">'+Number(p.count).toLocaleString()+'</span></a>';});
+    h+='<a class="chip" href="/protocols" style="color:var(--sig);border-color:var(--sig)">All protocols \u2192</a>';
     h+='</div>';}
     if(state.categories.length&&!state.protocol&&!state.tick&&!state.block){h+='<div class="chips" style="margin-top:8px">';
     h+='<a class="chip'+(state.category==null&&!state.address?' active':'')+'" href="/feed">All categories</a>';
@@ -1127,6 +1156,7 @@ ${ogMeta}
     setNav();
     if(state.screen==='landing')renderLanding();
     else if(state.screen==='collections')renderCollections();
+    else if(state.screen==='protocols')renderProtocols();
     else if(state.screen==='feed')renderFeed();
     else if(state.screen==='guide')renderGuide();
     else if(state.screen==='detail')renderDetail();
@@ -1153,6 +1183,7 @@ ${ogMeta}
     state.filter=null;state.address=null;state.category=null;state.protocol=null;state.tick=null;state.block=null;
     state.kind=new URLSearchParams(location.search).get('kind')==='all'?'all':'text';
     if(r.name==='collections'){state.screen='collections';return render();}
+    if(r.name==='protocols'){state.screen='protocols';return Promise.all([loadProtocols(),loadTicks(),loadChain()]).then(render);}
     if(r.name==='guide'){state.screen='guide';return render();}
     if(r.name==='feed'){state.screen='feed';state.sort=sort;state.nextBefore=null;return loadFeed(false).then(render);}
     if(r.name==='c'){
@@ -1203,6 +1234,7 @@ ${ogMeta}
     var target='/';
     if(screen==='feed')target='/feed';
     else if(screen==='collections')target='/collections';
+    else if(screen==='protocols')target='/protocols';
     else if(screen==='guide')target='/guide';
     else if(screen==='detail')target='/m/'+param;
     else if(screen==='colfeed')target='/c/'+attr(colSlug(colById(Number(param)))||param);
@@ -1234,6 +1266,7 @@ ${ogMeta}
     if(a==='home')return go('landing');
     if(a==='feed')return go('feed');
     if(a==='collections')return go('collections');
+    if(a==='protocols')return go('protocols');
     if(a==='guide')return go('guide');
     if(a==='back')return goBack();
     if(a==='open-collection')return go('colfeed',t.getAttribute('data-id'));
