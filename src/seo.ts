@@ -1613,7 +1613,7 @@ export function cleanCryptoPreview(content?: string | null): string {
       return lead ? `${lead} [BIE1 Payload]` : '[Electrum BIE1 ECIES Encrypted]';
     }
   }
-  return content;
+  return text;
 }
 
 export function renderMessageSsr(msg: Message, colName?: string, related: Message[] = [], colNames?: Map<number, string>): string {
