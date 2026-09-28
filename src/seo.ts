@@ -1158,8 +1158,8 @@ export function buildMessageSchema(
   return {
     '@type': 'SocialMediaPosting',
     '@id': `${siteUrl}/m/${msg.txid}#post`,
-    headline: msg.content ? `\u201c${msg.content.slice(0, 100)}\u201d` : 'Bitcoin OP_RETURN transmission',
-    articleBody: msg.content || '',
+    headline: msg.content ? `\u201c${stripDataUris(msg.content).slice(0, 100)}\u201d` : 'Bitcoin OP_RETURN transmission',
+    articleBody: stripDataUris(msg.content),
     datePublished: msg.block_time
       ? new Date(msg.block_time * 1000).toISOString()
       : new Date(msg.created_at).toISOString(),
@@ -1498,9 +1498,17 @@ export function renderAddressSsr(address: string): string {
   return h;
 }
 
+/** Drop inline data: URIs (etched images) so previews and schema stay readable. */
+export function stripDataUris(content?: string | null): string {
+  if (!content) return '';
+  const kept = content.split('\n').filter((l) => !/^data:[a-z0-9.+-]+\/[a-z0-9.+-]+[;,]/i.test(l.trim()));
+  const out = kept.join('\n').trim();
+  return out || (content.trim() ? '[inline file]' : '');
+}
+
 export function cleanCryptoPreview(content?: string | null): string {
   if (!content) return '';
-  const text = content.trim();
+  const text = stripDataUris(content).trim();
   if (text.includes('-----BEGIN PGP SIGNED MESSAGE-----')) {
     const sigIdx = text.indexOf('-----BEGIN PGP SIGNATURE-----');
     const headIdx = text.indexOf('-----BEGIN PGP SIGNED MESSAGE-----');

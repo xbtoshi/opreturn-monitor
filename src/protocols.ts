@@ -171,6 +171,8 @@ const RE_THOR_OUT = /^(OUT|REFUND):([0-9A-Fa-f]{64})$/;
 const RE_THOR_MEMO = /^(=|SWAP|s|ADD|a|\+|WITHDRAW|wd|-|MIGRATE|NOOP|BOND|UNBOND|LEAVE|LOAN\+|LOAN-|\$\+|\$-|RAGNAROK|YGGDRASIL\+|YGGDRASIL-|RESERVE|DONATE|d|TRADE\+|TRADE-|SECURE\+|SECURE-|RUNEPOOL\+|RUNEPOOL-|CONSOLIDATE|SWITCH|LIMITO|LO):/i;
 const RE_BRIDGE_MEMO = /^(?:([A-Za-z0-9]{2,8}):)?(to|from):([0-9][0-9.]*)?([A-Za-z][A-Za-z0-9()._-]*):(\S+)$/;
 const RE_EVM_HASH = /^0x[0-9a-fA-F]{64}$/;
+/** Inline data URI, e.g. data:image/png;base64,... (Core 30 lifted the 80-byte cap). */
+const RE_DATA_URI = /^data:([a-z0-9.+-]+\/[a-z0-9.+-]+)(;[a-z0-9=.-]+)*(;base64)?,/i;
 const RE_LIFI = /=\|lifi/;
 const RE_SLUG = /[^a-z0-9._-]+/g;
 
@@ -210,7 +212,7 @@ export function detectFromText(text: string): Omit<DecodedOp, 'vout' | 'payload_
           return {
             protocol: slugProtocol(rec.p),
             op: strField(rec, 'op'),
-            tick: strField(rec, 'tick', 'ticker', 'symbol'),
+            tick: strField(rec, 'tick', 'ticker', 'symbol', 'name'),
             amount: strField(rec, 'amt', 'amount', 'lim', 'max'),
             text: t,
           };
@@ -247,6 +249,12 @@ export function detectFromText(text: string): Omit<DecodedOp, 'vout' | 'payload_
 
   if (RE_EVM_HASH.test(t)) {
     return { protocol: 'evm-hash', op: null, tick: null, amount: null, text: t };
+  }
+
+  const data = RE_DATA_URI.exec(t);
+  if (data) {
+    // The whole URI is kept as text so the UI can render images inline.
+    return { protocol: 'data-uri', op: data[1].toLowerCase(), tick: null, amount: null, text: t };
   }
 
   // Bare marker followed by nothing, a control byte or non-ASCII data.
@@ -451,6 +459,10 @@ export function protocolLabel(protocol: string): string {
       return 'Syscoin';
     case 'lifi':
       return 'LI.FI';
+    case 'data-uri':
+      return 'Inline file';
+    case 'nft':
+      return 'NFT';
     default:
       return protocol.toUpperCase();
   }

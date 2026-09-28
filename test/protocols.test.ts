@@ -120,6 +120,24 @@ describe('decodeScript', () => {
     expect(decodeScript(opReturn('SATFLOW is great'))?.protocol).toBe('text');
   });
 
+  it('decodes the ak21 mint: nft JSON, a text line and an inline PNG', () => {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADwAAAAUCAYAAADRA14pAAAACXBIWXMAAAPoAAAD6AG1e1Jr';
+    const tx = decodeTx([
+      { scriptpubkey: '0014' + '00'.repeat(20), scriptpubkey_type: 'v0_p2wpkh', scriptpubkey_address: 'bc1qrecipient', value: 1000 },
+      { scriptpubkey: opReturn('{"p":"nft","op":"mint","name":"ak21"}'), scriptpubkey_type: 'op_return' },
+      { scriptpubkey: opReturn('we do what we must because we can'), scriptpubkey_type: 'op_return' },
+      { scriptpubkey: opReturn(png), scriptpubkey_type: 'op_return' },
+    ]);
+    expect(tx.protocol).toBe('nft');
+    expect(tx.ops.map((o) => [o.protocol, o.op, o.tick])).toEqual([
+      ['nft', 'mint', 'ak21'],
+      ['text', null, null],
+      ['data-uri', 'image/png', null],
+    ]);
+    expect(tx.content).toBe(`{"p":"nft","op":"mint","name":"ak21"}\nwe do what we must because we can\n${png}`);
+    expect(isStorableProtocol(tx.protocol)).toBe(true);
+  });
+
   it('does not mistake the word "sys" or "CORE" in prose for a protocol tag', () => {
     expect(decodeScript(opReturn('system is down'))?.protocol).toBe('text');
     expect(decodeScript(opReturn('CORE values matter'))?.protocol).toBe('text');

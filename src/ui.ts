@@ -235,6 +235,9 @@ ${ogMeta}
   .opline .tk{color:#0f766e;font-weight:600}
   .opline .arrow{color:var(--fg5)}
   .msg .content.proto{font-family:'Martian Mono',monospace;font-size:13px;line-height:1.5;color:var(--fg3);font-weight:400}
+  .inline-media{margin:10px 0 6px}
+  .inline-media img{display:block;max-width:100%;min-width:min(100%,160px);height:auto;max-height:360px;image-rendering:pixelated;border:1px solid var(--line2);background:#fff}
+  .inline-media.file{font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
   .ops{margin:14px 0 0;border-top:1px solid var(--line3);padding-top:12px}
   .ops .op{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line3);font-family:'Martian Mono',monospace;font-size:12px;color:var(--fg3)}
   .ops .op code{color:var(--fg);font-size:11px;word-break:break-all}
@@ -334,8 +337,11 @@ ${ogMeta}
   .env-armor-toggle{margin-top:6px}
   .env-text-btn{background:none;border:none;color:var(--fg4);font-family:'Martian Mono',monospace;font-size:10px;cursor:pointer;padding:0;text-decoration:underline}
   .env-text-btn:hover{color:var(--sig)}
-  .key-exchange-banner{margin-bottom:18px;border:1px solid var(--line);background:var(--card);box-shadow:0 4px 20px rgba(0,0,0,.04)}
-  .keb-head{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--inv-bg);color:var(--inv-fg);font-family:'Martian Mono',monospace;font-size:11px;letter-spacing:.06em}
+  .page-title{font-size:clamp(26px,4vw,40px);overflow-wrap:anywhere;word-break:break-word}
+  .key-exchange-banner{margin-bottom:18px;border:1px solid var(--line);background:var(--card);box-shadow:0 4px 20px rgba(0,0,0,.04);min-width:0}
+  .keb-head{display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--inv-bg);color:var(--inv-fg);font-family:'Martian Mono',monospace;font-size:11px;letter-spacing:.06em;width:100%;border:none;text-align:left;cursor:default}
+  .keb-caret{display:none}
+  .keb-key code,.keb-fp code,.keb-key span{word-break:break-all;overflow-wrap:anywhere}
   .keb-badge{margin-left:auto;background:var(--sig);color:var(--on-sig);padding:2px 7px;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
   .keb-body{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:center;padding:16px 18px}
   .keb-party{display:flex;flex-direction:column;gap:5px}
@@ -353,17 +359,41 @@ ${ogMeta}
     .keb-divider{display:none}
   }
   @media(max-width:600px){
-    header{padding:10px 12px;gap:8px}
+    header{padding:8px 10px;gap:6px}
     .brand .tag{display:none}
-    nav{gap:0}
-    .navbtn{padding:8px 9px;font-size:13px}
-    .room{height:calc(100dvh - 200px);min-height:380px;max-height:none}
-    .room-head{flex-direction:column;align-items:stretch;gap:8px;padding:10px 12px}
-    .room-head .who{flex:none}
-    .party-pill{white-space:nowrap;padding:4px 8px;font-size:9px}
-    .share-room{margin:4px 0 0;width:100%;padding:8px 12px}
-    .room-log{padding:12px 10px 18px}
-    .room-foot{flex-direction:column;align-items:flex-start;gap:6px;padding:8px 12px}
+    .brand .logo{font-size:14px}
+    /* Five entries no longer fit next to the brand: let the nav scroll sideways. */
+    .brand{flex:0 0 auto}
+    nav{gap:0;flex:0 1 auto;min-width:0;margin-left:auto;overflow-x:auto;justify-content:flex-start;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    nav::-webkit-scrollbar{display:none}
+    .navbtn{padding:8px 8px;font-size:12px;flex:0 0 auto}
+    /* Vote pill sits on the bubble's bottom edge instead of over the sender line. */
+    .msg-actions{top:auto;bottom:-12px;right:10px}
+    .turn.party .msg-actions{right:auto;left:10px}
+    .bubble-meta{margin-top:14px}
+    .page-title{font-size:22px;line-height:1.15}
+    .feed-head{gap:10px}
+    /* The room is not a scroll box on phones: the page scrolls, so the log
+       gets the full height instead of whatever is left under the header. */
+    .room{height:auto;min-height:0;max-height:none;box-shadow:none}
+    .room-log{flex:none;overflow:visible;padding:12px 10px 18px}
+    .room-head{flex-wrap:nowrap;align-items:center;gap:8px;padding:8px 10px;overflow:hidden}
+    .room-count{flex:0 0 auto;white-space:nowrap}
+    .room-head .who{flex:1 1 auto;min-width:0;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+    .room-head .who::-webkit-scrollbar{display:none}
+    .party-pill{white-space:nowrap;padding:4px 8px;font-size:9px;flex:0 0 auto}
+    .share-room{flex:0 0 auto;margin:0;padding:6px 8px;font-size:10px}
+    .room-foot{gap:8px;padding:8px 12px;font-size:10px;flex-wrap:wrap}
+    /* Key exchange banner collapses to its title bar; tap to expand. */
+    .key-exchange-banner{margin-bottom:12px}
+    .keb-head{cursor:pointer;padding:8px 12px;font-size:10px;gap:8px}
+    .keb-title{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .keb-badge{display:none}
+    .keb-caret{display:inline;transition:transform .15s}
+    .key-exchange-banner.open .keb-caret{transform:rotate(180deg)}
+    .keb-body{display:none}
+    .key-exchange-banner.open .keb-body{display:grid;padding:12px}
+    .wrap{min-width:0}
     .turn{max-width:100%;gap:6px}
     .avatar{width:26px;height:26px;font-size:8px}
     .turn.first .avatar{margin-top:20px}
@@ -543,9 +573,25 @@ ${ogMeta}
   function primaryOp(m){
     if(!m||!m.protocol||m.protocol==='text'||m.protocol==='binary')return null;
     var ops=m.ops;
-    if(!ops){ops=[];String(m.content||'').split('\\n').forEach(function(line,i){line=line.trim();if(line.charAt(0)!=='{')return;try{var j=JSON.parse(line);if(j&&typeof j.p==='string')ops.push({vout:i,protocol:String(j.p).toLowerCase(),op:j.op||null,tick:j.tick||null,amount:j.amt||j.amount||null});}catch(e){}});}
+    if(!ops){ops=[];String(m.content||'').split('\\n').forEach(function(line,i){line=line.trim();if(line.charAt(0)!=='{')return;try{var j=JSON.parse(line);if(j&&typeof j.p==='string')ops.push({vout:i,protocol:String(j.p).toLowerCase(),op:j.op||null,tick:j.tick||j.name||null,amount:j.amt||j.amount||null});}catch(e){}});}
     for(var i=0;i<ops.length;i++){if(ops[i].protocol===m.protocol)return ops[i];}
     return ops[0]||{protocol:m.protocol,op:null,tick:null,amount:null};
+  }
+  /* Inline files etched as data: URIs. Only base64 images are rendered (as <img>, so SVG scripts never run); other files get a placeholder. */
+  var RE_DATA_IMG=/^data:image\\/(png|jpeg|jpg|gif|webp|svg\\+xml|bmp|avif);base64,[A-Za-z0-9+\\/=\\s]+$/;
+  var RE_DATA_ANY=/^data:([a-z0-9.+-]+\\/[a-z0-9.+-]+)(?:;[a-z0-9=.-]+)*(?:;base64)?,/i;
+  function splitMedia(content){
+    var lines=String(content||'').split('\\n'),text=[],images=[],files=[];
+    lines.forEach(function(l){var t=l.trim();var m=RE_DATA_ANY.exec(t);
+      if(!m){text.push(l);return;}
+      if(RE_DATA_IMG.test(t))images.push(t.replace(/\\s+/g,''));else files.push(m[1]+' \\u00b7 '+Math.round(t.length*3/4/1024*10)/10+' KB');});
+    return {text:text.join('\\n').trim(),images:images,files:files};
+  }
+  function mediaHTML(media){
+    var h='';
+    media.images.forEach(function(src){h+='<div class="inline-media"><img src="'+attr(src)+'" alt="Image etched into an OP_RETURN output" loading="lazy" decoding="async"></div>';});
+    media.files.forEach(function(f){h+='<div class="inline-media file">\\ud83d\\udcce inline file \\u00b7 '+esc(f)+'</div>';});
+    return h;
   }
   function protoBadge(m,extra){
     var p=m.protocol;if(!p||p==='text')return '';
@@ -743,7 +789,8 @@ ${ogMeta}
     h+='<span class="fee">'+esc(feeText(m))+'</span>';
     if(m.dup_count>1)h+='<span class="fee" title="Same message broadcast in '+m.dup_count+' separate transactions">\\u00d7'+m.dup_count+' txs</span>';
     h+='<span class="time">'+esc(timeAgo(msgTime(m)))+'</span></div>';
-    var displayText=m.content||'';
+    var media=splitMedia(m.content);
+    var displayText=media.images.length||media.files.length?(media.text||'[inline file]'):(m.content||'');
     if(env){
       if(env.leadText)displayText=env.leadText;
       else if(env.type==='bie1')displayText='[Electrum BIE1 ECIES encrypted payload to '+shortAddr(m.address)+']';
@@ -751,6 +798,7 @@ ${ogMeta}
     }
     if(isProto)h+=opLine(m);
     h+='<button class="content-btn" data-action="open-msg" data-txid="'+attr(m.txid)+'"><p class="content'+(isProto?' proto':'')+'">'+esc(displayText)+'</p>'+(displayText.length>280?'<div class="readmore">\\u2026 read full message \\u2192</div>':'')+'</button>';
+    h+=mediaHTML(media);
     h+='<div class="foot">';
     if(m.collection_id){h+='<span>\u21b3 <a href="/c/'+attr(colSlug(colById(m.collection_id)))+'">'+esc(colName(m.collection_id))+'</a></span>';}
     if(m.block_height!=null)h+='<a href="/block/'+m.block_height+'" title="block height">#'+Number(m.block_height).toLocaleString()+'</a>';
@@ -764,7 +812,7 @@ ${ogMeta}
   function renderFeed(){
     var title=state.address?state.address:(state.filter?colName(state.filter):(state.category?state.category:(state.protocol?protoLabel(state.protocol):(state.tick?'$'+state.tick:(state.block?'Block '+Number(state.block).toLocaleString():'All transmissions')))));
     var kick=state.address?'\u25c6 ADDRESS RECORD':(state.filter?('\u25c6 '+catCode(colIndex(state.filter)+1)):(state.category?('\u25c6 '+catSlug(state.category).toUpperCase().replace(/-/g,' ')):(state.protocol?'\u25c6 OP_RETURN PROTOCOL \u00b7 '+state.protocol.toUpperCase():(state.tick?'\u25c6 TOKEN TICKER':(state.block?'\u25c6 BLOCK CENSUS':(state.kind==='all'?'\u25c6 EVERY BLOCK \u00b7 EVERY PROTOCOL':'\u25c6 EVERY BLOCK \u00b7 HUMAN MESSAGES'))))));
-    var h='<section class="wrap wrap-narrow"><div class="feed-head"><div><div class="kicker" style="margin-bottom:6px">'+kick+'</div><h2 class="title" style="font-size:clamp(26px,4vw,40px);overflow-wrap:anywhere">'+esc(title)+'</h2></div>';
+    var h='<section class="wrap wrap-narrow"><div class="feed-head"><div><div class="kicker" style="margin-bottom:6px">'+kick+'</div><h2 class="title page-title">'+esc(title)+'</h2></div>';
     h+='<div class="head-ctl">'+viewToggle('feed')+'<div class="seg"><button data-action="sort" data-sort="hot" class="'+(state.sort==='hot'?'active':'')+'">\ud83d\udd25 Hottest</button><button data-action="sort" data-sort="new" class="'+(state.sort==='new'?'active':'')+'">\u25f7 Newest</button></div></div></div>';
     var plain=!state.filter&&!state.address&&!state.category&&!state.protocol&&!state.tick&&!state.block;
     if(plain&&state.chain){var ch=state.chain;h+='<div class="chain"><span><b>'+Number(ch.blocks).toLocaleString()+'</b> blocks scanned</span><span><b>'+Number(ch.opreturn_outputs).toLocaleString()+'</b> OP_RETURN outputs</span><span><b>'+(ch.opreturn_outputs?Math.round(ch.runes_outputs/ch.opreturn_outputs*100):0)+'%</b> Runes</span><span><b>'+Number(ch.stored_txs).toLocaleString()+'</b> decoded</span>'+(ch.highest_height!=null?'<a href="/block/'+ch.highest_height+'">latest #'+Number(ch.highest_height).toLocaleString()+'</a>':'')+'</div>';}
@@ -972,14 +1020,14 @@ ${ogMeta}
   function renderChat(){
     var col=state.filter?colById(state.filter):null;
     var title=state.address?state.address:(col?col.name:'Chat room');
-    var h='<section class="wrap wrap-narrow"><div class="feed-head"><div><div class="kicker" style="margin-bottom:6px">\u25c6 CHAT ROOM \u00b7 OLDEST TO NEWEST</div><h2 class="title" style="font-size:clamp(26px,4vw,40px);overflow-wrap:anywhere">'+esc(title)+'</h2></div>';
+    var h='<section class="wrap wrap-narrow"><div class="feed-head"><div><div class="kicker" style="margin-bottom:6px">\u25c6 CHAT ROOM \u00b7 OLDEST TO NEWEST</div><h2 class="title page-title">'+esc(title)+'</h2></div>';
     h+='<div class="head-ctl">'+viewToggle('chat')+'</div></div>';
 
     var msgs=state.chat.messages;
     var hasCrypto=msgs.some(function(m){return parseCryptoEnvelope(m.content);});
     if(hasCrypto){
       h+='<div class="key-exchange-banner">';
-      h+='<div class="keb-head"><span class="keb-icon">🔐</span><span class="keb-title">CRYPTOGRAPHIC KEY EXCHANGE ACTIVE</span><span class="keb-badge">On-Chain PGP / ECIES</span></div>';
+      h+='<button class="keb-head" data-action="keb-toggle" aria-expanded="false"><span class="keb-icon">🔐</span><span class="keb-title">CRYPTOGRAPHIC KEY EXCHANGE ACTIVE</span><span class="keb-badge">On-Chain PGP / ECIES</span><span class="keb-caret">\u25be</span></button>';
       h+='<div class="keb-body">';
       h+='<div class="keb-party"><div class="keb-role">RESPONDER / PROTOCOL DEFENSE</div><div class="keb-name">Blockstream Security Reporting</div>';
       h+='<div class="keb-key"><span>PGP Signing Key: <code>4AC8CC886844A2D6</code></span><span>Encryption Subkey: <code>BB332D31CBA44EDF</code> (RSA-4096)</span></div>';
@@ -994,7 +1042,7 @@ ${ogMeta}
     }
 
     var parts=state.chat.participants||[];var multi=parts.length>1;
-    h+='<div class="room"><div class="room-head"><span>'+parts.length+' monitored '+(parts.length===1?'party':'parties')+'</span><div class="who">';
+    h+='<div class="room"><div class="room-head"><span class="room-count">'+parts.length+' monitored '+(parts.length===1?'party':'parties')+'</span><div class="who">';
     parts.forEach(function(p){h+='<a class="party-pill" href="/a/'+attr(p.address)+'/chat" title="'+attr((p.label?p.label+' \u00b7 ':'')+p.address)+'"><span class="dot"></span>'+esc(partyName(p,p.address))+'</a>';});
     h+='</div><button class="share-room" data-action="share-room">Share room \u2197</button></div>';
     h+='<div class="room-log" id="room-log">';
@@ -1015,10 +1063,16 @@ ${ogMeta}
     var logEl=document.getElementById('room-log');
     if(logEl){
       var sc=state.chatScroll;state.chatScroll=null;
-      if(sc&&sc.keep!=null){logEl.scrollTop=logEl.scrollHeight-sc.keep;}
+      if(pageScrollsChat()){
+        // Small screens: the room is not a scroll box, the document is.
+        var de=document.documentElement;
+        if(sc&&sc.keep!=null){window.scrollTo(0,de.scrollHeight-sc.keep);}
+        else{var foot=document.querySelector('.room-foot');window.scrollTo(0,foot?foot.getBoundingClientRect().top+window.scrollY-window.innerHeight+foot.offsetHeight+8:de.scrollHeight);}
+      }else if(sc&&sc.keep!=null){logEl.scrollTop=logEl.scrollHeight-sc.keep;}
       else{logEl.scrollTop=logEl.scrollHeight;}
     }
   }
+  function pageScrollsChat(){return window.matchMedia&&window.matchMedia('(max-width:600px)').matches;}
 
   function renderDetail(){
     var m=state.cache[state.detailTx];if(!m){go('feed');return;}
@@ -1036,10 +1090,12 @@ ${ogMeta}
     if(env&&env.isSigned){
       h+='<div class="crypto-sig-badge" style="margin-top:12px"><span class="sig-icon">🛡️</span><span>Signed by <strong>'+esc(env.signer||'Blockstream Security')+'</strong></span><span>Key ID: <code>'+esc(env.signerKey||'4AC8CC886844A2D6')+'</code></span><a href="https://blockstream.com/pgp.txt" target="_blank" rel="noopener">pgp.txt ↗</a></div>';
     }
-    var qtext=(env&&env.leadText)?env.leadText:m.content;
+    var dmedia=splitMedia(m.content);
+    var qtext=(env&&env.leadText)?env.leadText:(dmedia.images.length||dmedia.files.length?(dmedia.text||'[inline file]'):m.content);
     var qlen=(qtext||'').length;var qcls=qlen>600?' long':(qlen>240?' med':'');
     if(isProto)h+='<div style="margin-top:14px">'+opLine(m)+'</div>';
     h+='<blockquote class="'+qcls.trim()+(isProto?' proto':'')+'"'+'>'+(isProto?esc(qtext):'\u201c'+esc(qtext)+'\u201d')+'</blockquote>';
+    h+=mediaHTML(dmedia);
     if(m.ops&&m.ops.length){h+='<div class="ops"><div class="kicker" style="margin-bottom:4px">\u25c6 DECODED OP_RETURN OUTPUTS \u00b7 '+m.ops.length+'</div>';
       m.ops.forEach(function(o){h+='<div class="op"><span>vout '+(o.vout<0?'?':o.vout)+'</span><a class="cat proto'+(isTokenProto(o.protocol)?' tok':'')+'" href="/p/'+encodeURIComponent(o.protocol)+'">'+esc(protoLabel(o.protocol))+'</a>'+(o.op?'<span>'+esc(o.op)+'</span>':'')+(o.amount?'<code>'+esc(fmtAmt(o.amount))+'</code>':'')+(o.tick?'<a href="/tick/'+encodeURIComponent(o.tick)+'" style="color:#0f766e;font-weight:600">$'+esc(o.tick)+'</a>':'')+(o.payload_hex?'<span class="hex">'+esc(o.payload_hex.length>200?o.payload_hex.slice(0,200)+'\u2026':o.payload_hex)+'</span>':'')+'</div>';});
       h+='</div>';}
@@ -1275,7 +1331,8 @@ ${ogMeta}
     if(a==='sort'){var s=t.getAttribute('data-sort');var qs=new URLSearchParams(location.search);if(s===defaultSort(currentRoute()))qs.delete('sort');else qs.set('sort',s);var q=qs.toString();history.replaceState({},'',location.pathname+(q?'?'+q:''));route();return;}
     if(a==='more'){loadFeed(true).then(render);return;}
     if(a==='view'){navigate(t.getAttribute('data-view')==='chat'?chatPath():feedPath());return;}
-    if(a==='chat-earlier'){var log=document.getElementById('room-log');state.chatScroll={keep:log?log.scrollHeight-log.scrollTop:0};loadChat(true).then(render);return;}
+    if(a==='chat-earlier'){var log=document.getElementById('room-log');state.chatScroll={keep:pageScrollsChat()?document.documentElement.scrollHeight-window.scrollY:(log?log.scrollHeight-log.scrollTop:0)};loadChat(true).then(render);return;}
+    if(a==='keb-toggle'){var kb=t.closest('.key-exchange-banner');if(kb){var open=kb.classList.toggle('open');t.setAttribute('aria-expanded',open?'true':'false');}return;}
     if(a==='share-room'){shareRoom(t);return;}
     if(a==='open-msg')return go('detail',t.getAttribute('data-txid'));
     if(a==='vote'){vote(Number(t.getAttribute('data-id')),t.getAttribute('data-dir')==='down'?'down':'up');return;}
