@@ -411,40 +411,32 @@ async function getMessagesByBranches(
   }
   if (branches.length === 0) return { messages: [], next_before: null };
 
-  // D1 allows 100 bind parameters per statement; each branch binds
-  // 2 + baseParams.length, so run the branches in chunks and merge in JS.
-  const perBranch = 2 + baseParams.length;
-  const chunkSize = Math.max(1, Math.floor(96 / perBranch));
+  // One statement per branch, all in a single batch: production D1 caps the
+  // number of terms in a compound SELECT, so UNION ALL is not an option for a
+  // collection with many addresses. Each statement is an indexed, ordered,
+  // limited lookup; the merge happens here.
+  const stmts = branches.map((b) =>
+    db
+      .prepare(
+        `SELECT ${MESSAGE_COLUMNS}, m.ts AS cur_ts, m.id AS cur_id
+           FROM messages m LEFT JOIN addresses a ON a.address = m.monitored_address
+          WHERE ${b.col} = ? AND ${baseWhere.join(' AND ')}
+          ORDER BY m.${order.replace(/, /g, ', m.')} LIMIT ?`
+      )
+      .bind(b.value, ...baseParams, opts.limit)
+  );
   const results: Record<string, unknown>[] = [];
-  for (let i = 0; i < branches.length; i += chunkSize) {
-    const chunk = branches.slice(i, i + chunkSize);
-    const params: unknown[] = [];
-    const sql = chunk
-      .map((b) => {
-        params.push(b.value, ...baseParams, opts.limit);
-        return `SELECT * FROM (
-          SELECT ${MESSAGE_COLUMNS}, m.ts AS cur_ts, m.id AS cur_id
-            FROM messages m LEFT JOIN addresses a ON a.address = m.monitored_address
-           WHERE ${b.col} = ? AND ${baseWhere.join(' AND ')}
-           ORDER BY m.${order.replace(/, /g, ', m.')} LIMIT ?)`;
-      })
-      .join(' UNION ALL ');
-    params.push(opts.limit * chunk.length);
-    const res = await db
-      .prepare(`SELECT * FROM (${sql}) ORDER BY ${order} LIMIT ?`)
-      .bind(...params)
-      .all<Record<string, unknown>>();
-    results.push(...res.results);
+  for (let i = 0; i < stmts.length; i += 20) {
+    const res = await db.batch<Record<string, unknown>>(stmts.slice(i, i + 20));
+    for (const r of res) results.push(...r.results);
   }
-  if (branches.length > chunkSize) {
-    const key = (r: Record<string, unknown>) => [num(r, 'likes'), num(r, 'cur_ts'), num(r, 'cur_id')];
-    results.sort((x, y) => {
-      const a = key(x);
-      const b = key(y);
-      if (opts.sort === 'hot' && a[0] !== b[0]) return b[0] - a[0];
-      return b[1] - a[1] || b[2] - a[2];
-    });
-  }
+  const key = (r: Record<string, unknown>) => [num(r, 'likes'), num(r, 'cur_ts'), num(r, 'cur_id')];
+  results.sort((x, y) => {
+    const a = key(x);
+    const b = key(y);
+    if (opts.sort === 'hot' && a[0] !== b[0]) return b[0] - a[0];
+    return b[1] - a[1] || b[2] - a[2];
+  });
 
   const seen = new Set<number>();
   const messages: Message[] = [];
