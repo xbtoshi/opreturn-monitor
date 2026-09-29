@@ -156,3 +156,69 @@ describe('feedview: the inlined client copy is the same code', () => {
     }
   });
 });
+
+describe('feedview: message page and chat rooms', () => {
+  const bie1 = { id: 21, txid: 'f'.repeat(64), address: 'bc1ql4mfu6aundtkksxklfajs2h3t9nzcd6gyqjlte', content: 'Encrypted to the key behind bc1ql4mfu6aundtkksxklfajs2h3t9nzcd6gyqjlte QklFMQNYZayNaeJgXiAtazTnKU8X2fMlvFUBF3AzSB', category: 'Contact / Negotiation', protocol: 'text', likes: 4, block_height: 969_050, block_time: 1_700_000_000, fee_sats: 1200, fee_rate: 3, sender: 'bc1qblockstream000000000', collection_id: 1 };
+  const pgpEnc = { id: 22, txid: '1'.repeat(64), address: 'bc1qblockstream000000000', content: 'Reply below\n-----BEGIN PGP MESSAGE-----\nabc\n-----END PGP MESSAGE-----', category: null, protocol: 'text', likes: 0, block_height: 969_051, block_time: 1_700_000_700, sender: 'bc1ql4mfu6aundtkksxklfajs2h3t9nzcd6gyqjlte' };
+  const withOps = { ...proto, ops: [{ vout: 0, protocol: 'ico-20', op: 'transfer', tick: 'LEAF', amount: '1630000', payload_hex: '7b2270223a2269636f2d3230227d' }], fee_sats: 500 };
+
+  it('renders the detail card with envelope, ops, facts and related links', () => {
+    const h = FV.detailHTML(view({ pathname: '/m/' + bie1.txid, detail: bie1, related: [text, proto] }));
+    const order = ['<main class="page"><button class="back" data-action="back">', '<div class="dgrid"><div class="dmain">', '<div class="artifact"><div class="meta">', 'class="catl" href="/cat/contact-negotiation"', 'BIE1 ECIES</span>', '<blockquote class="', 'id="env-' + bie1.txid + '"', 'data-action="open-decrypt" data-txid="' + bie1.txid + '" data-payload="QklFMQNYZayNaeJgXiAtazTnKU8X2fMlvFUBF3AzSB" data-addr="' + bie1.address + '"', 'data-action="toggle-armor" data-target="armor-det-' + bie1.txid + '"', 'id="dec-' + bie1.txid + '"', 'id="armor-det-' + bie1.txid + '"', '<div class="acts"><span class="vg big">', 'href="/c/coldcard-exploit-bulletin-board/chat">Open in chat room</a>', 'MORE FROM COLDCARD EXPLOIT', 'href="/m/' + text.txid + '"', '<div class="facts"><span class="h">ON-CHAIN RECORD</span>', 'data-copy="' + bie1.txid + '"', '<a href="/block/969050">#969,050</a> · 2023-11-14', '3 sat/vB · 1,200 sats <span id="feeusd"', '<span class="k">SENDER</span>', 'href="/c/coldcard-exploit-bulletin-board">Coldcard Exploit Bulletin Board</a>', '(AI)', '<span class="k">SIZE</span><span class="v">', 'bytes</span>', '22:13 UTC', 'https://mempool.space/tx/' + bie1.txid];
+    let pos = -1;
+    for (const needle of order) { const i = h.indexOf(needle, pos + 1); expect(i, needle).toBeGreaterThan(pos); pos = i; }
+    const p = FV.detailHTML(view({ pathname: '/m/' + proto.txid, detail: withOps }));
+    expect(p).toContain('DECODED OP_RETURN OUTPUTS · 1');
+    expect(p).toContain('<div class="op"><span>vout 0</span><a class="pl tok" href="/p/ico-20">ICO-20</a><span>transfer</span><code>1,630,000</code><a href="/tick/LEAF"');
+    expect(p).toContain('<span class="hex">7b2270223a2269636f2d3230227d</span>');
+    expect(p).toContain('<blockquote class="proto">');
+    expect(p).toContain('<span class="k">CATEGORY</span><span class="v">—</span>');
+    const e = FV.detailHTML(view({ pathname: '/m/x', detail: pgpEnc }));
+    expect(e).toContain('class="crypto-envelope pgp"');
+    expect(e).toContain('Inspect PGP Armor');
+    expect(e).toContain('>Reply below</blockquote>');
+    expect(FV.detailHTML(view({ pathname: '/m/x', detail: { ...text, content: '</script><b>x</b>' } }))).not.toContain('</script>');
+  });
+
+  it('renders a chat room with day separators, grouped bubbles, the key-exchange banner and load-earlier', () => {
+    const chat = {
+      participants: [{ address: 'bc1qblockstream000000000', label: 'Blockstream Security (responder)' }, { address: bie1.address, label: 'Whitehat (peg-out auditor)' }],
+      messages: [
+        { ...text, id: 31, txid: '3'.repeat(64), sender: 'bc1qanon0000000000000000000', address: 'bc1qblockstream000000000', block_time: 1_700_000_000 },
+        { ...text, id: 32, txid: '4'.repeat(64), sender: 'bc1qanon0000000000000000000', address: 'bc1qblockstream000000000', block_time: 1_700_000_100, content: 'second line' },
+        { ...bie1, id: 33, txid: '5'.repeat(64), block_time: 1_700_100_000 },
+        { ...pgpEnc, id: 34, txid: '6'.repeat(64), block_time: 1_700_100_600, is_mempool: 1 },
+      ],
+      nextBefore: 'older',
+    };
+    const h = FV.chatHTML(view({ pathname: '/c/coldcard-exploit-bulletin-board/chat', filter: 1, chat }));
+    const order = ['<main class="page narrow">', 'CHAT ROOM · OLDEST TO NEWEST', 'page-title">Coldcard Exploit Bulletin Board<', '<div class="chips"><a class="chip active" href="/c/coldcard-exploit-bulletin-board/chat">', '<div class="keb" id="keb">', '<div class="room" id="room-log" data-scroll="bottom">', '<button class="btn-more" data-action="chat-earlier">', '<div class="day">2023-11-14</div>', '<div class="turn"><div class="who-line" style="color:#', '<span class="to">→ Blockstream Security</span>', 'data-action="open-msg" data-txid="' + '3'.repeat(64) + '"', '<div class="turn"><div class="bubble">', 'second line', '<div class="day">2023-11-16</div>', '<div class="turn party"><div class="who-line" style="color:var(--sig)"><span>Blockstream Security</span><span class="to">\u2192 Whitehat</span>', 'id="env-' + '5'.repeat(64) + '"', 'data-target="armor-' + '5'.repeat(64) + '"', '<div class="bubble mem">', 'class="crypto-envelope pgp"', '<span class="st mem">', '<div class="roomfoot">', 'ETCH A REPLY'];
+    let pos = -1;
+    for (const needle of order) { const i = h.indexOf(needle, pos + 1); expect(i, needle).toBeGreaterThan(pos); pos = i; }
+    expect((h.match(/class="who-line"/g) || []).length).toBe(3);
+    const empty = FV.chatHTML(view({ pathname: '/a/bc1qx/chat', address: 'bc1qx', chat: { messages: [], participants: [], nextBefore: null } }));
+    expect(empty).toContain('page-title">bc1qx<');
+    expect(empty).toContain('No messages in this room yet.');
+    expect(empty).not.toContain('id="keb"');
+    expect(FV.chatHTML(view({ pathname: '/rooms', chat: null }))).toContain('page-title">Chat rooms<');
+  });
+
+  it('the inlined client copy renders the message page and chat rooms identically too', () => {
+    const ui = readFileSync(new URL('../src/ui.ts', import.meta.url), 'utf8');
+    const src = ui.slice(ui.indexOf('/*__FEEDVIEW_START__*/'), ui.indexOf('/*__FEEDVIEW_END__*/')).replace(/\\\$\{/g, '${').replace(/\\`/g, '`').replace(/\\\\/g, '\\');
+    const clientFV = new Function(src + '\nreturn FV;')() as typeof FV;
+    const chat = { participants: [{ address: bie1.address, label: 'Whitehat' }], messages: [{ ...text, sender: 'bc1qanon' }, { ...bie1, block_time: 1_700_100_000 }, { ...image, sender: bie1.address, block_time: 1_700_100_100 }], nextBefore: null };
+    for (const v of [
+      view({ pathname: '/m/' + bie1.txid, detail: bie1, related: [text, proto] }),
+      view({ pathname: '/m/' + proto.txid, detail: withOps, related: [] }),
+      view({ pathname: '/m/x', detail: pgpEnc }),
+      view({ pathname: '/m/y', detail: image, related: [signed] }),
+      view({ pathname: '/c/coldcard-exploit-bulletin-board/chat', filter: 1, chat }),
+      view({ pathname: '/rooms', filter: 2, chat }),
+      view({ pathname: '/a/' + bie1.address + '/chat', address: bie1.address, chat }),
+    ]) {
+      if (v.detail) expect(clientFV.detailHTML(v as never)).toBe(FV.detailHTML(v as never));
+      else expect(clientFV.chatHTML(v)).toBe(FV.chatHTML(v));
+    }
+  });
+});

@@ -1,7 +1,8 @@
 /**
- * Feed view: the one renderer for feed-style screens (/feed, /c, /a, /p,
- * /tick, /block, /cat), used verbatim by the Worker for the server-rendered
- * page and by the inline client script after the assembler inlines this file.
+ * Shared view renderer for feed-style screens (/feed, /c, /a, /p, /tick,
+ * /block, /cat), the message page (/m) and chat rooms (/rooms, /c/…/chat,
+ * /a/…/chat), used verbatim by the Worker for the server-rendered page and by
+ * the inline client script after the assembler inlines this file.
  *
  * Rules: no imports, no DOM, no globals. Every function that needs page state
  * takes a view object `s` (the client's state plus `pathname`/`search`).
@@ -348,6 +349,133 @@ var FV = (function () {
     return h;
   }
 
+  /* ---- message detail ---- */
+  function clock(ts) { return new Date(ts * 1000).toISOString().slice(11, 16) + ' UTC'; }
+  function dateOf(ts) { return new Date(ts * 1000).toISOString().slice(0, 10); }
+  function fmtSats(n) { if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M'; if (n >= 1e4) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K'; return fmt(n); }
+  function byteSize(text) { try { return new TextEncoder().encode(text || '').length + ' bytes'; } catch (e) { return String(text || '').length + ' chars'; } }
+  function factRow(k, v, copyable) { return '<div class="f"><span class="k">' + esc(k) + '</span><span class="v">' + (copyable ? '<button data-action="copy" data-copy="' + attr(v) + '" title="copy">' + esc(v) + '</button>' : v) + '</span></div>'; }
+  /** Envelope UI shared by the detail card and chat bubbles; `armorPrefix` keeps the two id namespaces apart. */
+  function envelopeHTML(m, env, armorPrefix, sub) {
+    var h = '';
+    if (env.type === 'bie1') {
+      h += '<div class="crypto-envelope bie1" id="env-' + attr(m.txid) + '"><div class="env-head"><span class="env-icon">⚡</span><div class="env-info"><div class="env-title">Electrum BIE1 ECIES Encrypted</div><div class="env-sub">Recipient: <code>' + esc(sub) + '</code> (secp256k1)</div></div></div>';
+      h += '<div class="env-actions"><button class="env-btn decrypt-btn" data-action="open-decrypt" data-txid="' + attr(m.txid) + '" data-payload="' + attr(env.bie1Payload) + '" data-addr="' + attr(m.address) + '">🔑 Decrypt with Private Key</button><button class="env-btn" data-action="copy" data-copy="' + attr(env.bie1Payload) + '">📋 Copy Payload</button><button class="env-btn" data-action="toggle-armor" data-target="' + armorPrefix + attr(m.txid) + '">🔍 Raw Payload</button></div>';
+      h += '<div class="env-decrypted" id="dec-' + attr(m.txid) + '" style="display:none"></div><div class="env-armor" id="' + armorPrefix + attr(m.txid) + '" style="display:none"><pre><code>' + esc(env.bie1Payload) + '</code></pre></div></div>';
+    } else if (env.type === 'pgp-encrypted') {
+      h += '<div class="crypto-envelope pgp" id="env-' + attr(m.txid) + '"><div class="env-head"><span class="env-icon">🔒</span><div class="env-info"><div class="env-title">Encrypted for Blockstream Security</div><div class="env-sub">RSA-4096 Subkey: <code>BB332D31CBA44EDF</code></div></div></div>';
+      h += '<div class="env-actions"><button class="env-btn" data-action="toggle-armor" data-target="' + armorPrefix + attr(m.txid) + '">🔍 Inspect PGP Armor</button><button class="env-btn" data-action="copy" data-copy="' + attr(env.pgpArmor || m.content) + '">📋 Copy PGP</button><a class="env-btn" href="https://blockstream.com/pgp.txt" target="_blank" rel="noopener">🔑 Public Key ↗</a></div>';
+      h += '<div class="env-armor" id="' + armorPrefix + attr(m.txid) + '" style="display:none"><pre><code>' + esc(env.pgpArmor || m.content) + '</code></pre></div></div>';
+    } else if (env.type === 'pgp-signed' && env.pgpArmor) {
+      h += '<div class="env-armor-toggle"><button class="env-text-btn" data-action="toggle-armor" data-target="' + armorPrefix + attr(m.txid) + '">🔍 Inspect raw PGP signature</button><div class="env-armor" id="' + armorPrefix + attr(m.txid) + '" style="display:none"><pre><code>' + esc(env.pgpArmor) + '</code></pre></div></div>';
+    }
+    return h;
+  }
+  function signedBadgeHTML(env, keyLabel) { return '<div class="crypto-sig-badge"><span class="sig-icon">🛡️</span><span>Signed by <strong>' + esc(env.signer || 'Blockstream Security') + '</strong></span><span>' + keyLabel + ' <code>' + esc(env.signerKey || '4AC8CC886844A2D6') + '</code></span><a href="https://blockstream.com/pgp.txt" target="_blank" rel="noopener">pgp.txt ↗</a></div>'; }
+  function detailHTML(s) {
+    var m = s.detail;
+    var proto = isProto(m); var hostile = HOSTILE[m.category]; var env = parseCryptoEnvelope(m.content); var media = splitMedia(m.content);
+    var col = m.collection_id ? colById(s, m.collection_id) : null;
+    var qtext = displayText(m); var qlen = qtext.length; var qcls = proto ? 'proto' : (qlen > 600 ? 'long' : (qlen > 240 ? 'med' : ''));
+    var h = '<main class="page"><button class="back" data-action="back">← Back to feed</button><div class="dgrid"><div class="dmain">';
+    h += '<div class="artifact"><div class="meta"><span class="dot ' + (proto ? 'tok' : catDot(m.category)) + '"></span>';
+    h += proto ? '<a class="catl tok" href="/p/' + encodeURIComponent(m.protocol) + '">' + esc(protoLabel(m.protocol)) + '</a>' : (m.category ? '<a class="catl' + (hostile ? ' sig' : '') + '" href="/cat/' + encodeURIComponent(catSlug(m.category)) + '">' + esc(m.category) + '</a>' : '<span class="catl">Unclassified</span>');
+    h += envBadges(m);
+    h += '<span class="st ' + (m.is_mempool ? 'mem' : 'conf') + '">' + (m.is_mempool ? '◷ IN MEMPOOL' : '✓ CONFIRMED') + '</span></div>';
+    if (env && env.isSigned) h += signedBadgeHTML(env, 'Key ID:');
+    if (proto) h += opLine(m);
+    h += '<blockquote class="' + qcls + '">' + esc(qtext) + '</blockquote>';
+    h += mediaHTML(media);
+    if (env) h += envelopeHTML(m, env, 'armor-det-', m.address);
+    if (m.ops && m.ops.length) {
+      h += '<div class="ops"><span class="slabel" style="padding:12px 0 4px">DECODED OP_RETURN OUTPUTS · ' + m.ops.length + '</span>';
+      m.ops.forEach(function (o) { h += '<div class="op"><span>vout ' + (o.vout < 0 ? '?' : o.vout) + '</span><a class="pl' + (isTokenProto(o.protocol) ? ' tok' : '') + '" href="/p/' + encodeURIComponent(o.protocol) + '">' + esc(protoLabel(o.protocol)) + '</a>' + (o.op ? '<span>' + esc(o.op) + '</span>' : '') + (o.amount ? '<code>' + esc(fmtAmt(o.amount)) + '</code>' : '') + (o.tick ? '<a href="/tick/' + encodeURIComponent(o.tick) + '" style="color:var(--tok);font-weight:600">$' + esc(o.tick) + '</a>' : '') + (o.payload_hex ? '<span class="hex">' + esc(o.payload_hex.length > 200 ? o.payload_hex.slice(0, 200) + '…' : o.payload_hex) + '</span>' : '') + '</div>'; });
+      h += '</div>';
+    }
+    h += '<div class="acts">' + voteGroup(s, m, true);
+    h += '<a class="act" href="' + attr(col ? '/c/' + colSlug(col) + '/chat' : '/a/' + encodeURIComponent(m.address) + '/chat') + '">Open in chat room</a>';
+    h += '<button class="share" data-action="share">Share card</button></div></div>';
+    var related = s.related || [];
+    if (related.length) {
+      h += '<div class="more"><span class="slabel">MORE FROM ' + esc((col ? shortCol(col) : shortAddr(m.address)).toUpperCase()) + '</span>';
+      related.forEach(function (r) { h += '<a href="/m/' + attr(r.txid) + '"><span>' + esc(displayText(r).replace(/\n+/g, ' / ')) + '</span><span>' + esc(timeAgo(msgTime(r), s.now)) + '</span></a>'; });
+      h += '</div>';
+    }
+    h += '<p class="caption">Etched into the Bitcoin blockchain. It cannot be deleted, edited, or taken down.</p>';
+    h += '</div>';
+    h += '<div class="facts"><span class="h">ON-CHAIN RECORD</span>';
+    h += factRow('TXID', m.txid, true);
+    h += factRow('BLOCK', m.block_height != null ? '<a href="/block/' + m.block_height + '">#' + fmt(m.block_height) + '</a>' + (m.block_time != null ? ' · ' + dateOf(m.block_time) : '') : (m.is_mempool ? 'unconfirmed (in mempool)' : '—'));
+    h += factRow('FEE', (feeText(m) || '—') + (m.fee_sats != null ? ' · ' + fmtSats(m.fee_sats) + ' sats <span id="feeusd" style="color:var(--fg4)">' + esc(s.feeUsd || '') + '</span>' : ''));
+    h += factRow('ADDRESS', m.address, true);
+    if (m.sender && m.sender !== m.address) h += factRow('SENDER', m.sender, true);
+    if (m.recipient && m.recipient !== m.address) h += factRow('RECIPIENT', m.recipient, true);
+    h += factRow('COLLECTION', col ? '<a href="/c/' + attr(colSlug(col)) + '">' + esc(col.name) + '</a>' : '—');
+    h += factRow('PROTOCOL', proto ? '<a href="/p/' + encodeURIComponent(m.protocol) + '">' + esc(m.protocol) + '</a>' : 'text');
+    h += factRow('CATEGORY', proto ? '—' : (m.category ? '<a href="/cat/' + encodeURIComponent(catSlug(m.category)) + '">' + esc(m.category) + '</a> (AI)' : 'unclassified'));
+    h += factRow('SIZE', byteSize(m.content));
+    h += factRow('TIME', esc(timeAgo(msgTime(m), s.now)) + (m.block_time != null ? ' · ' + clock(m.block_time) : ''));
+    h += '<a class="ext" href="https://mempool.space/tx/' + attr(m.txid) + '" target="_blank" rel="noopener">VIEW ON MEMPOOL.SPACE ↗</a></div>';
+    h += '</div></main>';
+    return h;
+  }
+
+  /* ---- chat rooms ---- */
+  var AVCOL = ['#d9481f', '#b5851f', '#5b7a4a', '#3d6e8f', '#7a4f9e', '#a03c5c', '#2f8a7d', '#6b5b3e'];
+  function hashStr(str) { var h = 7; str = String(str || ''); for (var i = 0; i < str.length; i++) { h = ((h * 31) + str.charCodeAt(i)) >>> 0; } return h; }
+  function avatarColor(a) { return AVCOL[hashStr(a) % AVCOL.length]; }
+  function partyOf(s, addr) { var ps = (s.chat && s.chat.participants) || []; for (var i = 0; i < ps.length; i++) { if (ps[i].address === addr) return ps[i]; } return null; }
+  function shortLabel(l) { return String(l || '').split(' (')[0]; }
+  function partyName(p, addr) { return p && p.label ? shortLabel(p.label) : shortAddr(addr); }
+  function bubbleHTML(s, m, first, multi) {
+    var sender = m.sender || ''; var party = sender ? partyOf(s, sender) : null;
+    var name = sender ? partyName(party, sender) : 'unknown sender';
+    var color = party ? 'var(--sig)' : avatarColor(sender || m.txid);
+    var env = parseCryptoEnvelope(m.content); var bodyHTML = '';
+    if (env) {
+      if (env.isSigned) bodyHTML += signedBadgeHTML(env, 'Key:');
+      if (env.leadText) { var ltext = env.leadText; var llong = ltext.length > 520; if (llong) ltext = ltext.slice(0, 480) + '…'; bodyHTML += '<div class="bubble-text" data-action="open-msg" data-txid="' + attr(m.txid) + '">' + esc(ltext) + (llong ? '<span class="readmore">read full message →</span>' : '') + '</div>'; }
+      bodyHTML += envelopeHTML(m, env, 'armor-', shortAddr(m.address));
+    } else {
+      var text = displayText(m); var long = text.length > 520; if (long) text = text.slice(0, 480) + '…';
+      bodyHTML = '<div class="bubble-text" data-action="open-msg" data-txid="' + attr(m.txid) + '">' + esc(text) + (long ? '<span class="readmore">read full message →</span>' : '') + '</div>' + mediaHTML(splitMedia(m.content));
+    }
+    var h = '<div class="turn' + (party ? ' party' : '') + '">';
+    if (first) { h += '<div class="who-line" style="color:' + color + '"><span>' + esc(name) + '</span>'; if (multi && m.address !== sender) h += '<span class="to">→ ' + esc(partyName(partyOf(s, m.address), m.address)) + '</span>'; h += '</div>'; }
+    h += '<div class="bubble' + (m.is_mempool ? ' mem' : '') + '">' + bodyHTML + '</div>';
+    h += '<div class="bubble-meta">' + voteGroup(s, m, false);
+    if (m.category) h += '<span class="cat' + (HOSTILE[m.category] ? ' sig' : '') + '">' + esc(m.category) + '</span>';
+    if (m.is_mempool) h += '<span class="st mem">◷ in mempool</span>';
+    if (m.dup_count > 1) h += '<span title="Same message broadcast in ' + m.dup_count + ' separate transactions">×' + m.dup_count + ' txs</span>';
+    h += '<span>' + esc(clock(tsOf(m))) + '</span></div></div>';
+    return h;
+  }
+  function chatHTML(s) {
+    var chat = s.chat || { messages: [], participants: [], nextBefore: null };
+    var col = s.filter ? colById(s, s.filter) : null;
+    var title = s.address ? s.address : (col ? col.name : 'Chat rooms');
+    var h = '<main class="page narrow"><div class="tt"><span class="kicker">CHAT ROOM · OLDEST TO NEWEST</span><h2 class="title page-title">' + esc(title) + '</h2></div>';
+    h += '<div class="chips">'; (s.collections || []).forEach(function (c) { h += '<a class="chip' + (s.filter === c.id ? ' active' : '') + '" href="/c/' + attr(colSlug(c)) + '/chat">' + esc(shortCol(c)) + '</a>'; }); h += '</div>';
+    var msgs = chat.messages || [];
+    if (msgs.some(function (m) { return parseCryptoEnvelope(m.content); })) {
+      h += '<div class="keb" id="keb"><button class="keb-head" data-action="keb-toggle"><span>🔐</span><span>CRYPTOGRAPHIC KEY EXCHANGE ACTIVE</span><span class="keb-badge">On-Chain PGP / ECIES</span><span style="margin-left:8px">▾</span></button><div class="keb-body">';
+      h += '<div class="keb-party"><div class="keb-role">RESPONDER / PROTOCOL DEFENSE</div><div class="keb-name">Blockstream Security Reporting</div><div class="keb-key"><span>PGP Signing Key: <code>4AC8CC886844A2D6</code></span><span>Encryption Subkey: <code>BB332D31CBA44EDF</code> (RSA-4096)</span></div><div class="keb-fp">Fingerprint: <code>1176 542D A98E 71E1 3372 2EF7 4AC8 CC88 6844 A2D6</code></div><div class="keb-links"><a href="https://blockstream.com/pgp.txt" target="_blank" rel="noopener">Download pgp.txt ↗</a><a href="https://keyserver.ubuntu.com/pks/lookup?search=0x1176542DA98E71E133722EF74AC8CC886844A2D6&fingerprint=on&op=index" target="_blank" rel="noopener">Ubuntu Keyserver ↗</a></div></div>';
+      h += '<div class="keb-divider">⇄</div>';
+      h += '<div class="keb-party"><div class="keb-role">CALLER / WHITEHAT HOLDING</div><div class="keb-name">Peg-Out Auditor Address</div><div class="keb-key"><span>Bitcoin Address: <code>bc1ql4mfu...jlte</code></span><span>Scheme: <strong>Electrum BIE1 ECIES</strong> (secp256k1)</span></div><div class="keb-desc">Blockstream encrypts payloads to the whitehat using Bitcoin secp256k1 ECDH + AES-128-CBC + HMAC-SHA256. The whitehat replies using Blockstream’s RSA-4096 PGP subkey.</div><div class="keb-links"><a href="/a/bc1ql4mfu6aundtkksxklfajs2h3t9nzcd6gyqjlte/chat">Filter Whitehat Chat ↗</a></div></div>';
+      h += '</div></div>';
+    }
+    var parts = chat.participants || []; var multi = parts.length > 1;
+    h += '<div class="room" id="room-log" data-scroll="bottom">';
+    if (chat.nextBefore) h += '<button class="btn-more" data-action="chat-earlier">↑ Load earlier</button>';
+    if (!msgs.length) h += '<span class="empty" style="padding:30px 0">No messages in this room yet.</span>';
+    var lastDay = '', lastSender = null, lastTs = 0;
+    msgs.forEach(function (m) { var ts = tsOf(m); var day = dateOf(ts); if (day !== lastDay) { h += '<div class="day">' + day + '</div>'; lastDay = day; lastSender = null; } var sender = m.sender || ''; var first = sender !== lastSender || ts - lastTs > 600; h += bubbleHTML(s, m, first, multi); lastSender = sender; lastTs = ts; });
+    h += '</div>';
+    h += '<div class="roomfoot"><span>New replies land with each block · <button class="clearall" data-action="share-room" style="padding:0">SHARE ROOM ↗</button></span><a class="etch" href="/guide">ETCH A REPLY →</a></div>';
+    h += '<p class="caption">Every bubble is an OP_RETURN output etched into Bitcoin. Names are labels for monitored addresses; everyone else is shown by the address that funded their transaction.</p></main>';
+    return h;
+  }
+
   return {
     HOSTILE: HOSTILE, PROTO_LABEL: PROTO_LABEL, PROTO_BLURB: PROTO_BLURB,
     esc: esc, attr: attr, fmt: fmt, shortAddr: shortAddr, catCode: catCode, timeAgo: timeAgo, msgTime: msgTime, tsOf: tsOf, feeText: feeText, whenText: whenText,
@@ -356,7 +484,9 @@ var FV = (function () {
     colById: colById, colName: colName, colBySlug: colBySlug, colIndex: colIndex, catName: catName, voteGroup: voteGroup,
     routeName: routeName, defaultSort: defaultSort, feedParams: feedParams, feedQuery: feedQuery, sortHref: sortHref, kindHref: kindHref, withKind: withKind,
     feedFilters: feedFilters, visibleFeed: visibleFeed, feedTitle: feedTitle, feedKicker: feedKicker, filtersHTML: filtersHTML, mobileCtlHTML: mobileCtlHTML,
-    rowHTML: rowHTML, protocolHeadHTML: protocolHeadHTML, protocolTailHTML: protocolTailHTML, tickHeadHTML: tickHeadHTML, blockHeadHTML: blockHeadHTML, railHTML: railHTML, feedHTML: feedHTML
+    rowHTML: rowHTML, protocolHeadHTML: protocolHeadHTML, protocolTailHTML: protocolTailHTML, tickHeadHTML: tickHeadHTML, blockHeadHTML: blockHeadHTML, railHTML: railHTML, feedHTML: feedHTML,
+    clock: clock, dateOf: dateOf, fmtSats: fmtSats, factRow: factRow, detailHTML: detailHTML,
+    avatarColor: avatarColor, partyOf: partyOf, partyName: partyName, shortLabel: shortLabel, bubbleHTML: bubbleHTML, chatHTML: chatHTML
   };
 })();
 export default FV;

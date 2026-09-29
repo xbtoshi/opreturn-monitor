@@ -44,12 +44,12 @@ import {
   generateRobotsTxt,
   generateSitemapXml,
   renderAddressMarkdown,
-  renderAddressSsr,
   renderCategoryMarkdown,
   renderCollectionMarkdown,
-  renderCollectionSsr,
   renderCollectionExtras,
   renderFeedPage,
+  renderDetailPage,
+  renderChatPage,
   renderCollectionsMarkdown,
   renderCollectionsSsr,
   renderFeedMarkdown,
@@ -58,7 +58,6 @@ import {
   renderLandingMarkdown,
   renderLandingSsr,
   renderMessageMarkdown,
-  renderMessageSsr,
   messageHeadline,
   messageExcerpt,
   renderNotFoundSsr,
@@ -66,7 +65,6 @@ import {
   renderProtocolMarkdown,
   renderProtocolsSsr,
   renderProtocolsMarkdown,
-  renderRoomsSsr,
   renderTickMarkdown,
   renderBlockMarkdown,
 } from './seo';
@@ -185,11 +183,29 @@ function hasLeadingZeroBits(hex: string, bits: number): boolean {
 
 app.get('/api/health', (c) => c.json({ ok: true, time: new Date().toISOString() }));
 
+/**
+ * USD price at a timestamp, through the edge cache so the message page (server)
+ * and the client's /api/price call resolve the same figure. Past days are
+ * keyed per day and kept for a day; today is keyed per ten minutes.
+ */
+async function priceUsdAt(c: Context<Bindings>, ts: number): Promise<number | null> {
+  const now = Math.floor(Date.now() / 1000);
+  const past = now - ts > 86400;
+  const bucket = past ? Math.floor(ts / 86400) * 86400 : Math.floor(ts / 600) * 600;
+  return cachedValue<number | null>(originOf(c), `price:${bucket}`, past ? 86400 : 600, () =>
+    fetchHistoricalPriceUsd(mempoolHosts(c.env), past ? bucket + 43200 : ts).catch(() => null)
+  );
+}
+
+function feeUsdText(feeSats: number | null | undefined, usd: number | null): string {
+  return feeSats != null && typeof usd === 'number' ? `\u2248 $${((feeSats / 1e8) * usd).toFixed(2)}` : '';
+}
+
 app.get('/api/price', async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const raw = Number(c.req.query('ts'));
   const ts = Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), now) : now;
-  const usd = await fetchHistoricalPriceUsd(mempoolHosts(c.env), ts);
+  const usd = await priceUsdAt(c, ts);
   // Past-day prices never change; today's price can drift.
   const maxAge = usd == null ? 60 : now - ts > 86400 ? 86400 : 600;
   return c.json({ usd }, 200, { 'cache-control': `public, max-age=${maxAge}` });
@@ -688,10 +704,6 @@ async function collectionMap(db_inst: D1Database): Promise<Map<number, Collectio
   return new Map(cols.map((c) => [c.id, c]));
 }
 
-async function collectionNames(db_inst: D1Database): Promise<Map<number, string>> {
-  const cols = await db.listCollections(db_inst).catch(() => []);
-  return new Map(cols.map((c) => [c.id, c.name]));
-}
 
 /**
  * The view for a feed-style page, built the way the client builds its state
@@ -756,13 +768,36 @@ async function feedViewFor(
   return { view, shell };
 }
 
-/** First page of records for a server-rendered listing; never throws. */
-async function ssrList(db_inst: D1Database, opts: Partial<db.GetMessagesOpts>): Promise<{ msgs: import('./types').Message[]; names: Map<number, string> }> {
-  const [res, names] = await Promise.all([
-    db.getMessages(db_inst, { sort: 'new', limit: 30, ...opts } as db.GetMessagesOpts).catch(() => ({ messages: [] })),
-    collectionNames(db_inst),
-  ]);
-  return { msgs: res.messages, names };
+/** A view for the message page and chat rooms: shell data plus the page's own rows; no feed, sidebar hidden. */
+async function pageViewFor(c: Context<Bindings>, base: Partial<FeedView>): Promise<{ view: FeedView; shell: ShellData }> {
+  const shell = await shellFor(c);
+  const url = new URL(c.req.url);
+  const feed = shell.feed || { collections: [], categories: [], protocols: [], chain: null };
+  const view: FeedView = {
+    pathname: url.pathname,
+    search: url.search,
+    sort: 'new',
+    kind: 'all',
+    feed: [],
+    collections: feed.collections,
+    categories: feed.categories,
+    protocols: feed.protocols,
+    chain: feed.chain,
+    filter: base.filter ?? null,
+    address: base.address ?? null,
+    detail: base.detail,
+    related: base.related || [],
+    chat: base.chat ?? null,
+  };
+  return { view, shell };
+}
+
+/** The client's loadRelated(): the message's collection if it has one, else its address; newest 6, minus itself, keep 5. */
+async function relatedFor(d1: D1Database, msg: import('./types').Message): Promise<import('./types').Message[]> {
+  const res = await db
+    .getMessages(d1, msg.collection_id ? { collectionId: msg.collection_id, kind: 'all', sort: 'new', limit: 6 } : { address: msg.address, kind: 'all', sort: 'new', limit: 6 })
+    .catch(() => ({ messages: [] as import('./types').Message[] }));
+  return res.messages.filter((x) => x.txid !== msg.txid).slice(0, 5);
 }
 
 // ---------------------------------------------------------------------------
@@ -1446,14 +1481,17 @@ function partialResponse(html: string, canonical: string): Response {
 app.get('/rooms', async (c) => {
   const origin = originOf(c);
   const cols = await db.listCollections(c.env.DB).catch(() => []);
-  const best = cols.slice().sort((a, b) => b.message_count - a.message_count)[0];
+  let best: (typeof cols)[number] | undefined;
+  for (const col of cols) if (!best || (col.message_count || 0) > (best.message_count || 0)) best = col;
   if (wantsMarkdown(c)) {
     return markdownResponse(
       `# Chat rooms\n\nEvery collection is also a chat room: the on-chain conversation between monitored addresses and everyone writing to them.\n\n${cols.map((col) => `- [${col.name}](${origin}/c/${col.slug || col.id}/chat) (${col.message_count} messages)`).join('\n')}\n`,
       origin
     );
   }
-  const list = best ? await ssrList(c.env.DB, { collectionId: best.id, kind: 'all', sort: 'new', limit: 30 }) : { msgs: [], names: new Map<number, string>() };
+  // The client opens the room of the first collection with the highest message count, in list order.
+  const chat = best ? await db.getChat(c.env.DB, { collectionId: best.id, limit: 200 }).catch(() => null) : null;
+  const { view, shell } = await pageViewFor(c, { filter: best ? best.id : null, chat: chat ? { messages: chat.messages as unknown as FeedView['feed'], participants: chat.participants, nextBefore: chat.next_before } : null });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1466,8 +1504,8 @@ app.get('/rooms', async (c) => {
       url: origin + '/rooms',
       image: origin + '/og/default.png',
       jsonLd: crumbs,
-      initialHtml: renderRoomsSsr(cols, best ?? null, list.msgs),
-    }, await shellFor(c))
+      initialHtml: renderChatPage(view),
+    }, shell)
   );
 });
 
@@ -1551,7 +1589,13 @@ app.get('/m/:txid', async (c) => {
   if (wantsMarkdown(c)) {
     return markdownResponse(renderMessageMarkdown(origin, msg, colName), origin);
   }
-  const related = await ssrList(c.env.DB, { address: msg.address, kind: 'all', sort: 'new', limit: 7 });
+  const [related, { view, shell }, usd] = await Promise.all([
+    relatedFor(c.env.DB, msg),
+    pageViewFor(c, { detail: msg as unknown as FeedView['detail'] }),
+    msg.fee_sats != null ? priceUsdAt(c, msg.block_time ?? Math.floor(Date.now() / 1000)) : Promise.resolve(null),
+  ]);
+  view.related = related as unknown as FeedView['feed'];
+  view.feeUsd = feeUsdText(msg.fee_sats, usd);
 
   applyDiscoveryHeaders(c, origin);
   const previewText = messageExcerpt(msg, 2000) || msg.content || 'OP_RETURN';
@@ -1582,8 +1626,8 @@ app.get('/m/:txid', async (c) => {
       image: `${origin}/og/message/${txid}.png`,
       type: 'article',
       jsonLd: { '@context': 'https://schema.org', '@graph': [postSchema, crumbs] },
-      initialHtml: renderMessageSsr(msg, colName, related.msgs, related.names),
-    }, await shellFor(c))
+      initialHtml: renderDetailPage(view as FeedView & { detail: NonNullable<FeedView['detail']> }),
+    }, shell)
   );
 });
 
@@ -1674,7 +1718,8 @@ app.get('/c/:slug/chat', async (c) => {
       origin
     );
   }
-  const list = await ssrList(c.env.DB, { collectionId: col.id, kind: 'all', sort: 'new', limit: 30 });
+  const chat = await db.getChat(c.env.DB, { collectionId: col.id, limit: 200 }).catch(() => null);
+  const { view, shell } = await pageViewFor(c, { filter: col.id, chat: chat ? { messages: chat.messages as unknown as FeedView['feed'], participants: chat.participants, nextBefore: chat.next_before } : null });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1689,24 +1734,11 @@ app.get('/c/:slug/chat', async (c) => {
       url: `${origin}/c/${slug}/chat`,
       image: `${origin}/og/chat/collection/${slug}.png`,
       jsonLd: crumbs,
-      initialHtml: renderCollectionSsr(col, [], list.msgs),
-    }, await shellFor(c))
+      initialHtml: renderChatPage(view),
+    }, shell)
   );
 });
 
-/**
- * Address pages exist for any address ever seen, which is an unbounded URL
- * space. Only monitored addresses and addresses with a real record are
- * offered for indexing; the rest stay crawlable but noindex.
- */
-async function addressPageData(db_inst: D1Database, address: string) {
-  const [list, addrs] = await Promise.all([
-    ssrList(db_inst, { address, kind: 'all', sort: 'new', limit: 30 }),
-    db.listAddresses(db_inst).catch(() => []),
-  ]);
-  const monitored = addrs.find((a) => a.address === address);
-  return { list, monitored, indexable: Boolean(monitored) || list.msgs.length >= 3 };
-}
 
 app.get('/a/:address', async (c) => {
   const address = c.req.param('address');
@@ -1745,7 +1777,13 @@ app.get('/a/:address/chat', async (c) => {
       origin
     );
   }
-  const { list, indexable } = await addressPageData(c.env.DB, address);
+  const [chat, addrs] = await Promise.all([
+    db.getChat(c.env.DB, { address, limit: 200 }).catch(() => null),
+    db.listAddresses(c.env.DB).catch(() => []),
+  ]);
+  // Same rule as the address feed page: monitored, or at least three rows, or stay noindex.
+  const indexable = addrs.some((a) => a.address === address) || (chat?.messages.length ?? 0) >= 3;
+  const { view, shell } = await pageViewFor(c, { address, chat: chat ? { messages: chat.messages as unknown as FeedView['feed'], participants: chat.participants, nextBefore: chat.next_before } : null });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1760,8 +1798,8 @@ app.get('/a/:address/chat', async (c) => {
       image: `${origin}/og/chat/address/${encodeURIComponent(address)}.png`,
       noindex: !indexable,
       jsonLd: crumbs,
-      initialHtml: renderAddressSsr(address, list.msgs, list.names),
-    }, await shellFor(c))
+      initialHtml: renderChatPage(view),
+    }, shell)
   );
 });
 

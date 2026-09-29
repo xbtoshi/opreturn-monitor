@@ -57,6 +57,13 @@ export interface FeedView {
   extraHtml?: string;
   /** Fixed "now" for deterministic relative times (tests). */
   now?: number;
+  /** Message page: the message (with decoded ops) and up to five related rows. */
+  detail?: FeedMessage & { ops?: Array<{ vout: number; protocol: string; op: string | null; tick: string | null; amount: string | null; payload_hex?: string | null }> | null };
+  related?: FeedMessage[];
+  /** Message page: the fee in USD at the block's price, e.g. "≈ $1.30", resolved before rendering on both sides. */
+  feeUsd?: string;
+  /** Chat rooms: oldest-to-newest bubbles, the monitored participants and the cursor for earlier pages. */
+  chat?: { messages: FeedMessage[]; participants: Array<{ address: string; label: string | null }>; nextBefore: string | null } | null;
 }
 
 export interface FeedParams {
@@ -121,5 +128,16 @@ declare const FV: {
   rowHTML(s: FeedView, m: FeedMessage): string;
   railHTML(s: FeedView): string;
   feedHTML(s: FeedView): string;
+  clock(ts: number): string;
+  dateOf(ts: number): string;
+  fmtSats(n: number): string;
+  factRow(k: string, v: string, copyable?: boolean): string;
+  detailHTML(s: FeedView & { detail: NonNullable<FeedView['detail']> }): string;
+  avatarColor(a: string): string;
+  partyOf(s: FeedView, addr: string): { address: string; label: string | null } | null;
+  partyName(p: { label: string | null } | null, addr: string): string;
+  shortLabel(l: string | null | undefined): string;
+  bubbleHTML(s: FeedView, m: FeedMessage, first: boolean, multi: boolean): string;
+  chatHTML(s: FeedView): string;
 };
 export default FV;
