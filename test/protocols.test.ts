@@ -230,6 +230,8 @@ describe('residue detectors', () => {
   });
   it('files known bare tags as tag rows but leaves the same word inside prose alone', () => {
     expect(detectFromText('LIHG1')).toMatchObject({ protocol: 'tag', op: 'LIHG1' });
+    expect(detectFromText('lihg1')).toMatchObject({ protocol: 'tag', op: 'lihg1' });
+    expect(detectFromText('BURN')).toMatchObject({ protocol: 'tag' });
     expect(detectFromText('burn')).toMatchObject({ protocol: 'tag', op: 'burn' });
     expect(detectFromText('burn it all down')).toBeNull();
     expect(detectFromText('Dump the bags')).toBeNull();
@@ -242,8 +244,11 @@ describe('residue detectors', () => {
     expect(detectFromText(`${h}|depositor=bc1qmcxg88mrjrstttgxd7ej5dh4juul78rg6d0apf|`)).toMatchObject({ protocol: 'evm-hash', op: 'deposit' });
     expect(detectFromText('0x0EACE3577f013699322972Eda811AC781BC0DB84')).toMatchObject({ protocol: 'evm-hash', op: 'address' });
     expect(detectFromText('110f905;')).toMatchObject({ protocol: 'hash' });
-    expect(detectFromText('10e8ecc')).toMatchObject({ protocol: 'hash' });
-    for (const word of ['decade', 'facade', 'beaded', 'Deadbeef']) expect(detectFromText(word), word).toBeNull();
+    expect(detectFromText('830626a60e817fff3b5f6a02211410c2')).toMatchObject({ protocol: 'hash' });
+    for (const word of ['decade', 'facade', 'beaded', 'Deadbeef', 'face2face', 'deadc0de', 'b00bcafe', 'cafe1234', 'deadbeef1', 'a1b2c3d4', '10e8ecc']) {
+      expect(detectFromText(word), word).toBeNull();
+    }
+    for (const n of ['1234567890', '20260930', '1000000']) expect(detectFromText(n), n).toMatchObject({ protocol: 'binary' });
     expect(detectFromText('be2e5527aa5103056603f1d5a2abc73deda5785a3bc338d2fc203900a458df5f')).toMatchObject({ protocol: 'hash' });
     expect(detectFromText('52494646fa0500005745425056503820ee0500001024009d012a800080003eed6aad')).toMatchObject({ protocol: 'hash' });
   });

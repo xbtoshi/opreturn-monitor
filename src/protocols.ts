@@ -213,14 +213,19 @@ const PREFIX_PROTOCOLS: Array<{ re: RegExp; protocol: string; op?: (m: RegExpExe
  * markers, burn labels). Exact whole-content match only, so "burn it all"
  * stays prose. The cron's tag sweep finds new ones by repetition count.
  */
-export const TAG_WORDS = new Set(['LIHG1', 'LIHG2', 'GGJD', 'FJNY', 'Ordis', 'UETCL', 'Dump', 'AFEC1', 'UEOLU', 'XSXS', 'burn', 'SIGNL', 'ORDI']);
+export const TAG_WORDS = new Set(
+  ['LIHG1', 'LIHG2', 'GGJD', 'FJNY', 'Ordis', 'UETCL', 'Dump', 'AFEC1', 'UEOLU', 'XSXS', 'burn', 'SIGNL', 'ORDI', 'MMSS', 'XFLKF', 'CSCS', 'XXJPS', 'KRTCL'].map((w) => w.toLowerCase())
+);
 
 /** 0x-prefixed 32-byte hash, optionally followed by |key=value fields (bridge deposit receipts). */
 const RE_EVM_HASH_FIELDS = /^0x([0-9a-fA-F]{64})((?:\|[A-Za-z0-9_]+=[^|\s]*)+)\|?$/;
 /** A bare 20-byte EVM address. */
 const RE_EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
-/** A bare hex digest (sha256, txid, short commit hash...) with nothing else; needs a digit so words like "decade" stay prose. */
-const RE_BARE_HEX = /^(?=.*\d)[0-9a-fA-F]{7,};?$/;
+/**
+ * A bare hex digest with nothing else: 16+ hex chars, or the "1a2b3c4;" short-hash-with-semicolon
+ * shape. Both need a digit and a letter, so "decade", "cafe1234" and dates like 20260930 stay prose or binary.
+ */
+const RE_BARE_HEX = /^(?=.*\d)(?=.*[a-fA-F])(?:[0-9a-fA-F]{16,}|[0-9a-fA-F]{7};)$/;
 /** Nothing a person would read: only digits, punctuation and whitespace (emoji still count as a message). */
 const RE_NO_LETTERS = /^[\p{N}\p{P}\p{Z}\p{Cc}$+<=>^`|~]*$/u;
 
@@ -312,7 +317,7 @@ export function detectFromText(text: string): Omit<DecodedOp, 'vout' | 'payload_
     }
   }
 
-  if (TAG_WORDS.has(t)) {
+  if (TAG_WORDS.has(t.toLowerCase())) {
     return { protocol: 'tag', op: t, tick: null, amount: null, text: t };
   }
 

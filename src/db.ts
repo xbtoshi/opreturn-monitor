@@ -973,7 +973,19 @@ export async function listFrequentTokenGroups(db: D1Database, min: number, limit
     .all<Record<string, unknown>>();
   return results
     .map((r) => ({ address: str(r, 'address'), content_hash: str(r, 'content_hash'), content: str(r, 'content'), n: num(r, 'n') }))
-    .filter((g) => /^[A-Za-z0-9_$#-]{2,12}$/.test(g.content.trim()));
+    // Inscription-like only: a digit or at least two capitals. A repeated lowercase
+    // word ("hello", "thanks") is a popular message, not a marker; the fixed
+    // TAG_WORDS list covers the few lowercase markers we know.
+    .filter((g) => /^(?=.*(?:\d|[A-Z].*[A-Z]))[A-Za-z0-9_$#-]{2,12}$/.test(g.content.trim()));
+}
+
+/** Undo convertGroupToTag for one token: every `tag` row carrying it goes back to text (unlabelled). */
+export async function untag(db: D1Database, tag: string): Promise<number> {
+  const res = await db.batch([
+    db.prepare(`UPDATE ops SET protocol = 'text', op = NULL WHERE protocol = 'tag' AND op = ?`).bind(tag),
+    db.prepare(`UPDATE messages SET protocol = 'text' WHERE protocol = 'tag' AND trim(content) = ?`).bind(tag),
+  ]);
+  return Number(res[1]?.meta?.changes ?? 0);
 }
 
 /** Turn every row of a group into a `tag` protocol row (ops rewritten, labels cleared). */

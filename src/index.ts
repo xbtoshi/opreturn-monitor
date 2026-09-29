@@ -521,6 +521,11 @@ app.post('/api/admin/ai-test', adminGuard, async (c) => {
 app.post('/api/admin/reparse', adminGuard, async (c) => {
   // ?scope=text re-runs the detectors over rows already filed as text
   // (keyset: pass back next_after until it is null).
+  if (c.req.query('scope') === 'untag') {
+    const tag = (c.req.query('tag') || '').trim();
+    if (!tag) return jsonError('tag required', 400);
+    return c.json({ ok: true, tag, rows: await db.untag(c.env.DB, tag) });
+  }
   if (c.req.query('scope') === 'tags') {
     const min = Math.max(Number(c.req.query('min')) || TAG_MIN_REPEATS, 5);
     return c.json({ ok: true, ...(await sweepTags(c.env.DB, min)) });
