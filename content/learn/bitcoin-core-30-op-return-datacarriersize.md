@@ -47,7 +47,7 @@ Node operators who preferred the old behaviour can set `-datacarriersize=83` in 
 
 Early Bitcoin had no formal policy for data outputs, and people embedded data in fake public keys and addresses, which bloated the UTXO set because those outputs could never be pruned. OP_RETURN was formalised as the "proper" way to carry data precisely because a provably unspendable output can be dropped from the UTXO set the moment it is created.
 
-Core 0.9 (2014) relayed OP_RETURN payloads of up to 40 bytes. Core 0.12 (2016) raised the default to 80 bytes of data, 83 including the opcode and push. That 80-byte figure became folklore, and many explainers still describe it as "the OP_RETURN limit". It was always a default relay setting, and it stayed unchanged for almost a decade until 30.0.
+Core 0.9 (March 2014) relayed OP_RETURN payloads of up to 40 bytes. Core 0.11.0 (July 2015) raised the default to 80 bytes of data, 83 including the opcode and push. That 80-byte figure became folklore, and many explainers still describe it as "the OP_RETURN limit". It was always a default relay setting, and it stayed unchanged for almost a decade until 30.0.
 
 ### Why the UTXO-prune design mattered
 
@@ -134,5 +134,5 @@ No. Every byte pays the prevailing fee rate, competes with payments for block sp
 
 - [Bitcoin Core 30.0 release notes](https://bitcoincore.org/en/releases/30.0/), 10 October 2025, "Mempool policy and mining changes" section.
 - Bitcoin Core pull request #32406 and the surrounding discussion for the reasoning behind the default.
-- Historical relay defaults: Bitcoin Core 0.9.0 and 0.12.0 release notes.
+- Historical relay defaults: Bitcoin Core 0.9.0 (40 bytes) and 0.11.0 (80 bytes, July 2015) release notes.
 - The Permanent Record [Field Manual](/guide) for practical etching steps, and the [protocol index](/protocols) for what larger payloads look like in practice.

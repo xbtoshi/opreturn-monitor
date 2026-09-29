@@ -9,7 +9,7 @@ import { fetchHistoricalPriceUsd, mempoolHosts } from './mempool';
 import { ingestOne, ingestStatus, resetIngestCursors } from './ingest';
 import { backfillDetails, reparseLegacy } from './cron';
 import { protocolLabel } from './protocols';
-import { getGuide, guideJsonLd, listGuides, loadFacts, renderGuide, renderGuideHtml, renderLearnIndexHtml } from './learn';
+import { getGuide, guideJsonLd, guideMinutes, listGuides, loadFacts, renderGuide, renderGuideHtml, renderLearnIndexHtml } from './learn';
 import {
   addressCardSvg,
   categoryCardSvg,
@@ -1194,8 +1194,7 @@ app.get('/collections', async (c) => {
 
 app.get('/learn', async (c) => {
   const origin = originOf(c);
-  const facts = await loadFacts(c.env.DB);
-  const guides = listGuides().map((doc) => ({ doc, minutes: renderGuide(doc, facts).minutes }));
+  const guides = listGuides().map((doc) => ({ doc, minutes: guideMinutes(doc.meta.slug) }));
   if (wantsMarkdown(c)) {
     return markdownResponse(
       `# Learn — guides to Bitcoin's OP_RETURN messages\n\n${guides.map(({ doc }) => `- [${doc.meta.title}](${origin}/learn/${doc.meta.slug}) — ${doc.meta.description}`).join('\n')}\n`,
@@ -1244,8 +1243,12 @@ app.get('/learn/:slug', async (c) => {
   const g = renderGuide(doc, await loadFacts(c.env.DB));
   if (wantsMarkdown(c)) return markdownResponse(g.markdown, origin);
   const related = doc.meta.related.map((s) => getGuide(s)).filter((x): x is NonNullable<typeof x> => Boolean(x));
+  const jsonLd = { '@context': 'https://schema.org', '@graph': guideJsonLd(origin, g) };
   const body = renderGuideHtml(g, related).replace('<main class="page article"', `<main class="page article" data-title="${escHtml(doc.meta.title + ' \u2014 The Permanent Record')}" data-description="${escHtml(doc.meta.description)}"`);
-  if (c.req.query('partial') === '1') return partialResponse(body, `${origin}/learn/${slug}`);
+  if (c.req.query('partial') === '1') {
+    // The fragment carries its structured data so client-side navigation can swap it into <head>.
+    return partialResponse(body + `<script type="application/ld+json" data-learn-jsonld>${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>`, `${origin}/learn/${slug}`);
+  }
   applyDiscoveryHeaders(c, origin);
   return c.html(
     renderIndex({
@@ -1254,7 +1257,7 @@ app.get('/learn/:slug', async (c) => {
       url: `${origin}/learn/${slug}`,
       image: `${origin}/og/default.png`,
       type: 'article',
-      jsonLd: { '@context': 'https://schema.org', '@graph': guideJsonLd(origin, g) },
+      jsonLd,
       initialHtml: body,
     }, await shellFor(c))
   );

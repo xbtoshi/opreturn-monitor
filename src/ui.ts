@@ -2,7 +2,7 @@
  * Single-page web UI for The Permanent Record — the "Ledger" layout.
  *
  * No build step: one <style> block, one inline script, string-built HTML.
- * The server injects a crawlable shell (src/seo.ts) into <main id="app">;
+ * The server injects a crawlable shell (src/seo.ts) into <div id="app">;
  * the script below takes over on boot and re-renders on navigation.
  * Everything in the inline script lives inside a TS template literal, so
  * backslashes are doubled there (\\n, \\u2026, \\d).
@@ -1299,12 +1299,12 @@ ${tabbarHtml()}
 
   /* ---- about ---- */
   var FAQ=[
-    ['What is an OP_RETURN message in Bitcoin?','An OP_RETURN output is a Bitcoin Script opcode (0x6a) used to embed arbitrary data into a transaction. Because OP_RETURN outputs are provably unspendable, nodes exclude them from the RAM-resident UTXO set, making it the standard method for recording permanent, tamper-evident messages without blockchain bloat.'],
-    ['Can an OP_RETURN message be deleted, altered, or censored?','No. Once a transaction carrying an OP_RETURN output is confirmed inside a Bitcoin block, it becomes an immutable part of the distributed ledger. It cannot be altered, edited, or removed by any central authority, corporation, or node operator.'],
-    ['How much data can fit inside an OP_RETURN output?','Consensus sets no specific limit. Relay policy allowed about 40 bytes from 2014 and 80 bytes from 2015; Bitcoin Core 30.0 (October 2025) raised the default -datacarriersize to 100,000 bytes, effectively uncapping it, and began relaying multiple OP_RETURN outputs per transaction. Operators can restore the old limit with -datacarriersize=83. Fees are the practical constraint.'],
+    ['What is an OP_RETURN message in Bitcoin?','An OP_RETURN output uses Bitcoin Script opcode 0x6a to mark an output as provably unspendable while carrying arbitrary data, which nodes drop from the UTXO set immediately. Full guide: /learn/what-is-op-return'],
+    ['Can an OP_RETURN message be deleted, altered, or censored?','No. Once the transaction is confirmed, the data is part of a block secured by proof of work; changing it would mean re-mining that block and every block after it. Full guide: /learn/what-is-op-return'],
+    ['How much data can fit inside an OP_RETURN output?','Consensus sets no specific limit. Bitcoin Core 30.0 (October 2025) raised the default -datacarriersize from 83 to 100,000 bytes, effectively uncapping it, and began relaying multiple OP_RETURN outputs; operators can restore the old limit with -datacarriersize=83. Full guide: /learn/bitcoin-core-30-op-return-datacarriersize'],
     ['What does The Permanent Record archive?','Every block is scanned and every OP_RETURN output is decoded: human messages, token protocols such as ico-20 and crc-20, bridge and sidechain markers, inline files. Curated collections follow high-profile addresses that turned into public bulletin boards: whitehat and hacker negotiations, dormant-wallet notices, Genesis block tributes.'],
     ['How does AI classification categorize transmissions?','Each human-readable message is processed through an OpenAI-compatible endpoint that classifies it into one of seven categories: Laundry / Service Ads, Begging / Victim Appeals, Threats / Hostility, Prompt Injection, Haiku / Philosophical, Self-deprecating / Black Humor, or Other. Protocol payloads are decoded, not classified.'],
-    ['How can I etch my own message into Bitcoin?','Attach an OP_RETURN output with Bitcoin Core (createrawtransaction with a data output) or Electrum (a script such as OP_RETURN <hex> in the Send tab); Sparrow Wallet has no native field yet but can sign a PSBT built elsewhere. You pay a standard miner fee proportional to data size. Full instructions are in the field manual and the guide at /learn/how-to-etch-op-return.']
+    ['How can I etch my own message into Bitcoin?','Attach an OP_RETURN output with Bitcoin Core (a data output in createrawtransaction) or Electrum (OP_RETURN <hex> in the Send tab), pay a normal miner fee, and broadcast. Sparrow Wallet has no native field yet. Step by step: /guide and /learn/how-to-etch-op-return']
   ];
   function textFeed(){return Object.keys(state.cache).map(function(k){return state.cache[k];}).filter(function(m,i,a){return m&&m.txid&&!isProto(m)&&a.findIndex(function(x){return x.id===m.id;})===i;});}
   function renderAbout(){
@@ -1343,7 +1343,7 @@ ${tabbarHtml()}
     app.innerHTML='<main class="page"><div class="empty">Loading\\u2026</div></main>';
     fetch(key+'?partial=1',{headers:{accept:'text/html'}}).then(function(r){return r.ok?r.text():Promise.reject(r.status);}).then(function(html){_learnHtml[key]=html;if(location.pathname===key){app.innerHTML=html;applyLearnMeta();window.scrollTo(0,0);}}).catch(function(){state.screen='notfound';renderNotFound();});
   }
-  function applyLearnMeta(){var el=app.querySelector('[data-learn]');if(!el)return;var t=el.getAttribute('data-title');if(t)document.title=t;var c=document.querySelector('link[rel="canonical"]');if(c)c.setAttribute('href',location.origin+location.pathname);var d=el.getAttribute('data-description');var md=document.querySelector('meta[name="description"]');if(md&&d)md.setAttribute('content',d);}
+  function applyLearnMeta(){var el=app.querySelector('[data-learn]');if(!el)return;var t=el.getAttribute('data-title');if(t)document.title=t;var c=document.querySelector('link[rel="canonical"]');if(c)c.setAttribute('href',location.origin+location.pathname);var d=el.getAttribute('data-description');var md=document.querySelector('meta[name="description"]');if(md&&d)md.setAttribute('content',d);var ld=app.querySelector('script[data-learn-jsonld]');var heads=document.head.querySelectorAll('script[type="application/ld+json"]');for(var i=0;i<heads.length;i++)heads[i].remove();if(ld){var sc=document.createElement('script');sc.type='application/ld+json';sc.textContent=ld.textContent;document.head.appendChild(sc);ld.remove();}}
   function renderNotFound(){
     app.innerHTML='<main class="page" style="align-items:center;text-align:center;padding-top:80px"><span class="kicker">◆ 404 NOT FOUND</span><h1 class="title" style="font-size:48px">Record not found</h1><p class="lede">The requested blockchain transmission or collection does not exist in this archive.</p><div class="cta"><a class="btn btn-primary" href="/feed">Return to the feed →</a><a class="btn" href="/collections">Browse collections</a></div></main>';
   }

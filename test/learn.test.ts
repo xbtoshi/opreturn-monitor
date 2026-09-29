@@ -88,6 +88,23 @@ describe('learn content', () => {
     }
   });
 
+  it('rejects attribute injection through links, headings, tables and code', () => {
+    const r = renderMarkdown('[x](https://a.com"onmouseover=alert(1)) [y](https://b.com/<img>) | `<b>` |\n## "><script>x</script>\n\n| h"><i> | 2 |\n| --- | --- |\n| `<x>` | [z](javascript:1) |');
+    expect(r.html).not.toMatch(/onmouseover|<script|<img|<i>|<b>|<x>/);
+    expect(r.html).not.toContain('javascript:');
+    expect(safeHref('https://a.com"onmouseover=alert(1)')).toBeNull();
+  });
+
+  it('every related slug and internal /learn link points at a real guide', () => {
+    const slugs = new Set(files.map((f) => f.replace(/\.md$/, '')));
+    for (const f of files) {
+      const src = readFileSync(new URL(f, dir), 'utf8');
+      const doc = parseFrontMatter(f, src);
+      for (const r of doc.meta.related) expect(slugs.has(r), `${f} related ${r}`).toBe(true);
+      for (const m of src.matchAll(/\]\(\/learn\/([a-z0-9-]+)\)/g)) expect(slugs.has(m[1]), `${f} link ${m[1]}`).toBe(true);
+    }
+  });
+
   it('never repeats the retired Core 30 or Sparrow wording', () => {
     const banned = [CORE30.banned, SPARROW.banned, 'Tools → add an OP_RETURN', 'Tools → Add OP_RETURN'];
     const sources = [

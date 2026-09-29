@@ -1038,15 +1038,15 @@ Enables autonomous agent registration, discovery, and credential claiming per th
 export const FAQ_ITEMS = [
   {
     q: 'What is an OP_RETURN message in Bitcoin?',
-    a: 'An OP_RETURN output is a Bitcoin Script opcode (0x6a) used to embed arbitrary data into a transaction. Because OP_RETURN outputs are provably unspendable, nodes exclude them from the RAM-resident UTXO set, making it the standard method for recording permanent, tamper-evident messages without blockchain bloat.',
+    a: 'An OP_RETURN output uses Bitcoin Script opcode 0x6a to mark an output as provably unspendable while carrying arbitrary data, which nodes drop from the UTXO set immediately. Full guide: /learn/what-is-op-return',
   },
   {
     q: 'Can an OP_RETURN message be deleted, altered, or censored?',
-    a: 'No. Once a transaction carrying an OP_RETURN output is confirmed inside a Bitcoin block, it becomes an immutable part of the distributed ledger. It cannot be altered, edited, or removed by any central authority, corporation, or node operator.',
+    a: 'No. Once the transaction is confirmed, the data is part of a block secured by proof of work; changing it would mean re-mining that block and every block after it. Full guide: /learn/what-is-op-return',
   },
   {
     q: 'How much data can fit inside an OP_RETURN output?',
-    a: HISTORY_CAPS + ' ' + CORE30.summary,
+    a: 'Consensus sets no specific limit. ' + CORE30.summary + ' Full guide: /learn/bitcoin-core-30-op-return-datacarriersize',
   },
   {
     q: 'What kinds of messages are monitored on The Permanent Record?',
@@ -1058,7 +1058,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'How can I etch my own message into Bitcoin?',
-    a: 'You can attach an OP_RETURN output with Bitcoin Core (createrawtransaction with a data output) or Electrum (a script such as OP_RETURN <hex> in the Send tab). Sparrow Wallet has no native OP_RETURN field yet but can sign a PSBT built elsewhere. You pay a standard miner fee proportional to data size. Full instructions are in the Field Manual and the guide at /learn/how-to-etch-op-return.',
+    a: 'Attach an OP_RETURN output with Bitcoin Core (a data output in createrawtransaction) or Electrum (OP_RETURN <hex> in the Send tab), pay a normal miner fee, and broadcast. Sparrow Wallet has no native field yet. Step by step: the Field Manual at /guide and the guide at /learn/how-to-etch-op-return.',
   },
 ];
 

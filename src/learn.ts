@@ -61,7 +61,10 @@ const fmt = (n: number) => n.toLocaleString('en-US');
  * cold isolate never renders a blank number; on failure tokens fall back to
  * a neutral phrase (never zero).
  */
+let factsCache: { at: number; facts: Facts } | null = null;
+
 export async function loadFacts(d1: D1Database): Promise<Facts> {
+  if (factsCache && Date.now() - factsCache.at < 60000) return factsCache.facts;
   const facts: Facts = { date: new Date().toISOString().slice(0, 10) };
   try {
     const [cols, chain, protocols] = await Promise.all([db.listCollections(d1), db.getChainStats(d1), db.listProtocols(d1)]);
@@ -82,7 +85,14 @@ export async function loadFacts(d1: D1Database): Promise<Facts> {
   } catch {
     // tokens fall back to neutral wording
   }
+  factsCache = { at: Date.now(), facts };
   return facts;
+}
+
+/** Reading time is independent of live numbers, so compute it once per guide. */
+const MINUTES = new Map<string, number>(GUIDE_SOURCES.map(([slug]) => [slug, readingMinutes(renderMarkdown(DOCS.get(slug)!.body).words)]));
+export function guideMinutes(slug: string): number {
+  return MINUTES.get(slug) ?? 1;
 }
 
 // ---------------------------------------------------------------------------

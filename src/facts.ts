@@ -1,6 +1,6 @@
 /**
  * Facts the site states in more than one place. Keeping the wording here
- * stops pages contradicting each other (see test/facts.test.ts).
+ * stops pages contradicting each other (see test/learn.test.ts).
  */
 
 /** Bitcoin Core 30.0 release notes, 2025-10-10: https://bitcoincore.org/en/releases/30.0/ */
@@ -28,4 +28,4 @@ export const SPARROW = {
 };
 
 export const HISTORY_CAPS =
-  'Standard relay policy limited OP_RETURN payloads to about 40 bytes from 2014 and 80 bytes (83 including the opcode and push) from 2015 onward; those were policy limits, never consensus rules.';
+  'Standard relay policy limited OP_RETURN payloads to 40 bytes from Bitcoin Core 0.9 (March 2014) and 80 bytes (83 including the opcode and push) from Bitcoin Core 0.11 (July 2015) onward; those were policy limits, never consensus rules.';

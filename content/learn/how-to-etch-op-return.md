@@ -63,7 +63,7 @@ From the console, the same works in `payto` and `paytomany`, which accept script
 
 ## Method C: Sparrow Wallet
 
-Sparrow is often recommended for this, so it is worth being precise. As of this writing Sparrow does **not** have a field for adding an OP_RETURN output. The feature request, [issue #97](https://github.com/sparrowwallet/sparrow/issues/97), has been open since 2020 and a pull request that adds an optional OP_RETURN field to the Send screen is pending. Until that ships, the workable path is to build the transaction elsewhere, for example with Bitcoin Core as above or with a small script using a library such as embit, export it as a PSBT, and use Sparrow's transaction editor to inspect and sign it. Sparrow's editor shows every output, including the OP_RETURN script, so you can verify what you are signing.
+Sparrow is often recommended for this, so it is worth being precise. As of this writing Sparrow does **not** have a field for adding an OP_RETURN output. The feature request, [issue #97](https://github.com/sparrowwallet/sparrow/issues/97), has been open since April 2021 and a pull request that adds an optional OP_RETURN field to the Send screen is pending. Until that ships, the workable path is to build the transaction elsewhere, for example with Bitcoin Core as above or with a small script using a library such as embit, export it as a PSBT, and use Sparrow's transaction editor to inspect and sign it. Sparrow's editor shows every output, including the OP_RETURN script, so you can verify what you are signing.
 
 We will update this page and the Field Manual when the field lands.
 

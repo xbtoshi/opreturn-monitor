@@ -116,7 +116,8 @@ function inline(text: string): string {
   });
   // links: [text](href)
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t: string, h: string) => {
-    const href = safeHref(h.replace(/&amp;/g, '&'));
+    // The text was escaped before this pass; undo that so the whitelist sees real quotes and brackets.
+    const href = safeHref(h.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
     if (!href) return t;
     const ext = /^https?:\/\//i.test(href) && !/^https?:\/\/opreturn\.xyz(\/|$)/i.test(href);
     return `<a href="${escapeHtml(href)}"${ext ? ' target="_blank" rel="noopener"' : ''}>${t}</a>`;
