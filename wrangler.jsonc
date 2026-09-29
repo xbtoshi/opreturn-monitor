@@ -2,6 +2,8 @@
   // ---- Bitcoin OP_RETURN Message Monitor -------------------------------
   "name": "opreturn-monitor",
   "main": "src/index.ts",
+  // Learn articles are Markdown files imported as text (no build step).
+  "rules": [{ "type": "Text", "globs": ["**/*.md"], "fallthrough": true }],
   "compatibility_date": "2026-08-05",
 
   // ---------------------------------------------------------------------------

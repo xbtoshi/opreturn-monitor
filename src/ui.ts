@@ -42,6 +42,7 @@ const NAV: Array<[string, string, string, string]> = [
   ['protocols', '/protocols', 'Protocols', 'protocols'],
   ['collections', '/collections', 'Collections', 'collections'],
   ['guide', '/guide', 'Etch a message', ''],
+  ['learn', '/learn', 'Learn', 'learn'],
   ['about', '/', 'About', ''],
 ];
 
@@ -532,6 +533,38 @@ ${ogMeta}
   .faq-item.open .faq-a{display:block}
   .faq-grid{display:contents}
 
+  /* ---- learn / articles ---- */
+  .crumbs{display:flex;gap:8px;font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
+  .art{display:flex;flex-direction:column;gap:22px;max-width:1080px}
+  .art-head{display:flex;flex-direction:column;gap:10px;max-width:72ch}
+  .art-title{font-size:38px;font-weight:600;letter-spacing:-.03em;line-height:1.08;text-wrap:balance}
+  .art-meta{font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
+  .answer{border:1.5px solid var(--fg);background:var(--card);padding:18px 22px;display:flex;flex-direction:column;gap:8px;max-width:72ch;box-shadow:8px 8px 0 var(--fg)}
+  .answer p{font-size:17px;line-height:1.5;font-weight:500}
+  .art-grid{display:grid;grid-template-columns:minmax(0,72ch) 240px;gap:48px;align-items:start}
+  .art-body{font-size:17px;line-height:1.6;color:var(--fg);display:flex;flex-direction:column;gap:16px;min-width:0}
+  .art-body h2{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.15;margin-top:22px;scroll-margin-top:24px}
+  .art-body h3{font-size:19px;font-weight:600;margin-top:8px;scroll-margin-top:24px}
+  .art-body p,.art-body li{overflow-wrap:anywhere}
+  .art-body ul,.art-body ol{padding-left:22px;display:flex;flex-direction:column;gap:6px}
+  .art-body blockquote{border-left:3px solid var(--sig);padding:6px 16px;color:var(--fg2)}
+  .art-body pre{background:var(--inv-bg);color:var(--inv-fg);font-family:'Martian Mono',monospace;font-size:12px;line-height:1.5;padding:14px 16px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+  .art-body code{font-family:'Martian Mono',monospace;font-size:.9em;background:var(--line2);padding:1px 5px}
+  .art-body pre code{background:none;padding:0;font-size:inherit}
+  .art-body table{border-collapse:collapse;width:100%;font-size:14px;background:var(--card);border:1px solid var(--line)}
+  .art-body th,.art-body td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line2);vertical-align:top}
+  .art-body th{font-family:'Martian Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg4)}
+  .art-body a{text-decoration:underline;text-underline-offset:3px}
+  .art-related{margin-top:28px;border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:8px}
+  .art-related ul{padding-left:0;list-style:none}
+  .art-toc{position:sticky;top:36px;display:flex;flex-direction:column;gap:10px;font-size:13px}
+  .art-toc ol{padding-left:0;list-style:none;display:flex;flex-direction:column;gap:6px;border-left:1px solid var(--line)}
+  .art-toc a{display:block;padding:2px 12px;color:var(--fg2)}
+  .art-toc a:hover{color:var(--sig)}
+  .trow.learn{grid-template-columns:minmax(0,1fr) 70px}
+  .trow.learn .nm .code{margin-bottom:2px}
+  .trow.learn .nm .d{white-space:normal}
+
   /* ---- modals & sheet ---- */
   .scrim{position:fixed;inset:0;background:rgba(22,20,13,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
   .scrim[hidden]{display:none}
@@ -617,6 +650,8 @@ ${ogMeta}
     .hero{grid-template-columns:minmax(0,1fr)}
     .hero h1{font-size:60px}
     .sticky{position:static}
+    .art-grid{grid-template-columns:minmax(0,1fr)}
+    .art-toc{position:static}
   }
   @media (max-width:759px){
     .shell{grid-template-columns:minmax(0,1fr)}
@@ -648,6 +683,10 @@ ${ogMeta}
     .turn{max-width:90%}
     .keb-body{grid-template-columns:1fr}
     .keb-divider{display:none}
+    .art-grid{grid-template-columns:minmax(0,1fr)}
+    .art-toc{display:none}
+    .art-title{font-size:28px}
+    .answer{box-shadow:none}
     .hero{padding:28px 16px;gap:28px}
     .hero h1{font-size:44px}
     .hero .btn{padding:13px 20px;font-size:15px}
@@ -1234,9 +1273,9 @@ ${tabbarHtml()}
 
   /* ---- etch ---- */
   var STEPS=[
-    ['01','Understand the tradeoff','OP_RETURN attaches data to a provably-unspendable output. The old 80-byte cap was a relay policy, not a consensus rule — Bitcoin Core v30 (2025) dropped that default, so larger payloads now relay and confirm, and a message can span several OP_RETURN outputs. It is cheap but not free — you pay a fee that scales with size — and it is immutable once mined.'],
-    ['02','Use a wallet that supports it','Sparrow Wallet (Tools → add an OP_RETURN output), Bitcoin Core via bitcoin-cli, or Electrum’s console. Custodial and exchange wallets will not let you.'],
-    ['03','Write your message','Plain UTF-8 text. There is no longer a hard 80-byte limit, but bigger data costs a higher fee and some nodes still run tighter relay limits — keep it short for reliability, or split it across outputs. Then encode it to hex with the encoder on the right.'],
+    ['01','Understand the tradeoff','OP_RETURN attaches data to a provably-unspendable output. Bitcoin Core 30.0 (2025) raised the default data-carrier limit from 83 bytes to 100,000, so larger payloads and multiple OP_RETURN outputs now relay and confirm on nodes running default settings; that is policy, not consensus, and some nodes keep the old limit. It is cheap but not free \\u2014 you pay a fee that scales with size \\u2014 and it is immutable once mined.'],
+    ['02','Use a wallet that supports it','Bitcoin Core via bitcoin-cli (example below), or Electrum, whose Send tab and console accept a script such as OP_RETURN <hex> in place of an address. Sparrow Wallet has no native OP_RETURN field yet (issue #97 is still open with a pull request pending) but can sign a PSBT built elsewhere. Custodial and exchange wallets will not let you.'],
+    ['03','Write your message','Plain UTF-8 text. Default nodes now relay up to 100,000 bytes across all OP_RETURN outputs, but bigger data costs a higher fee and some nodes keep the old 83-byte limit \\u2014 keep it short for reliability, or split it across outputs. Then encode it to hex with the encoder on the right.'],
     ['04','Build the transaction','Add one OP_RETURN output carrying your data (0 sats) plus a change output back to yourself, and set a fee rate from mempool.space.'],
     ['05','Broadcast and wait','Sign, broadcast, and watch it hit the mempool. Once a block confirms it, it lives on-chain forever. Send it to an address we monitor and it shows up in the feed here.']
   ];
@@ -1253,7 +1292,7 @@ ${tabbarHtml()}
     h+='<div class="encoder"><span class="h">ENCODE YOUR MESSAGE</span><div class="bd"><textarea id="etch-text" rows="3" placeholder="gm, permanent record">'+esc(state.etch)+'</textarea>';
     h+='<div class="meta"><span id="etch-bytes">'+e.bytes+' bytes</span><span id="etch-sats">≈ '+fmt(Math.round((e.bytes+232)*6))+' sats at 6 sat/vB</span></div>';
     h+='<div class="hex" id="etch-hex">'+esc(e.hex)+'</div><button class="btn" data-action="copy-hex">Copy hex</button></div></div>';
-    h+='<p class="gnote">This tool only reads the chain — it never asks for your keys and cannot send anything for you.</p></div></div></main>';
+    h+='<p class="gnote">This tool only reads the chain — it never asks for your keys and cannot send anything for you. Step-by-step companion: <a href="/learn/how-to-etch-op-return">How to etch an OP_RETURN message</a>.</p></div></div></main>';
     app.innerHTML=h;
   }
   function updateEtch(){var e=etchHex();var b=document.getElementById('etch-bytes'),s=document.getElementById('etch-sats'),x=document.getElementById('etch-hex');if(b)b.textContent=e.bytes+' bytes';if(s)s.textContent='≈ '+fmt(Math.round((e.bytes+232)*6))+' sats at 6 sat/vB';if(x)x.textContent=e.hex;}
@@ -1262,10 +1301,10 @@ ${tabbarHtml()}
   var FAQ=[
     ['What is an OP_RETURN message in Bitcoin?','An OP_RETURN output is a Bitcoin Script opcode (0x6a) used to embed arbitrary data into a transaction. Because OP_RETURN outputs are provably unspendable, nodes exclude them from the RAM-resident UTXO set, making it the standard method for recording permanent, tamper-evident messages without blockchain bloat.'],
     ['Can an OP_RETURN message be deleted, altered, or censored?','No. Once a transaction carrying an OP_RETURN output is confirmed inside a Bitcoin block, it becomes an immutable part of the distributed ledger. It cannot be altered, edited, or removed by any central authority, corporation, or node operator.'],
-    ['How much data can fit inside an OP_RETURN output?','Historically, Bitcoin standard relay policy restricted OP_RETURN outputs to 40 bytes and later 80 bytes. In 2025, Bitcoin Core v30 removed the default 80-byte relay cap, allowing larger arbitrary data payloads to propagate across the network as standard transactions.'],
+    ['How much data can fit inside an OP_RETURN output?','Consensus sets no specific limit. Relay policy allowed about 40 bytes from 2014 and 80 bytes from 2015; Bitcoin Core 30.0 (October 2025) raised the default -datacarriersize to 100,000 bytes, effectively uncapping it, and began relaying multiple OP_RETURN outputs per transaction. Operators can restore the old limit with -datacarriersize=83. Fees are the practical constraint.'],
     ['What does The Permanent Record archive?','Every block is scanned and every OP_RETURN output is decoded: human messages, token protocols such as ico-20 and crc-20, bridge and sidechain markers, inline files. Curated collections follow high-profile addresses that turned into public bulletin boards: whitehat and hacker negotiations, dormant-wallet notices, Genesis block tributes.'],
     ['How does AI classification categorize transmissions?','Each human-readable message is processed through an OpenAI-compatible endpoint that classifies it into one of seven categories: Laundry / Service Ads, Begging / Victim Appeals, Threats / Hostility, Prompt Injection, Haiku / Philosophical, Self-deprecating / Black Humor, or Other. Protocol payloads are decoded, not classified.'],
-    ['How can I etch my own message into Bitcoin?','You can attach an OP_RETURN output using non-custodial tools such as Sparrow Wallet (Tools → Add OP_RETURN), Bitcoin Core CLI (createrawtransaction), or Electrum. You pay a standard network miner fee proportional to data size. Full instructions are in the field manual.']
+    ['How can I etch my own message into Bitcoin?','Attach an OP_RETURN output with Bitcoin Core (createrawtransaction with a data output) or Electrum (a script such as OP_RETURN <hex> in the Send tab); Sparrow Wallet has no native field yet but can sign a PSBT built elsewhere. You pay a standard miner fee proportional to data size. Full instructions are in the field manual and the guide at /learn/how-to-etch-op-return.']
   ];
   function textFeed(){return Object.keys(state.cache).map(function(k){return state.cache[k];}).filter(function(m,i,a){return m&&m.txid&&!isProto(m)&&a.findIndex(function(x){return x.id===m.id;})===i;});}
   function renderAbout(){
@@ -1276,7 +1315,7 @@ ${tabbarHtml()}
     h+='<span class="pill-live"><span class="d"></span>'+(ch&&ch.stored_txs?fmt(ch.stored_txs)+' OP_RETURN TXS DECODED':fmt(state.collections.reduce(function(t,c){return t+(c.message_count||0);},0))+' MESSAGES ARCHIVED')+' · UPDATING EVERY BLOCK</span>';
     h+='<h1>People are leaving messages inside Bitcoin. Forever.</h1>';
     h+='<p class="lede">Every one of these was etched into an OP_RETURN output on the blockchain — threats, confessions, prayers, ads, haiku. Immutable. Unstoppable. We scan every block, decode every OP_RETURN protocol, and keep the human messages front and centre.</p>';
-    h+='<div class="cta"><a class="btn btn-primary" href="/feed">Enter the feed →</a><a class="btn" href="/guide">Etch your own</a></div></div>';
+    h+='<div class="cta"><a class="btn btn-primary" href="/feed">Enter the feed →</a><a class="btn" href="/guide">Etch your own</a><a class="btn" href="/learn">Read the guides</a></div></div>';
     h+='<div class="livepanel"><span class="h">● LIVE FROM THE CHAIN</span>';
     if(!live.length)h+='<a href="/feed"><span class="k">waiting for the next block</span><span class="c">The feed fills in as blocks arrive.</span></a>';
     live.forEach(function(m){h+='<a href="/m/'+attr(m.txid)+'"><span class="k">'+esc(m.category||'message')+' · '+esc(timeAgo(msgTime(m)))+'</span><span class="c">'+esc(displayText(m))+'</span></a>';});
@@ -1294,6 +1333,17 @@ ${tabbarHtml()}
     h+='</div></div></main>';
     app.innerHTML=h;
   }
+  var _learnHtml={};
+  function renderLearn(){
+    var key=location.pathname;
+    var cur=app.querySelector('[data-learn]');
+    var want=key==='/learn'?'index':key.slice('/learn/'.length);
+    if(cur&&cur.getAttribute('data-learn')===want)return;
+    if(_learnHtml[key]){app.innerHTML=_learnHtml[key];applyLearnMeta();return;}
+    app.innerHTML='<main class="page"><div class="empty">Loading\\u2026</div></main>';
+    fetch(key+'?partial=1',{headers:{accept:'text/html'}}).then(function(r){return r.ok?r.text():Promise.reject(r.status);}).then(function(html){_learnHtml[key]=html;if(location.pathname===key){app.innerHTML=html;applyLearnMeta();window.scrollTo(0,0);}}).catch(function(){state.screen='notfound';renderNotFound();});
+  }
+  function applyLearnMeta(){var el=app.querySelector('[data-learn]');if(!el)return;var t=el.getAttribute('data-title');if(t)document.title=t;var c=document.querySelector('link[rel="canonical"]');if(c)c.setAttribute('href',location.origin+location.pathname);var d=el.getAttribute('data-description');var md=document.querySelector('meta[name="description"]');if(md&&d)md.setAttribute('content',d);}
   function renderNotFound(){
     app.innerHTML='<main class="page" style="align-items:center;text-align:center;padding-top:80px"><span class="kicker">◆ 404 NOT FOUND</span><h1 class="title" style="font-size:48px">Record not found</h1><p class="lede">The requested blockchain transmission or collection does not exist in this archive.</p><div class="cta"><a class="btn btn-primary" href="/feed">Return to the feed →</a><a class="btn" href="/collections">Browse collections</a></div></main>';
   }
@@ -1306,6 +1356,7 @@ ${tabbarHtml()}
     else if(state.screen==='etch')renderEtch();
     else if(state.screen==='detail')renderDetail();
     else if(state.screen==='chat')renderChat();
+    else if(state.screen==='learn')renderLearn();
     else renderNotFound();
     syncShell();
   }
@@ -1330,6 +1381,7 @@ ${tabbarHtml()}
     if(r.name==='collections'){state.screen='collections';return render();}
     if(r.name==='protocols'){state.screen='protocols';return Promise.all([loadProtocols(),loadTicks(),loadChain()]).then(render);}
     if(r.name==='guide'){state.screen='etch';return render();}
+    if(r.name==='learn'){state.screen='learn';return render();}
     if(r.name==='feed')return feedScreen();
     if(r.name==='rooms'){var best=null;state.collections.forEach(function(c){if(!best||(c.message_count||0)>(best.message_count||0))best=c;});if(best){state.filter=best.id;state.screen='chat';resetChat();return loadChat(false).then(render);}state.screen='chat';return render();}
     if(r.name==='c'){var col=colById(Number(r.param))||colBySlug(r.param);if(col){state.filter=col.id;if(r.chat){state.screen='chat';resetChat();return loadChat(false).then(render);}return feedScreen();}state.screen='notfound';return render();}

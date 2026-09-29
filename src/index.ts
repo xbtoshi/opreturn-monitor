@@ -9,6 +9,7 @@ import { fetchHistoricalPriceUsd, mempoolHosts } from './mempool';
 import { ingestOne, ingestStatus, resetIngestCursors } from './ingest';
 import { backfillDetails, reparseLegacy } from './cron';
 import { protocolLabel } from './protocols';
+import { getGuide, guideJsonLd, listGuides, loadFacts, renderGuide, renderGuideHtml, renderLearnIndexHtml } from './learn';
 import {
   addressCardSvg,
   categoryCardSvg,
@@ -61,6 +62,7 @@ import {
   messageHeadline,
   messageExcerpt,
   renderNotFoundSsr,
+  escHtml,
   renderProtocolSsr,
   renderProtocolMarkdown,
   renderProtocolsSsr,
@@ -639,7 +641,7 @@ app.get('/robots.txt', (c) => {
 
 app.get('/llms.txt', (c) => {
   const origin = originOf(c);
-  return new Response(generateLlmsTxt(origin), {
+  return new Response(generateLlmsTxt(origin, listGuides().map((g) => ({ slug: g.meta.slug, title: g.meta.title, description: g.meta.description }))), {
     headers: {
       'content-type': 'text/markdown; charset=utf-8',
       'cache-control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
@@ -682,7 +684,7 @@ app.get('/sitemap.xml', async (c) => {
     block_time: m.block_time,
     created_at: m.created_at,
   }));
-  const xml = generateSitemapXml(origin, finalCols, addrs, topMsgs, protocols.map((p) => p.protocol), ticks);
+  const xml = generateSitemapXml(origin, finalCols, addrs, topMsgs, protocols.map((p) => p.protocol), ticks, listGuides().map((g) => ({ slug: g.meta.slug, updated: g.meta.updated })));
   return new Response(xml, {
     headers: {
       'content-type': 'application/xml; charset=utf-8',
@@ -1055,6 +1057,18 @@ app.all('/mcp', async (c) => {
         });
       }
 
+      if (toolName === 'list_guides') {
+        const guides = listGuides().map((g) => ({ slug: g.meta.slug, title: g.meta.title, description: g.meta.description, updated: g.meta.updated, url: `${origin}/learn/${g.meta.slug}` }));
+        return c.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify(guides, null, 2) }] } });
+      }
+
+      if (toolName === 'get_guide') {
+        const doc = getGuide(String(args.slug || ''));
+        if (!doc) return c.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: 'Guide not found' }], isError: true } });
+        const g = renderGuide(doc, await loadFacts(c.env.DB));
+        return c.json({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: g.markdown }] } });
+      }
+
       if (toolName === 'get_etch_guide') {
         const guide = renderGuideMarkdown(origin);
         return c.json({
@@ -1173,6 +1187,91 @@ app.get('/collections', async (c) => {
     }, await shellFor(c))
   );
 });
+
+// ---------------------------------------------------------------------------
+// Learn: long-form guides (content/learn/*.md), server-rendered with live facts
+// ---------------------------------------------------------------------------
+
+app.get('/learn', async (c) => {
+  const origin = originOf(c);
+  const facts = await loadFacts(c.env.DB);
+  const guides = listGuides().map((doc) => ({ doc, minutes: renderGuide(doc, facts).minutes }));
+  if (wantsMarkdown(c)) {
+    return markdownResponse(
+      `# Learn — guides to Bitcoin's OP_RETURN messages\n\n${guides.map(({ doc }) => `- [${doc.meta.title}](${origin}/learn/${doc.meta.slug}) — ${doc.meta.description}`).join('\n')}\n`,
+      origin
+    );
+  }
+  const body = renderLearnIndexHtml(guides);
+  if (c.req.query('partial') === '1') return partialResponse(body, `${origin}/learn`);
+  applyDiscoveryHeaders(c, origin);
+  const crumbs = buildBreadcrumbSchema(origin, [
+    { name: 'Home', path: '/' },
+    { name: 'Learn', path: '/learn' },
+  ]);
+  return c.html(
+    renderIndex({
+      title: 'Learn \u2014 guides to Bitcoin OP_RETURN messages',
+      description: 'Plain-language guides written from the archive: what OP_RETURN is, Bitcoin Core 30 policy, how to read incident boards, how to etch a message, and how to use the API.',
+      url: origin + '/learn',
+      image: origin + '/og/default.png',
+      jsonLd: crumbs,
+      initialHtml: body,
+    }, await shellFor(c))
+  );
+});
+
+app.get('/learn/:slug', async (c) => {
+  const origin = originOf(c);
+  const slug = c.req.param('slug');
+  const doc = getGuide(slug);
+  if (!doc) {
+    if (wantsMarkdown(c)) {
+      return new Response(`# Guide Not Found\n\nNo guide named "${slug}".`, { status: 404, headers: { 'content-type': 'text/markdown; charset=utf-8', Vary: 'Accept' } });
+    }
+    return c.html(
+      renderIndex({
+        title: 'Guide not found \u2014 The Permanent Record',
+        description: 'This guide does not exist.',
+        url: `${origin}/learn/${slug}`,
+        image: `${origin}/og/default.png`,
+        noindex: true,
+        initialHtml: renderNotFoundSsr('Guide not found', `There is no guide named \u201c${slug}\u201d.`),
+      }, await shellFor(c)),
+      404
+    );
+  }
+  const g = renderGuide(doc, await loadFacts(c.env.DB));
+  if (wantsMarkdown(c)) return markdownResponse(g.markdown, origin);
+  const related = doc.meta.related.map((s) => getGuide(s)).filter((x): x is NonNullable<typeof x> => Boolean(x));
+  const body = renderGuideHtml(g, related).replace('<main class="page article"', `<main class="page article" data-title="${escHtml(doc.meta.title + ' \u2014 The Permanent Record')}" data-description="${escHtml(doc.meta.description)}"`);
+  if (c.req.query('partial') === '1') return partialResponse(body, `${origin}/learn/${slug}`);
+  applyDiscoveryHeaders(c, origin);
+  return c.html(
+    renderIndex({
+      title: `${doc.meta.title} \u2014 The Permanent Record`,
+      description: doc.meta.description,
+      url: `${origin}/learn/${slug}`,
+      image: `${origin}/og/default.png`,
+      type: 'article',
+      jsonLd: { '@context': 'https://schema.org', '@graph': guideJsonLd(origin, g) },
+      initialHtml: body,
+    }, await shellFor(c))
+  );
+});
+
+/** Fragment for client-side navigation: never indexable, canonical to the full page. */
+function partialResponse(html: string, canonical: string): Response {
+  return new Response(html, {
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'x-robots-tag': 'noindex',
+      link: `<${canonical}>; rel="canonical"`,
+      'cache-control': 'public, max-age=60',
+      vary: 'Accept',
+    },
+  });
+}
 
 app.get('/rooms', async (c) => {
   const origin = originOf(c);

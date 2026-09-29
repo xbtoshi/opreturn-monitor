@@ -1,5 +1,6 @@
 import { CATEGORIES, categorySlug } from './classify';
 import { protocolLabel } from './protocols';
+import { CORE30, HISTORY_CAPS, SPARROW } from './facts';
 
 const HOSTILE_CATEGORIES = new Set(['Prompt Injection', 'Threats / Hostility', 'Laundry / Service Ads']);
 import type { Address, CollectionWithStats, Message } from './types';
@@ -100,7 +101,8 @@ Sitemap: ${siteUrl}/sitemap.xml
 // 2. Generative Engine Optimization: llms.txt & llms-full.txt
 // ---------------------------------------------------------------------------
 
-export function generateLlmsTxt(siteUrl: string): string {
+export function generateLlmsTxt(siteUrl: string, guides: Array<{ slug: string; title: string; description: string }> = []): string {
+  const LEARN_INDEX = guides.map((g) => `- [${g.title}](${siteUrl}/learn/${g.slug}) — ${g.description}`).join('\n') || `- ${siteUrl}/learn`;
   return `# The Permanent Record — Bitcoin OP_RETURN Monitor
 
 > opreturn.xyz is a real-time, high-availability monitor and historical archive for arbitrary data and messages embedded inside the Bitcoin blockchain via OP_RETURN outputs. It tracks active bulletin boards, hacker communications, dormant wallet notices, and cultural memorials, with AI categorization and high-performance edge caching.
@@ -109,7 +111,7 @@ export function generateLlmsTxt(siteUrl: string): string {
 
 - **Opcode Mechanics**: \`OP_RETURN\` (\`0x6a\`) is a script opcode that marks a transaction output as provably unspendable.
 - **UTXO Set Health**: Because provably unspendable outputs can never be spent, compliant nodes immediately prune them from their RAM-resident UTXO (Unspent Transaction Output) set, eliminating UTXO bloat while permanently committing the data to the blockchain history.
-- **Data Limits**: Standard relay policy historically capped OP_RETURN data at 40 bytes (2014) and 80 bytes (2016). In 2025, Bitcoin Core v30 removed the default 80-byte relay cap (\`-datacarriersize\`), enabling standard propagation of larger arbitrary data payloads and multi-output data chaining.
+- **Data Limits**: ${HISTORY_CAPS} ${CORE30.summary}
 - **Cost**: Embedding data requires paying miner fees proportional to transaction virtual size (vBytes), with output value typically set to 0 sats.
 - **Immutability**: Once confirmed inside a Bitcoin block, transmissions are mathematically unalterable, uncensorable, and permanently replicated across tens of thousands of nodes worldwide.
 
@@ -159,6 +161,11 @@ Transmissions are classified into seven discrete categories:
 - \`GET ${siteUrl}/api/categories\` — Category distribution and counts.
 - \`GET ${siteUrl}/api/message/:key\` — Message lookup by ID or txid.
 - \`GET ${siteUrl}/api/price?ts=\` — Historical USD price at block timestamp.
+
+## Guides (Learn)
+
+Long-form explainers, also available as Markdown via \`Accept: text/markdown\`:
+${LEARN_INDEX}
 
 ## Machine Discovery & Agent Standards
 
@@ -228,7 +235,7 @@ An OP_RETURN output lets you attach arbitrary binary or UTF-8 data to a Bitcoin 
 
 ### Step 1: Understand the Constraints
 - Standard UTF-8 text payload.
-- Bitcoin Core v30 (2025) removed the default 80-byte relay cap, permitting standard propagation of larger payloads.
+- ${CORE30.summary}
 - Cost: Standard miner fees (sat/vB) for the transaction virtual size.
 - 0 sats output value (provably unspendable).
 
@@ -249,7 +256,7 @@ bitcoin-cli signrawtransactionwithwallet "<raw-tx-hex>"
 bitcoin-cli sendrawtransaction "<signed-hex>"
 \`\`\`
 
-### Step 3: Constructing with Sparrow Wallet
+### Step 3: Constructing with a wallet
 1. Navigate to **Send**.
 2. Click **Add OP_RETURN** in the transaction outputs section.
 3. Paste plain text or hex data.
@@ -313,7 +320,8 @@ export function generateSitemapXml(
   addresses: Address[],
   topMessages: SitemapMessage[],
   protocols: string[] = [],
-  ticks: Array<{ tick: string }> = []
+  ticks: Array<{ tick: string }> = [],
+  guides: Array<{ slug: string; updated: string }> = []
 ): string {
   const urls: Array<{ loc: string; lastmod?: string; changefreq: string; priority: string }> = [];
 
@@ -326,6 +334,8 @@ export function generateSitemapXml(
   urls.push({ loc: `${siteUrl}/guide`, lastmod: today, changefreq: 'monthly', priority: '0.8' });
   urls.push({ loc: `${siteUrl}/protocols`, lastmod: today, changefreq: 'hourly', priority: '0.9' });
   urls.push({ loc: `${siteUrl}/rooms`, lastmod: today, changefreq: 'hourly', priority: '0.8' });
+  urls.push({ loc: `${siteUrl}/learn`, lastmod: guides.reduce((m, g) => (g.updated > m ? g.updated : m), today), changefreq: 'weekly', priority: '0.9' });
+  for (const g of guides) urls.push({ loc: `${siteUrl}/learn/${g.slug}`, lastmod: g.updated, changefreq: 'weekly', priority: '0.8' });
 
   // Collections & Chat
   for (const col of collections) {
@@ -932,6 +942,16 @@ export function generateMcpServerCardJson(siteUrl: string): Record<string, unkno
         },
       },
       {
+        name: 'list_guides',
+        description: 'List the Learn guides (long-form explainers on OP_RETURN, Core 30 policy, incident boards, etching, the API) with slugs and descriptions',
+        inputSchema: { type: 'object', properties: {} },
+      },
+      {
+        name: 'get_guide',
+        description: 'Get one Learn guide as Markdown with live numbers resolved',
+        inputSchema: { type: 'object', properties: { slug: { type: 'string', description: 'Guide slug from list_guides' } }, required: ['slug'] },
+      },
+      {
         name: 'get_etch_guide',
         description: 'Get the technical guide for constructing an OP_RETURN Bitcoin transaction',
         inputSchema: {
@@ -1026,7 +1046,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'How much data can fit inside an OP_RETURN output?',
-    a: 'Historically, Bitcoin standard relay policy restricted OP_RETURN outputs to 40 bytes and later 80 bytes. In 2025, Bitcoin Core v30 removed the default 80-byte relay cap, allowing larger arbitrary data payloads to propagate across the network as standard transactions.',
+    a: HISTORY_CAPS + ' ' + CORE30.summary,
   },
   {
     q: 'What kinds of messages are monitored on The Permanent Record?',
@@ -1038,7 +1058,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'How can I etch my own message into Bitcoin?',
-    a: 'You can attach an OP_RETURN output using non-custodial tools such as Sparrow Wallet (Tools → Add OP_RETURN), Bitcoin Core CLI (createrawtransaction), or Electrum. You pay a standard network miner fee proportional to data size. Full instructions are available in our Field Manual.',
+    a: 'You can attach an OP_RETURN output with Bitcoin Core (createrawtransaction with a data output) or Electrum (a script such as OP_RETURN <hex> in the Send tab). Sparrow Wallet has no native OP_RETURN field yet but can sign a PSBT built elsewhere. You pay a standard miner fee proportional to data size. Full instructions are in the Field Manual and the guide at /learn/how-to-etch-op-return.',
   },
 ];
 
@@ -1108,13 +1128,13 @@ export function buildGuideHowToSchema(siteUrl: string): Record<string, unknown> 
         '@type': 'HowToStep',
         position: 1,
         name: 'Understand the tradeoff',
-        text: 'OP_RETURN attaches data to a provably-unspendable output. Bitcoin Core v30 removed the 80-byte relay cap, but larger data pays higher miner fees. The message is immutable once confirmed.',
+        text: 'OP_RETURN attaches data to a provably-unspendable output. ' + CORE30.short + ' Larger data pays higher miner fees. The message is immutable once confirmed.',
       },
       {
         '@type': 'HowToStep',
         position: 2,
         name: 'Use a wallet that supports OP_RETURN',
-        text: 'Choose a non-custodial wallet like Sparrow Wallet, Bitcoin Core, or Electrum. Custodial exchanges do not support arbitrary data outputs.',
+        text: 'Use Bitcoin Core (bitcoin-cli) or Electrum, which accept an OP_RETURN output directly; Sparrow Wallet can sign a PSBT built elsewhere but has no native OP_RETURN field yet. Custodial exchanges do not support arbitrary data outputs.',
       },
       {
         '@type': 'HowToStep',
@@ -1262,10 +1282,10 @@ There is no undo. Anything you write is public forever, tied to your transaction
 ## Steps to Etch
 
 ### 1. Understand the Tradeoff
-OP_RETURN attaches data to a provably-unspendable output. Bitcoin Core v30 removed the 80-byte default cap, allowing larger data to relay and confirm.
+OP_RETURN attaches data to a provably-unspendable output. ${CORE30.short}
 
 ### 2. Use a Wallet that Supports OP_RETURN
-- **Sparrow Wallet**: Tools → Add OP_RETURN output
+- **Sparrow Wallet**: no native OP_RETURN field yet (${SPARROW.issueUrl}); sign a PSBT built with Core or a script library
 - **Bitcoin Core**: \`bitcoin-cli createrawtransaction\`
 - **Electrum**: Console tab
 
@@ -1428,9 +1448,9 @@ export function renderGuideSsr(): string {
   h += '<p class="lede" style="margin-top:12px;font-size:17px">An <span class="mono" style="font-size:.85em">OP_RETURN</span> output lets you attach a small piece of arbitrary data to a Bitcoin transaction. Miners record it in the blockchain like any other transaction \u2014 which means once it confirms, it is public and permanent.</p>';
   h += '<div class="callout"><div><div class="b">\u26a0 BEFORE YOU DO THIS</div><p style="margin-top:6px">There is no undo. Anything you write is public forever, tied to your transaction, and costs a real fee. Never include anything private, illegal, or that identifies you unless you intend to.</p></div></div>';
   h += '<div class="guide-steps">';
-  h += '<div class="gstep"><div class="gnum">01</div><div><h3>Understand the tradeoff</h3><p>OP_RETURN attaches data to a provably-unspendable output. The old 80-byte cap was a relay policy, not a consensus rule \u2014 Bitcoin Core v30 (2025) dropped that default, so larger payloads now relay and confirm, and a message can span several OP_RETURN outputs. It is cheap but not free \u2014 you pay a fee that scales with size \u2014 and it is immutable once mined.</p></div></div>';
-  h += '<div class="gstep"><div class="gnum">02</div><div><h3>Use a wallet that supports it</h3><p>Sparrow Wallet (Tools \u2192 add an OP_RETURN output), Bitcoin Core via <span class="mono" style="font-size:.9em">bitcoin-cli</span>, or Electrum\u2019s console. Custodial and exchange wallets will not let you.</p></div></div>';
-  h += '<div class="gstep"><div class="gnum">03</div><div><h3>Write your message</h3><p>Plain UTF-8 text. There is no longer a hard 80-byte limit, but bigger data costs a higher fee and some nodes still run tighter relay limits \u2014 keep it short for reliability, or split it across outputs. Then encode it to hex.</p></div></div>';
+  h += '<div class="gstep"><div class="gnum">01</div><div><h3>Understand the tradeoff</h3><p>OP_RETURN attaches data to a provably-unspendable output. ' + escHtml(CORE30.short) + ' It is cheap but not free \u2014 you pay a fee that scales with size \u2014 and it is immutable once mined.</p></div></div>';
+  h += '<div class="gstep"><div class="gnum">02</div><div><h3>Use a wallet that supports it</h3><p>' + escHtml(SPARROW.wallets) + '</p></div></div>';
+  h += '<div class="gstep"><div class="gnum">03</div><div><h3>Write your message</h3><p>Plain UTF-8 text. Default nodes now relay up to 100,000 bytes across all OP_RETURN outputs, but bigger data costs a higher fee and some nodes keep the old 83-byte limit \u2014 keep it short for reliability, or split it across outputs. Then encode it to hex.</p></div></div>';
   h += `<div class="gstep"><div class="gnum">04</div><div><h3>Build the transaction</h3><p>Add one OP_RETURN output carrying your data (0 sats) plus a change output back to yourself, and set a fee rate from mempool.space.</p><div class="code">${escHtml(code)}</div></div></div>`;
   h += '<div class="gstep"><div class="gnum">05</div><div><h3>Broadcast and wait</h3><p>Sign, broadcast, and watch it hit the mempool. Once a block confirms it, it lives on-chain forever. Send it to an address we monitor and it shows up in the feed here.</p></div></div>';
   h += '</div>';
