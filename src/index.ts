@@ -1147,6 +1147,26 @@ app.all('/mcp', async (c) => {
 
 app.get('/', async (c) => {
   const origin = originOf(c);
+  if (wantsMarkdown(c)) {
+    // Agents get the short form without paying for the landing's seven queries.
+    const [cols, addrs, feedRes] = await Promise.all([
+      db.listCollections(c.env.DB).catch(() => []),
+      db.listAddresses(c.env.DB).catch(() => []),
+      db.getMessages(c.env.DB, { sort: 'hot', limit: 1, kind: 'text' }).catch(() => ({ messages: [] })),
+    ]);
+    const feat = feedRes.messages[0] || null;
+    const cmap = new Map(cols.map((col) => [col.id, col.name]));
+    return markdownResponse(
+      renderLandingMarkdown(
+        origin,
+        cols.length || seedCollections.length,
+        addrs.length || seedCollections.reduce((sum, col) => sum + (col.addresses?.length || 0), 0),
+        feat,
+        feat?.collection_id ? cmap.get(feat.collection_id) : undefined
+      ),
+      origin
+    );
+  }
   const [cols, addrs, feedRes, liveRes, chain, protocols, categories] = await Promise.all([
     db.listCollections(c.env.DB).catch(() => []),
     db.listAddresses(c.env.DB).catch(() => []),
@@ -1164,18 +1184,12 @@ app.get('/', async (c) => {
   const cmap = new Map(cols.map((col) => [col.id, col.name]));
   const colName = feat?.collection_id ? cmap.get(feat.collection_id) : undefined;
 
-  if (wantsMarkdown(c)) {
-    return markdownResponse(
-      renderLandingMarkdown(origin, colsCount, addrsCount, feat, colName),
-      origin
-    );
-  }
-
   applyDiscoveryHeaders(c, origin);
   const graph = [...buildWebSiteGraph(origin), buildFaqSchema()];
   const initialHtml = renderLandingSsr({
     collectionsCount: colsCount,
     addressesCount: addrsCount,
+    messagesCount: cols.reduce((t, col) => t + (col.message_count || 0), 0),
     featured: feat,
     colName,
     live: liveRes.messages,

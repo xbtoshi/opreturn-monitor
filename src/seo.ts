@@ -1385,6 +1385,8 @@ export function renderFeedMarkdown(siteUrl: string): string {
 export interface LandingData {
   collectionsCount: number;
   addressesCount: number;
+  /** Sum of collection message counts; the pill fallback when the chain census is empty. */
+  messagesCount: number;
   featured?: Message | null;
   colName?: string;
   live: Message[];
@@ -1416,14 +1418,15 @@ const msgTime = (m: Message) => (m.block_time != null ? m.block_time : m.created
 export function renderLandingSsr(d: LandingData): string {
   const ch = d.chain;
   let h = '<main data-ssr="about"><div class="hero"><div class="l">';
-  h += `<span class="pill-live"><span class="d"></span>${ch && ch.stored_txs ? `${fmtN(ch.stored_txs)} OP_RETURN TXS DECODED` : `${fmtN(d.collectionsCount)} COLLECTIONS ARCHIVED`} · UPDATING EVERY BLOCK</span>`;
+  h += `<span class="pill-live"><span class="d"></span>${ch && ch.stored_txs ? `${fmtN(ch.stored_txs)} OP_RETURN TXS DECODED` : `${fmtN(d.messagesCount)} MESSAGES ARCHIVED`} · UPDATING EVERY BLOCK</span>`;
   h += '<h1>People are leaving messages inside Bitcoin. Forever.</h1>';
   h += '<p class="lede">Every one of these was etched into an OP_RETURN output on the blockchain — threats, confessions, prayers, ads, haiku. Immutable. Unstoppable. We scan every block, decode every OP_RETURN protocol, and keep the human messages front and centre.</p>';
   h += '<div class="cta"><a class="btn btn-primary" href="/feed">Enter the feed →</a><a class="btn" href="/guide">Etch your own</a><a class="btn" href="/learn">Read the guides</a></div></div>';
   h += '<div class="livepanel"><span class="h">● LIVE FROM THE CHAIN</span>';
   if (!d.live.length) h += '<a href="/feed"><span class="k">waiting for the next block</span><span class="c">The feed fills in as blocks arrive.</span></a>';
   for (const m of d.live) {
-    h += `<a href="/m/${escHtml(m.txid)}"><span class="k">${escHtml(m.category || 'message')} · ${escHtml(timeAgo(msgTime(m)))}</span><span class="c">${escHtml(messageExcerpt(m, 200))}</span></a>`;
+    const t = msgTime(m);
+    h += `<a href="/m/${escHtml(m.txid)}" data-ts="${escHtml(String(t ?? ''))}" data-k="${escHtml(m.category || 'message')}"><span class="k">${escHtml(m.category || 'message')} · ${escHtml(timeAgo(t))}</span><span class="c">${escHtml(messageExcerpt(m, 200))}</span></a>`;
   }
   h += '</div></div>';
 

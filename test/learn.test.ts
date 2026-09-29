@@ -59,6 +59,27 @@ describe('markdown renderer', () => {
   });
 });
 
+describe('landing SSR', () => {
+  it('renders the same section skeleton the client builds, with the first FAQ open', async () => {
+    const { renderLandingSsr, timeAgo } = await import('../src/seo');
+    const now = Math.floor(Date.now() / 1000);
+    const msg = { id: 1, txid: 'a'.repeat(64), address: 'bc1qxyz', content: 'Hello, Blockchain!', category: 'Graffiti / Greetings', likes: 3, is_mempool: 0, created_at: '', block_time: now - 240, raw_hex: null, fee_sats: null, fee_rate: null, collection_id: null } as never;
+    const html = renderLandingSsr({
+      collectionsCount: 8, addressesCount: 32, messagesCount: 100, featured: msg, live: [msg],
+      chain: { blocks: 10, lowest_height: 1, highest_height: 10, opreturn_outputs: 200, runes_outputs: 150, binary_outputs: 0, stored_txs: 50 },
+      protocolsCount: 4, categories: [{ category: 'Other', count: 3 }, { category: 'Threats / Hostility', count: 1 }],
+    });
+    const order = ['<main data-ssr="about">', 'class="hero"', 'class="livepanel"', 'data-ts="', 'class="about-sec"', 'class="stats"', 'class="about-grid"', 'class="featured"', 'class="chart"', 'class="faq"', 'class="faq-item open"'];
+    let pos = -1;
+    for (const needle of order) { const i = html.indexOf(needle, pos + 1); expect(i, needle).toBeGreaterThan(pos); pos = i; }
+    expect(html).toContain('50 OP_RETURN TXS DECODED');
+    expect(html).toContain('75%');
+    expect(html).toContain('4m ago');
+    expect(html).not.toContain('<script');
+    expect(timeAgo(now - 3700)).toBe('1h ago');
+  });
+});
+
 describe('learn content', () => {
   it('has ten guides with complete front matter', () => {
     expect(files.length).toBe(10);

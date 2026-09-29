@@ -1313,8 +1313,8 @@ ${tabbarHtml()}
   ];
   function textFeed(){return Object.keys(state.cache).map(function(k){return state.cache[k];}).filter(function(m,i,a){return m&&m.txid&&!isProto(m)&&a.findIndex(function(x){return x.id===m.id;})===i;});}
   function renderAbout(){
-    // The server already rendered this exact layout; keep it until the reader interacts.
-    if(!state.aboutDirty&&app.querySelector('[data-ssr="about"]'))return;
+    // The server rendered this screen; keep its DOM for the whole visit (the FAQ toggles in place).
+    if(app.querySelector('[data-ssr="about"]'))return;
     var all=textFeed();var live=all.slice().sort(function(a,b){return tsOf(b)-tsOf(a);}).slice(0,4);
     var feat=null;all.forEach(function(m){if(!feat||m.likes>feat.likes)feat=m;});
     var ch=state.chain;
@@ -1435,7 +1435,7 @@ ${tabbarHtml()}
     if(a==='share'){copyLink(t,'Share card');return;}
     if(a==='copy-hex'){try{navigator.clipboard.writeText(etchHex().hex);}catch(x){}t.textContent='Copied ✓';setTimeout(function(){t.textContent='Copy hex';},1400);return;}
     if(a==='step-toggle'){var i=Number(t.getAttribute('data-i'));state.stepOpen[i]=!state.stepOpen[i];renderEtch();return;}
-    if(a==='faq-toggle'){var j=Number(t.getAttribute('data-i'));state.faqOpen[j]=!state.faqOpen[j];state.aboutDirty=true;renderAbout();return;}
+    if(a==='faq-toggle'){var j=Number(t.getAttribute('data-i'));state.faqOpen[j]=!state.faqOpen[j];t.classList.toggle('open',!!state.faqOpen[j]);var sg=t.querySelector('.sign');if(sg)sg.textContent=state.faqOpen[j]?'\\u2212':'+';return;}
     if(a==='theme'){toggleTheme();return;}
     if(a==='sheet-open'){openSheet();return;}
     if(a==='sheet-close'){closeSheet();return;}
@@ -1896,6 +1896,8 @@ ${tabbarHtml()}
     route();
     window.addEventListener('popstate',route);
     _pollTimer=setInterval(pollNewBlocks,60000);
+    // Server-rendered relative times ("4m ago") would otherwise sit still for the whole visit.
+    setInterval(function(){var els=document.querySelectorAll('[data-ssr="about"] [data-ts]');for(var i=0;i<els.length;i++){var el=els[i];var ts=el.getAttribute('data-ts');var k=el.querySelector('.k');if(k&&ts)k.textContent=(el.getAttribute('data-k')||'message')+' \\u00b7 '+timeAgo(/^\\d+$/.test(ts)?Number(ts):ts);}},60000);
   });
 })();
 
