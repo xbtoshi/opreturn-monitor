@@ -875,6 +875,8 @@ export interface ReparseRow {
   address: string;
   content: string | null;
   ts: number;
+  /** Current protocol; null for rows the registry has never seen. */
+  protocol?: string | null;
 }
 
 /** Rows stored before the protocol registry existed, oldest first. */
@@ -892,17 +894,55 @@ export async function listMessagesNeedingReparse(db: D1Database, limit: number):
   }));
 }
 
+/** Rows filed as text, or never parsed, keyset-paged, for re-running newer detectors over them. */
+export async function listTextRowsForReparse(db: D1Database, after: number, limit: number): Promise<ReparseRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, txid, address, content, ts, protocol FROM messages
+        WHERE id > ? AND (protocol = 'text' OR protocol IS NULL) ORDER BY id ASC LIMIT ?`
+    )
+    .bind(after, limit)
+    .all<Record<string, unknown>>();
+  return results.map((r) => ({
+    id: num(r, 'id'),
+    txid: str(r, 'txid'),
+    address: str(r, 'address'),
+    content: nullableStr(r, 'content'),
+    ts: num(r, 'ts'),
+    protocol: nullableStr(r, 'protocol'),
+  }));
+}
+
+/**
+ * Write a reparse result. Count-only protocols (binary, runes) never get ops
+ * rows, so they stay out of /protocols exactly like freshly ingested blocks.
+ * With `replace`, the row's previous ops are removed first so a text -> pwt
+ * transition does not leave a stale text op behind; when the new ops line up
+ * one-to-one with the old ones, the original vout and payload hex are kept.
+ */
 export async function applyReparse(
   db: D1Database,
   row: ReparseRow,
   protocol: string,
   hash: string,
-  ops: DecodedOp[]
+  ops: DecodedOp[],
+  replace = false
 ): Promise<void> {
   const stmts: D1PreparedStatement[] = [
     db.prepare('UPDATE messages SET protocol = ?, content_hash = ? WHERE id = ?').bind(protocol, hash, row.id),
   ];
-  for (const op of ops) stmts.push(insertOpStatement(db, row.txid, op, row.ts));
+  let toInsert = ops.filter((op) => !COUNT_ONLY_PROTOCOLS.has(op.protocol));
+  if (replace) {
+    const { results: old } = await db
+      .prepare('SELECT vout, payload_hex FROM ops WHERE txid = ? ORDER BY vout ASC, id ASC')
+      .bind(row.txid)
+      .all<{ vout: number; payload_hex: string | null }>();
+    if (old.length === toInsert.length) {
+      toInsert = toInsert.map((op, i) => ({ ...op, vout: old[i].vout, payload_hex: op.payload_hex || old[i].payload_hex || '' }));
+    }
+    stmts.push(db.prepare('DELETE FROM ops WHERE txid = ?').bind(row.txid));
+  }
+  for (const op of toInsert) stmts.push(insertOpStatement(db, row.txid, op, row.ts));
   await db.batch(stmts);
 }
 
@@ -1010,12 +1050,12 @@ export async function reconcileMonitored(db: D1Database): Promise<number> {
 // Classification
 // ---------------------------------------------------------------------------
 
-/** Human-text rows the AI has not seen yet. Protocol rows never qualify. */
+/** Human-text group representatives the AI has not seen yet. Protocol rows and collapsed duplicates never qualify; duplicates inherit via setCategoryForGroup. */
 export async function getUnclassifiedMessages(db: D1Database, limit: number): Promise<Message[]> {
   const { results } = await db
     .prepare(
       `SELECT id, txid, address, content FROM messages
-        WHERE category IS NULL AND (protocol = 'text' OR protocol IS NULL)
+        WHERE category IS NULL AND (protocol = 'text' OR protocol IS NULL) AND is_dup = 0
           AND content IS NOT NULL AND length(trim(content)) > 0
         ORDER BY id ASC LIMIT ?`
     )
@@ -1043,11 +1083,120 @@ export async function setCategory(db: D1Database, messageId: number, category: s
   await db.prepare('UPDATE messages SET category = ? WHERE id = ?').bind(category, messageId).run();
 }
 
+export interface CategoryAssignment {
+  id: number;
+  /** null clears the category (used to revert a reclassification run). */
+  category: string | null;
+}
+
+/**
+ * Statements that set a row's category and copy it onto the collapsed
+ * duplicates of its dedupe group (same address + content_hash, is_dup = 1).
+ * Rows without a content_hash get the single-row update only.
+ */
+export function categoryStatements(
+  db: D1Database,
+  a: CategoryAssignment,
+  key: { address: string; content_hash: string | null }
+): D1PreparedStatement[] {
+  const stmts = [db.prepare('UPDATE messages SET category = ? WHERE id = ?').bind(a.category, a.id)];
+  if (key.content_hash) {
+    stmts.push(
+      db
+        .prepare('UPDATE messages SET category = ? WHERE address = ? AND content_hash = ? AND is_dup = 1')
+        .bind(a.category, key.address, key.content_hash)
+    );
+  }
+  return stmts;
+}
+
+/**
+ * Apply many category assignments. Group keys are looked up first, then the
+ * statements run in batches small enough for D1 (<= 50 per batch, <= 100
+ * bound parameters). Returns how many rows were addressed directly.
+ */
+export async function setCategories(db: D1Database, assignments: CategoryAssignment[]): Promise<{ updated: number; propagated: number }> {
+  if (assignments.length === 0) return { updated: 0, propagated: 0 };
+  const keys = new Map<number, { address: string; content_hash: string | null }>();
+  const ids = assignments.map((a) => a.id);
+  for (let i = 0; i < ids.length; i += 90) {
+    const chunk = ids.slice(i, i + 90);
+    const { results } = await db
+      .prepare(`SELECT id, address, content_hash FROM messages WHERE id IN (${chunk.map(() => '?').join(',')})`)
+      .bind(...chunk)
+      .all<{ id: number; address: string; content_hash: string | null }>();
+    for (const r of results) keys.set(Number(r.id), { address: r.address, content_hash: r.content_hash });
+  }
+  const stmts: D1PreparedStatement[] = [];
+  const isPropagation: boolean[] = [];
+  let updated = 0;
+  for (const a of assignments) {
+    const key = keys.get(a.id);
+    if (!key) continue;
+    const s = categoryStatements(db, a, key);
+    updated++;
+    s.forEach((st, i) => {
+      stmts.push(st);
+      isPropagation.push(i > 0);
+    });
+  }
+  // `propagated` counts duplicate rows actually rewritten, from D1's change counts.
+  let propagated = 0;
+  for (let i = 0; i < stmts.length; i += 50) {
+    const results = await db.batch(stmts.slice(i, i + 50));
+    results.forEach((r, j) => {
+      if (isPropagation[i + j]) propagated += Number(r.meta?.changes ?? 0);
+    });
+  }
+  return { updated, propagated };
+}
+
+/** Set one row's category and propagate it to its collapsed duplicates. */
+export async function setCategoryForGroup(db: D1Database, messageId: number, category: string): Promise<void> {
+  await setCategories(db, [{ id: messageId, category }]);
+}
+
+export interface TextRow {
+  id: number;
+  txid: string;
+  address: string;
+  content: string;
+  category: string | null;
+  content_hash: string | null;
+  ts: number;
+}
+
+/**
+ * Human-text group representatives, keyset-paged by id, for the offline
+ * reclassifier. Rows that are still unparsed (protocol NULL) are included
+ * because the cron treats them as text until reparseLegacy runs.
+ */
+export async function listTextRows(db: D1Database, after: number, limit: number): Promise<TextRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, txid, address, content, category, content_hash, ts FROM messages
+        WHERE id > ? AND (protocol = 'text' OR protocol IS NULL) AND is_dup = 0
+          AND content IS NOT NULL AND length(trim(content)) > 0
+        ORDER BY id ASC LIMIT ?`
+    )
+    .bind(after, limit)
+    .all<Record<string, unknown>>();
+  return results.map((r) => ({
+    id: num(r, 'id'),
+    txid: str(r, 'txid'),
+    address: str(r, 'address'),
+    content: str(r, 'content'),
+    category: nullableStr(r, 'category'),
+    content_hash: nullableStr(r, 'content_hash'),
+    ts: num(r, 'ts'),
+  }));
+}
+
 export async function countUnclassified(db: D1Database): Promise<number> {
   const row = await db
     .prepare(
       `SELECT COUNT(*) AS n FROM messages
-        WHERE category IS NULL AND (protocol = 'text' OR protocol IS NULL)
+        WHERE category IS NULL AND (protocol = 'text' OR protocol IS NULL) AND is_dup = 0
           AND content IS NOT NULL AND length(trim(content)) > 0`
     )
     .first<{ n: number }>();

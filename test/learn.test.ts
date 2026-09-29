@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { parseFrontMatter, renderMarkdown, resolveTokens, safeHref, slugId } from '../src/markdown';
 import { CORE30, SPARROW } from '../src/facts';
+import { CATEGORIES } from '../src/classify';
 
 const dir = new URL('../content/learn/', import.meta.url);
 const files = readdirSync(dir).filter((f) => f.endsWith('.md')).sort();
@@ -105,8 +106,23 @@ describe('learn content', () => {
     }
   });
 
-  it('never repeats the retired Core 30 or Sparrow wording', () => {
-    const banned = [CORE30.banned, SPARROW.banned, 'Tools → add an OP_RETURN', 'Tools → Add OP_RETURN'];
+  it('states the current category count wherever a count is written out', () => {
+    const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+    const word = words[CATEGORIES.length];
+    const sources = [
+      ...files.map((f) => readFileSync(new URL(f, dir), 'utf8')),
+      readFileSync(new URL('../src/ui.ts', import.meta.url), 'utf8'),
+      readFileSync(new URL('../README.md', import.meta.url), 'utf8'),
+    ];
+    for (const s of sources) {
+      for (const m of s.matchAll(/\b([a-z]+) (categories|classifier categories|category names)\b/gi)) {
+        if (words.includes(m[1].toLowerCase())) expect(m[1].toLowerCase(), m[0]).toBe(word);
+      }
+    }
+  });
+
+  it('never repeats the retired Core 30 or Sparrow wording, nor the old seven-category count', () => {
+    const banned = [CORE30.banned, SPARROW.banned, 'Tools → add an OP_RETURN', 'Tools → Add OP_RETURN', 'seven categor', 'seven classifier', 'seven discrete', 'seven category names'];
     const sources = [
       ...files.map((f) => readFileSync(new URL(f, dir), 'utf8')),
       readFileSync(new URL('../src/seo.ts', import.meta.url), 'utf8'),

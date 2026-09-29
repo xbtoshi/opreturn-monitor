@@ -217,18 +217,52 @@ async function classifyNewMessages(d1: D1Database, env: Env, max: number): Promi
   const pending = await db.getUnclassifiedMessages(d1, max);
   if (pending.length === 0) return 0;
 
-  const results = await classifyBatch(
+  const result = await classifyBatch(
     pending.map((m) => ({ id: m.id, content: m.content as string })),
     env
   );
 
-  let classified = 0;
-  for (const [id, category] of Object.entries(results)) {
-    await db.setCategory(d1, Number(id), category);
-    classified++;
-  }
+  const assignments = Object.entries(result.categories).map(([id, category]) => ({ id: Number(id), category }));
+  if (assignments.length) await db.setCategories(d1, assignments);
 
-  return classified;
+  // Leave a trace either way: the classifier was silently dead for three
+  // weeks once because every failure collapsed into "0 classified".
+  const now = new Date().toISOString();
+  if (result.error) {
+    console.error('classify:', result.error);
+    await db.setIngestState(d1, { ai_last_error: result.error.slice(0, 300), ai_last_error_at: now });
+  }
+  if (assignments.length) await db.setIngestState(d1, { ai_last_ok: now });
+
+  return assignments.length;
+}
+
+/**
+ * Re-run the protocol detectors over rows filed as text (or never parsed),
+ * `limit` at a time from `after`. Used after new residue detectors ship so old rows
+ * leave the human feed too. Returns the last id looked at (null when done).
+ */
+export async function reparseTextRows(
+  d1: D1Database,
+  after: number,
+  limit: number
+): Promise<{ scanned: number; changed: number; next_after: number | null }> {
+  const rows = await db.listTextRowsForReparse(d1, after, limit);
+  const groups: db.GroupKey[] = [];
+  let changed = 0;
+  for (const row of rows) {
+    const content = row.content ?? '';
+    const { ops, protocol } = content.trim() ? reparseContent(content) : { ops: [], protocol: 'binary' };
+    // Text rows that still read as text are untouched; never-parsed rows
+    // always get written so they stop counting as text by default.
+    if (protocol === 'text' && row.protocol === 'text') continue;
+    const hash = db.contentHash(content, null);
+    await db.applyReparse(d1, row, protocol, hash, ops, row.protocol != null);
+    groups.push({ address: row.address, content_hash: hash });
+    changed++;
+  }
+  await db.recomputeGroups(d1, groups);
+  return { scanned: rows.length, changed, next_after: rows.length < limit ? null : rows[rows.length - 1].id };
 }
 
 /** Classify every unclassified message, in batches, until none remain. */

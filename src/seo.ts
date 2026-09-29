@@ -1,4 +1,4 @@
-import { CATEGORIES, categorySlug } from './classify';
+import { CATEGORIES, CATEGORY_DEFINITIONS, categorySlug } from './classify';
 import { protocolLabel } from './protocols';
 import { CORE30, HISTORY_CAPS, SPARROW } from './facts';
 
@@ -140,14 +140,8 @@ Protocol pages: ${siteUrl}/p/{protocol} · Ticker pages: ${siteUrl}/tick/{TICK} 
 
 ## AI Classification Taxonomy
 
-Transmissions are classified into seven discrete categories:
-- \`Laundry / Service Ads\`: Mixers, crypto laundry, OTC desks, phishing links.
-- \`Begging / Victim Appeals\`: Requests for refunds, charity, hospital bills, student loans.
-- \`Threats / Hostility\`: Law enforcement ultimatums, hacker taunts, extortion.
-- \`Prompt Injection\`: Text attempting to subvert LLM indexing bots (e.g., 'Ignore previous instructions').
-- \`Haiku / Philosophical\`: Poetry, blockchain maxims, existential reflections.
-- \`Self-deprecating / Black Humor\`: Irony, despair, memes about losing private keys.
-- \`Other\`: General greetings, unclassified data, signatures.
+Human-readable transmissions are classified into ${CATEGORIES.length} discrete categories:
+${CATEGORIES.map((c) => `- \`${c}\`: ${CATEGORY_DEFINITIONS[c]}`).join('\n')}
 
 ## Public REST API
 
@@ -1054,7 +1048,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'How does AI classification categorize transmissions?',
-    a: 'Each message is decoded to UTF-8 and processed through an OpenAI-compatible endpoint that classifies content into one of seven categories: Laundry / Service Ads, Begging / Victim Appeals, Threats / Hostility, Prompt Injection, Haiku / Philosophical, Self-deprecating / Black Humor, or Other.',
+    a: `Each message is decoded to UTF-8 and processed through an OpenAI-compatible endpoint that classifies content into one of ${CATEGORIES.length} categories: ${CATEGORIES.filter((c) => c !== 'Other').join(', ')}, or Other.`,
   },
   {
     q: 'How can I etch my own message into Bitcoin?',

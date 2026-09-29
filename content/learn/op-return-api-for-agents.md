@@ -18,7 +18,7 @@ The API is the same one the site's own interface uses, so anything you can see y
 - `GET /api/collections` lists the curated collections with address and message counts.
 - `GET /api/messages` is the feed. Filters: `collection_id`, `address`, `category`, `protocol`, `tick`, `block`, `kind=text|all`, `sort=hot|new`, `limit` (max 100) and a `before` cursor for paging.
 - `GET /api/chat?collection_id=…` or `?address=…` returns the chronological conversation with sender attribution and the room's participants.
-- `GET /api/categories` returns the seven classifier categories with counts.
+- `GET /api/categories` returns the eleven classifier categories with counts.
 - `GET /api/message/:txid` returns one message with its decoded OP_RETURN outputs.
 
 ### Protocols, tickers, chain and block census

@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import seedCollections from '../collections.json';
-import { categoryFromSlug, categorySlug } from './classify';
+import { categoryFromSlug, categorySlug, isCategory } from './classify';
 import { classifyOnePass } from './cron';
 import { runCron } from './cron';
 import * as db from './db';
 import { fetchHistoricalPriceUsd, mempoolHosts } from './mempool';
 import { ingestOne, ingestStatus, resetIngestCursors } from './ingest';
-import { backfillDetails, reparseLegacy } from './cron';
+import { backfillDetails, reparseLegacy, reparseTextRows } from './cron';
 import { protocolLabel } from './protocols';
 import { getGuide, guideJsonLd, guideMinutes, listGuides, loadFacts, renderGuide, renderGuideHtml, renderLearnIndexHtml } from './learn';
 import {
@@ -522,6 +522,14 @@ app.post('/api/admin/ai-test', adminGuard, async (c) => {
 
 /** Re-derive protocol/ops for legacy rows now instead of waiting for the cron. */
 app.post('/api/admin/reparse', adminGuard, async (c) => {
+  // ?scope=text re-runs the detectors over rows already filed as text
+  // (keyset: pass back next_after until it is null).
+  if (c.req.query('scope') === 'text') {
+    const after = Math.max(Number(c.req.query('after')) || 0, 0);
+    const limit = Math.min(Math.max(Number(c.req.query('limit')) || 500, 1), 1000);
+    const r = await reparseTextRows(c.env.DB, after, limit);
+    return c.json({ ok: true, ...r });
+  }
   const max = Math.min(Math.max(Number(c.req.query('max')) || 500, 1), 2000);
   let total = 0;
   while (total < max) {
@@ -530,6 +538,30 @@ app.post('/api/admin/reparse', adminGuard, async (c) => {
     if (n === 0) break;
   }
   return c.json({ ok: true, reparsed: total });
+});
+
+/** Human-text group representatives for the offline reclassifier (keyset by id). */
+app.get('/api/admin/messages/text', adminGuard, async (c) => {
+  const after = Math.max(Number(c.req.query('after')) || 0, 0);
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 500, 1), 500);
+  const rows = await db.listTextRows(c.env.DB, after, limit);
+  return c.json({ ok: true, rows, next_after: rows.length < limit ? null : rows[rows.length - 1].id });
+});
+
+/** Bulk category writes: [{ id, category|null }], <= 200 per call; duplicates inherit. */
+app.post('/api/admin/categories', adminGuard, async (c) => {
+  const body = (await c.req.json().catch(() => null)) as unknown;
+  if (!Array.isArray(body) || body.length === 0 || body.length > 200) return jsonError('expected 1-200 assignments', 400);
+  const assignments: db.CategoryAssignment[] = [];
+  for (const item of body as Array<{ id?: unknown; category?: unknown }>) {
+    const id = Number(item?.id);
+    if (!Number.isInteger(id) || id <= 0) return jsonError(`invalid id: ${String(item?.id)}`, 400);
+    if (item?.category === null) assignments.push({ id, category: null });
+    else if (isCategory(item?.category)) assignments.push({ id, category: item.category });
+    else return jsonError(`unknown category for id ${id}: ${String(item?.category)}`, 400);
+  }
+  const r = await db.setCategories(c.env.DB, assignments);
+  return c.json({ ok: true, ...r });
 });
 
 app.post('/api/admin/details', adminGuard, async (c) => {

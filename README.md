@@ -175,7 +175,22 @@ node scripts/loadtest-seed.mjs 400000      # seed local D1 with synthetic explor
 - AI classification is best-effort: batches of `AI_BATCH_SIZE` (default 10)
   messages are sent in one request; any message the batch response missed is
   retried individually. Failures leave `category` NULL and the next cron run
-  retries (capped by `AI_MAX_PER_RUN`).
+  retries (capped by `AI_MAX_PER_RUN`; note that `0` means "use the default",
+  not "off" — unset `OPENAI_API_KEY` to disable). Only dedupe-group
+  representatives (`is_dup = 0`) are sent; collapsed duplicates inherit the
+  label. Every request carries `x-opencode-session` and a `user-agent`, which
+  OpenCode Zen Go requires (it returns 400 `MissingSessionID` otherwise).
+  Classifier health is in `GET /api/admin/ingest/status` as `ai_last_ok`,
+  `ai_last_error` and `ai_last_error_at`.
+- The taxonomy has eleven labels (`CATEGORIES` in `src/classify.ts`); the
+  prompt, the llms.txt taxonomy block and the FAQ are generated from it. To
+  relabel the archive offline with Claude, run
+  `node --experimental-strip-types scripts/reclassify.mts` (dry run, writes a
+  JSONL with old and new labels), then `--apply <jsonl>`; `--revert <jsonl>`
+  restores the previous labels. It needs `ADMIN_KEY` and `ANTHROPIC_API_KEY`
+  in the environment or `.dev.vars`, and uses the admin endpoints
+  `GET /api/admin/messages/text`, `POST /api/admin/categories` and
+  `POST /api/admin/reparse?scope=text`.
 - Likes require a client-mined proof-of-work nonce (16 leading zero bits of
   `sha256(message_id:nonce)`, verified server-side in `src/index.ts`), plus a
   voter fingerprint (hashed `CF-Connecting-IP` + User-Agent) that dedupes votes.

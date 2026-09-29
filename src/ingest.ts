@@ -57,6 +57,10 @@ export interface IngestStatus {
   last_error: string | null;
   /** Set when forward ingestion stopped itself (deep reorg); clear via ingest/reset. */
   halt_reason: string | null;
+  /** Last time the AI classifier wrote at least one category. */
+  ai_last_ok: string | null;
+  ai_last_error: string | null;
+  ai_last_error_at: string | null;
   stats: db.ChainStats;
   recent: db.BlockRow[];
 }
@@ -77,6 +81,9 @@ export async function ingestStatus(env: Env, hosts: string[]): Promise<IngestSta
     backfill_floor: n('backfill_floor'),
     last_error: state.last_error || null,
     halt_reason: state.halt_reason || null,
+    ai_last_ok: state.ai_last_ok || null,
+    ai_last_error: state.ai_last_error || null,
+    ai_last_error_at: state.ai_last_error_at || null,
     stats,
     recent,
   };

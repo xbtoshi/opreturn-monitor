@@ -39,9 +39,9 @@ Most of it is playful. Some of it is a genuine probe, sent to addresses whose ho
 
 ## How The Permanent Record classifies it
 
-The pipeline is deliberately narrow. Every OP_RETURN output is decoded by the protocol registry first. Runes, token JSON, bridge memos and other structured payloads are handled there and never reach a model. Only text that reads as prose goes to the classifier, which assigns one of seven categories: Laundry / Service Ads, Begging / Victim Appeals, Threats / Hostility, Prompt Injection, Haiku / Philosophical, Self-deprecating / Black Humor, and Other.
+The pipeline is deliberately narrow. Every OP_RETURN output is decoded by the protocol registry first. Runes, token JSON, bridge memos and other structured payloads are handled there and never reach a model. Only text that reads as prose goes to the classifier, which assigns one of eleven categories: Laundry / Service Ads, Begging / Victim Appeals, Threats / Hostility, Prompt Injection, Haiku / Philosophical, Self-deprecating / Black Humor, Legal / Ownership Notices, Contact / Negotiation, Politics / Activism, Graffiti / Greetings, and Other.
 
-The classifier is itself a language model, which means the category exists partly because the site had to think about this problem for its own sake. The model is asked to label the text, not to act on it, its output is constrained to one of the seven category names, and nothing it produces is executed or displayed as anything but a label. That is the general pattern: a model may read untrusted text if its output has no authority.
+The classifier is itself a language model, which means the category exists partly because the site had to think about this problem for its own sake. The model is asked to label the text, not to act on it, its output is constrained to one of the eleven category names, and nothing it produces is executed or displayed as anything but a label. That is the general pattern: a model may read untrusted text if its output has no authority.
 
 You can browse the category on its own page, [/cat/prompt-injection](/cat/prompt-injection), or filter any feed by it from the sidebar.
 
@@ -71,7 +71,7 @@ A concrete sketch, since "treat it as data" is easy to say and easy to get wrong
 
 1. **Decode before you read.** Run structured parsers first. Token JSON, memos and protocol markers should be recognised and routed away from the model entirely; only what fails every parser is prose.
 2. **Quarantine the prose.** Put it in its own message or field, labelled as untrusted user content from the blockchain, and never concatenate it with system instructions.
-3. **Constrain the output.** Ask for a label from a fixed list, a summary of bounded length, or a boolean. Reject anything else. This is how the site's classifier works: seven category names in, one category name out.
+3. **Constrain the output.** Ask for a label from a fixed list, a summary of bounded length, or a boolean. Reject anything else. This is how the site's classifier works: eleven category names in, one category name out.
 4. **Separate reading from acting.** The component that reads chain text must not hold keys, must not be able to call transfer or sign tools, and must not be able to rewrite the policy of the component that does.
 5. **Log and review.** Keep the raw text and the model's output side by side. Injections that "work" show up as labels or summaries that do not match the input, and the archive's category page is a ready-made regression set.
 
@@ -89,7 +89,7 @@ It works only if some software feeds on-chain text to a language model that also
 
 ### Does opreturn.xyz categorize them?
 
-Yes, under Prompt Injection, one of seven categories the AI classifier assigns to human-readable text. Protocol payloads are decoded separately and never classified.
+Yes, under Prompt Injection, one of eleven categories the AI classifier assigns to human-readable text. Protocol payloads are decoded separately and never classified.
 
 ### How should agents treat OP_RETURN text?
 

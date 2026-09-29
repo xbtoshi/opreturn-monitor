@@ -184,6 +184,28 @@ const MARKER_TAGS: Record<string, string> = {
   ALPN: 'alpn',
 };
 
+/**
+ * Machine-generated ASCII with a recognisable prefix. These read as "text"
+ * to the decoder but are indexer tags, lottery draws or session ids, and
+ * they were the bulk of what the human-message classifier was being fed.
+ * Each becomes a storable protocol row so it is reachable from /p/<slug>.
+ */
+const PREFIX_PROTOCOLS: Array<{ re: RegExp; protocol: string; op?: (m: RegExpExecArray) => string | null }> = [
+  { re: /^pwt1:(list\d*|send\d*|seal\d*|[a-z]+\d*):/i, protocol: 'pwt', op: (m) => m[1].toLowerCase() },
+  { re: /^MTLD_(BATCH_)?\d/, protocol: 'mtld', op: (m) => (m[1] ? 'batch' : null) },
+  { re: /^SODA #\d+ - Drawn [A-Z][a-z]{2} \d{1,2}, \d{4}$/, protocol: 'soda', op: () => 'draw' },
+  { re: /^SENTINEL\|([A-Z]+)\|/, protocol: 'sentinel', op: (m) => m[1].toLowerCase() },
+  { re: /^lEdge[0-9a-f]{64}/, protocol: 'ledge' },
+  { re: /^bitfee(?::\S*)?(?:\s+bitfee:\S*)*$/, protocol: 'bitfee' },
+];
+
+/** 0x-prefixed 32-byte hash, optionally followed by |key=value fields (bridge deposit receipts). */
+const RE_EVM_HASH_FIELDS = /^0x([0-9a-fA-F]{64})((?:\|[A-Za-z0-9_]+=[^|\s]*)+)$/;
+/** A bare hex digest (sha256, txid, hash160...) with nothing else. */
+const RE_BARE_HEX = /^(?:[0-9a-f]{32,}|[0-9A-F]{32,})$/;
+/** Nothing a person would read: only digits, punctuation and whitespace (emoji still count as a message). */
+const RE_NO_LETTERS = /^[\p{N}\p{P}\p{Z}\p{Cc}$+<=>^`|~]*$/u;
+
 
 function slugProtocol(p: string): string {
   return p.toLowerCase().replace(RE_SLUG, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'unknown';
@@ -250,6 +272,11 @@ export function detectFromText(text: string): Omit<DecodedOp, 'vout' | 'payload_
   if (RE_EVM_HASH.test(t)) {
     return { protocol: 'evm-hash', op: null, tick: null, amount: null, text: t };
   }
+  const hashFields = RE_EVM_HASH_FIELDS.exec(t);
+  if (hashFields) {
+    const op = /\|depositor=/i.test(hashFields[2]) ? 'deposit' : 'fields';
+    return { protocol: 'evm-hash', op, tick: null, amount: null, text: t };
+  }
 
   const data = RE_DATA_URI.exec(t);
   if (data) {
@@ -262,6 +289,21 @@ export function detectFromText(text: string): Omit<DecodedOp, 'vout' | 'payload_
     if (t.startsWith(tag) && (t.length === tag.length || t.charCodeAt(tag.length) < 0x20 || t.charCodeAt(tag.length) >= 0x80)) {
       return { protocol: MARKER_TAGS[tag], op: null, tick: null, amount: null, text: tag };
     }
+  }
+
+  for (const p of PREFIX_PROTOCOLS) {
+    const m = p.re.exec(t);
+    if (m) return { protocol: p.protocol, op: p.op ? p.op(m) : null, tick: null, amount: null, text: t.slice(0, 200) };
+  }
+
+  if (RE_BARE_HEX.test(t)) {
+    return { protocol: 'hash', op: null, tick: null, amount: null, text: t };
+  }
+
+  // Digits, punctuation or a single character: not a message. Counted as
+  // binary, which keeps the row but drops it from feeds and classification.
+  if (t.length <= 1 || RE_NO_LETTERS.test(t)) {
+    return { protocol: 'binary', op: null, tick: null, amount: null, text: null };
   }
 
   return null;
@@ -445,6 +487,20 @@ export function protocolLabel(protocol: string): string {
       return 'Bridge memo';
     case 'evm-hash':
       return 'EVM hash';
+    case 'hash':
+      return 'Hash';
+    case 'pwt':
+      return 'PWT';
+    case 'mtld':
+      return 'MTLD';
+    case 'soda':
+      return 'SODA';
+    case 'sentinel':
+      return 'Sentinel';
+    case 'ledge':
+      return 'lEdge';
+    case 'bitfee':
+      return 'bitfee';
     case 'witness-commitment':
       return 'Witness commitment';
     case 'rootstock':

@@ -198,6 +198,49 @@ describe('reparseContent (legacy rows)', () => {
   });
 });
 
+describe('residue detectors', () => {
+  it('files indexer tags, lottery draws, session ids and pwt ops as protocols, not text', () => {
+    expect(detectFromText('pwt1:list5:eyJhbW91bnRNb2RlbCI6ImNhbm9uaWNhbCJ9')).toMatchObject({ protocol: 'pwt', op: 'list5' });
+    expect(detectFromText('pwt1:seal5:db3e58…:eyJ')).toMatchObject({ protocol: 'pwt', op: 'seal5' });
+    expect(detectFromText('MTLD_395720')).toMatchObject({ protocol: 'mtld', op: null });
+    expect(detectFromText('MTLD_BATCH_3_395171_395177')).toMatchObject({ protocol: 'mtld', op: 'batch' });
+    expect(detectFromText('SODA #8470 - Drawn Jun 4, 2026')).toMatchObject({ protocol: 'soda', op: 'draw' });
+    expect(detectFromText('SENTINEL|SESSION|377a7d24aae1986ef0bda1dea60f2eac10078898|8a6f644f')).toMatchObject({ protocol: 'sentinel', op: 'session' });
+    expect(detectFromText('lEdge115311e82b75c0ba22b3f35883d7fe6c5c1c0a8bc7fef628681fca77def8d1ec')).toMatchObject({ protocol: 'ledge' });
+    expect(detectFromText('bitfee\nbitfee:v1:7dacbdf58a0a99d067dff0c56a482a0b65d468ca135315a3c0209aef63a9a9a5i0')).toMatchObject({ protocol: 'bitfee' });
+    expect(reparseContent('bitfee\nbitfee:v1:7dacbdf58a0a99d067dff0c56a482a0b65d468ca135315a3c0209aef63a9a9a5i0').protocol).toBe('bitfee');
+    expect(detectFromText('bitfee')).toMatchObject({ protocol: 'bitfee' });
+  });
+  it('does not mistake prose that starts with a marker word for the protocol', () => {
+    for (const t of ['bitfee is a scam', 'SODA #1 - Drawn by me yesterday', 'MTLD_ is what they call it', 'pwt1: what is this']) {
+      expect(detectFromText(t), t).toBeNull();
+      expect(reparseContent(t).protocol, t).toBe('text');
+    }
+  });
+  it('recognises 0x hashes with |key=value fields and bare hex digests', () => {
+    const h = '0x8cb90e6fdf021816d59d0dc36d6f786e4dee679685d2a2624b051ef34b78470d';
+    expect(detectFromText(`${h}|depositor=bc1qc0u3r24f8`)).toMatchObject({ protocol: 'evm-hash', op: 'deposit' });
+    expect(detectFromText(`${h}|k=v|x=1`)).toMatchObject({ protocol: 'evm-hash', op: 'fields' });
+    expect(detectFromText('be2e5527aa5103056603f1d5a2abc73deda5785a3bc338d2fc203900a458df5f')).toMatchObject({ protocol: 'hash' });
+    expect(detectFromText('52494646fa0500005745425056503820ee0500001024009d012a800080003eed6aad')).toMatchObject({ protocol: 'hash' });
+  });
+  it('counts digits-only and single-character payloads as binary, never as a message', () => {
+    for (const t of ['227423', 'x', '!!!', '42 / 7', '']) {
+      const d = detectFromText(t);
+      if (t === '') expect(d).toBeNull();
+      else expect(d, t).toMatchObject({ protocol: 'binary' });
+    }
+    expect(reparseContent('227423').protocol).toBe('binary');
+    expect(isStorableProtocol('binary')).toBe(false);
+  });
+  it('still keeps prose, emoji and short words as text', () => {
+    for (const t of ['hello federal agents :3', '🚀🚀🚀', 'gm', 'kl', 'Not abandoned? Prove it by Sept 30', 'toss a coin to your witcher', 'ГРУ к СВР. Использованы для хакинга!']) {
+      expect(detectFromText(t), t).toBeNull();
+      expect(reparseContent(t).protocol, t).toBe('text');
+    }
+  });
+});
+
 describe('classification gating', () => {
   it('only text (or not-yet-parsed) rows are classifiable', () => {
     expect(isClassifiable('text')).toBe(true);
