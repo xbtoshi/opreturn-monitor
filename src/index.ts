@@ -191,10 +191,21 @@ app.get('/api/health', (c) => c.json({ ok: true, time: new Date().toISOString() 
 async function priceUsdAt(c: Context<Bindings>, ts: number): Promise<number | null> {
   const now = Math.floor(Date.now() / 1000);
   const past = now - ts > 86400;
-  const bucket = past ? Math.floor(ts / 86400) * 86400 : Math.floor(ts / 600) * 600;
+  // Past blocks: the price at the start of the block's hour; today: ten-minute buckets.
+  const bucket = past ? Math.floor(ts / 3600) * 3600 : Math.floor(ts / 600) * 600;
   return cachedValue<number | null>(originOf(c), `price:${bucket}`, past ? 86400 : 600, () =>
-    fetchHistoricalPriceUsd(mempoolHosts(c.env), past ? bucket + 43200 : ts).catch(() => null)
+    fetchHistoricalPriceUsd(mempoolHosts(c.env), bucket).catch(() => null)
   );
+}
+
+/** `promise`, or `fallback` when it takes longer than `ms`; the promise keeps running (and caching) in the background. */
+function within<T>(ms: number, promise: Promise<T>, fallback: T): Promise<T> {
+  return Promise.race([promise, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
+}
+
+/** One rule for both /a/:address pages: monitored addresses, or at least three rows in the address feed, are indexable. */
+function addressIndexable(monitored: boolean, addressRows: number): boolean {
+  return monitored || addressRows >= 3;
 }
 
 function feeUsdText(feeSats: number | null | undefined, usd: number | null): string {
@@ -1592,7 +1603,9 @@ app.get('/m/:txid', async (c) => {
   const [related, { view, shell }, usd] = await Promise.all([
     relatedFor(c.env.DB, msg),
     pageViewFor(c, { detail: msg as unknown as FeedView['detail'] }),
-    msg.fee_sats != null ? priceUsdAt(c, msg.block_time ?? Math.floor(Date.now() / 1000)) : Promise.resolve(null),
+    // A cache miss calls the price host; never hold the page for it. On a timeout the span is
+    // empty and the client fills it after its own fetch (the one case the row may reflow).
+    msg.fee_sats != null ? within(1500, priceUsdAt(c, msg.block_time ?? Math.floor(Date.now() / 1000)), null) : Promise.resolve(null),
   ]);
   view.related = related as unknown as FeedView['feed'];
   view.feeUsd = feeUsdText(msg.fee_sats, usd);
@@ -1748,7 +1761,7 @@ app.get('/a/:address', async (c) => {
   }
   const [{ view, shell }, addrs] = await Promise.all([feedViewFor(c, 'a', { address }), db.listAddresses(c.env.DB).catch(() => [])]);
   const monitored = addrs.find((a) => a.address === address);
-  const indexable = Boolean(monitored) || view.feed.length >= 3;
+  const indexable = addressIndexable(Boolean(monitored), view.feed.length);
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1777,12 +1790,13 @@ app.get('/a/:address/chat', async (c) => {
       origin
     );
   }
-  const [chat, addrs] = await Promise.all([
+  const [chat, addrs, feedRows] = await Promise.all([
     db.getChat(c.env.DB, { address, limit: 200 }).catch(() => null),
     db.listAddresses(c.env.DB).catch(() => []),
+    // The same window the address feed page judges by.
+    db.getMessages(c.env.DB, { address, kind: 'all', sort: 'new', limit: 3 }).then((r) => r.messages.length).catch(() => 0),
   ]);
-  // Same rule as the address feed page: monitored, or at least three rows, or stay noindex.
-  const indexable = addrs.some((a) => a.address === address) || (chat?.messages.length ?? 0) >= 3;
+  const indexable = addressIndexable(addrs.some((a) => a.address === address), feedRows);
   const { view, shell } = await pageViewFor(c, { address, chat: chat ? { messages: chat.messages as unknown as FeedView['feed'], participants: chat.participants, nextBefore: chat.next_before } : null });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [

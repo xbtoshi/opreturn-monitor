@@ -432,7 +432,7 @@ ${ogMeta}
   .bubble{text-align:left;background:var(--bg);border:1px solid var(--line);color:var(--fg);padding:11px 14px;font-size:15px;line-height:1.4;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;max-width:100%}
   .turn.party .bubble{background:var(--sigT);border-color:var(--sig)}
   .bubble.mem{opacity:.7;border-style:dashed}
-  .bubble-text{cursor:pointer}
+  .bubble-text{display:block;cursor:pointer;color:inherit;text-decoration:none}
   .bubble .readmore{display:block;font-family:'Martian Mono',monospace;font-size:11px;font-weight:600;color:var(--sig);margin-top:8px}
   .bubble-meta{display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-family:'Martian Mono',monospace;font-size:10px;color:var(--fg4)}
   .bubble-meta .cat{font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg3)}
@@ -632,13 +632,8 @@ ${ogMeta}
   .faq-wrap{display:flex;flex-direction:column;gap:18px}
   .faq-wrap .faq-item{display:flex}
   .faq-wrap .faq-a{display:block}
-  .cell{background:var(--card);padding:12px 16px;display:flex;flex-direction:column;gap:4px}
-  .cell .k{font-family:'Martian Mono',monospace;font-size:10px;letter-spacing:.08em;color:var(--fg4)}
-  .cell .v{font-family:'Martian Mono',monospace;font-size:12px;overflow-wrap:anywhere}
   .actions{display:flex;flex-wrap:wrap;gap:10px}
   .act{border:1px solid var(--fg);background:none;color:var(--fg);padding:11px 16px;font-family:'Martian Mono',monospace;font-size:12px}
-  .pad{padding:24px}
-  .artifact .pad blockquote{margin:16px 0}
   .decrypt-lede code{color:var(--sig);font-weight:600;word-break:break-all}
 
   /* ---- responsive ---- */
@@ -1184,7 +1179,7 @@ var FV = (function () {
     h += '<div class="facts"><span class="h">ON-CHAIN RECORD</span>';
     h += factRow('TXID', m.txid, true);
     h += factRow('BLOCK', m.block_height != null ? '<a href="/block/' + m.block_height + '">#' + fmt(m.block_height) + '</a>' + (m.block_time != null ? ' · ' + dateOf(m.block_time) : '') : (m.is_mempool ? 'unconfirmed (in mempool)' : '—'));
-    h += factRow('FEE', (feeText(m) || '—') + (m.fee_sats != null ? ' · ' + fmtSats(m.fee_sats) + ' sats <span id="feeusd" style="color:var(--fg4)">' + esc(s.feeUsd || '') + '</span>' : ''));
+    h += factRow('FEE', (feeText(m) || '—') + (m.fee_sats != null ? ' · ' + fmtSats(m.fee_sats) + ' sats <span id="feeusd" style="display:block;min-height:1.4em;color:var(--fg4)">' + esc(s.feeUsd || '') + '</span>' : ''));
     h += factRow('ADDRESS', m.address, true);
     if (m.sender && m.sender !== m.address) h += factRow('SENDER', m.sender, true);
     if (m.recipient && m.recipient !== m.address) h += factRow('RECIPIENT', m.recipient, true);
@@ -1212,11 +1207,11 @@ var FV = (function () {
     var env = parseCryptoEnvelope(m.content); var bodyHTML = '';
     if (env) {
       if (env.isSigned) bodyHTML += signedBadgeHTML(env, 'Key:');
-      if (env.leadText) { var ltext = env.leadText; var llong = ltext.length > 520; if (llong) ltext = ltext.slice(0, 480) + '…'; bodyHTML += '<div class="bubble-text" data-action="open-msg" data-txid="' + attr(m.txid) + '">' + esc(ltext) + (llong ? '<span class="readmore">read full message →</span>' : '') + '</div>'; }
+      if (env.leadText) { var ltext = env.leadText; var llong = ltext.length > 520; if (llong) ltext = ltext.slice(0, 480) + '…'; bodyHTML += '<a class="bubble-text" href="/m/' + attr(m.txid) + '">' + esc(ltext) + (llong ? '<span class="readmore">read full message →</span>' : '') + '</a>'; }
       bodyHTML += envelopeHTML(m, env, 'armor-', shortAddr(m.address));
     } else {
       var text = displayText(m); var long = text.length > 520; if (long) text = text.slice(0, 480) + '…';
-      bodyHTML = '<div class="bubble-text" data-action="open-msg" data-txid="' + attr(m.txid) + '">' + esc(text) + (long ? '<span class="readmore">read full message →</span>' : '') + '</div>' + mediaHTML(splitMedia(m.content));
+      bodyHTML = '<a class="bubble-text" href="/m/' + attr(m.txid) + '">' + esc(text) + (long ? '<span class="readmore">read full message →</span>' : '') + '</a>' + mediaHTML(splitMedia(m.content));
     }
     var h = '<div class="turn' + (party ? ' party' : '') + '">';
     if (first) { h += '<div class="who-line" style="color:' + color + '"><span>' + esc(name) + '</span>'; if (multi && m.address !== sender) h += '<span class="to">→ ' + esc(partyName(partyOf(s, m.address), m.address)) + '</span>'; h += '</div>'; }
@@ -1394,6 +1389,8 @@ var FV = (function () {
   /* ---- detail ---- */
   function loadFeeUsd(m){
     state.feeUsd='';if(m.fee_sats==null)return Promise.resolve();
+    // Server-rendered page: reuse its figure so hydration cannot change the row (and skip the second lookup).
+    var ssr=document.getElementById('feeusd');if(ssr&&ssr.textContent){state.feeUsd=ssr.textContent;return Promise.resolve();}
     var ts=m.block_time!=null?m.block_time:Math.floor(Date.now()/1000);
     return fetchJSON('/api/price?ts='+ts).then(function(r){if(r.d&&typeof r.d.usd==='number')state.feeUsd='\\u2248 $'+(m.fee_sats/1e8*r.d.usd).toFixed(2);}).catch(function(){});
   }

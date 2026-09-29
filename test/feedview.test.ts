@@ -192,10 +192,13 @@ describe('feedview: message page and chat rooms', () => {
       nextBefore: 'older',
     };
     const h = FV.chatHTML(view({ pathname: '/c/coldcard-exploit-bulletin-board/chat', filter: 1, chat }));
-    const order = ['<main class="page narrow">', 'CHAT ROOM · OLDEST TO NEWEST', 'page-title">Coldcard Exploit Bulletin Board<', '<div class="chips"><a class="chip active" href="/c/coldcard-exploit-bulletin-board/chat">', '<div class="keb" id="keb">', '<div class="room" id="room-log" data-scroll="bottom">', '<button class="btn-more" data-action="chat-earlier">', '<div class="day">2023-11-14</div>', '<div class="turn"><div class="who-line" style="color:#', '<span class="to">→ Blockstream Security</span>', 'data-action="open-msg" data-txid="' + '3'.repeat(64) + '"', '<div class="turn"><div class="bubble">', 'second line', '<div class="day">2023-11-16</div>', '<div class="turn party"><div class="who-line" style="color:var(--sig)"><span>Blockstream Security</span><span class="to">\u2192 Whitehat</span>', 'id="env-' + '5'.repeat(64) + '"', 'data-target="armor-' + '5'.repeat(64) + '"', '<div class="bubble mem">', 'class="crypto-envelope pgp"', '<span class="st mem">', '<div class="roomfoot">', 'ETCH A REPLY'];
+    const order = ['<main class="page narrow">', 'CHAT ROOM · OLDEST TO NEWEST', 'page-title">Coldcard Exploit Bulletin Board<', '<div class="chips"><a class="chip active" href="/c/coldcard-exploit-bulletin-board/chat">', '<div class="keb" id="keb">', '<div class="room" id="room-log" data-scroll="bottom">', '<button class="btn-more" data-action="chat-earlier">', '<div class="day">2023-11-14</div>', '<div class="turn"><div class="who-line" style="color:#', '<span class="to">→ Blockstream Security</span>', '<a class="bubble-text" href="/m/' + '3'.repeat(64) + '">', '<div class="turn"><div class="bubble">', 'second line', '<div class="day">2023-11-16</div>', '<div class="turn party"><div class="who-line" style="color:var(--sig)"><span>Blockstream Security</span><span class="to">\u2192 Whitehat</span>', 'id="env-' + '5'.repeat(64) + '"', 'data-target="armor-' + '5'.repeat(64) + '"', '<div class="bubble mem">', 'class="crypto-envelope pgp"', '<span class="st mem">', '<div class="roomfoot">', 'ETCH A REPLY'];
     let pos = -1;
     for (const needle of order) { const i = h.indexOf(needle, pos + 1); expect(i, needle).toBeGreaterThan(pos); pos = i; }
     expect((h.match(/class="who-line"/g) || []).length).toBe(3);
+    // every bubble is a crawlable permalink, not just a client action
+    expect((h.match(/<a class="bubble-text" href="\/m\//g) || []).length).toBe(4);
+    expect(h).not.toContain('bubble-text" data-action');
     const empty = FV.chatHTML(view({ pathname: '/a/bc1qx/chat', address: 'bc1qx', chat: { messages: [], participants: [], nextBefore: null } }));
     expect(empty).toContain('page-title">bc1qx<');
     expect(empty).toContain('No messages in this room yet.');
