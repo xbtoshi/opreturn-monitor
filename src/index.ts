@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import seedCollections from '../collections.json';
-import { categoryFromSlug, categorySlug, isCategory } from './classify';
+import { aiHeaders, categoryFromSlug, categorySlug, isCategory } from './classify';
 import { classifyOnePass } from './cron';
 import { runCron } from './cron';
 import * as db from './db';
@@ -490,10 +490,7 @@ app.post('/api/admin/ai-test', adminGuard, async (c) => {
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${key}`,
-      },
+      headers: aiHeaders(key, crypto.randomUUID()),
       body: JSON.stringify({
         model,
         temperature: 0,
