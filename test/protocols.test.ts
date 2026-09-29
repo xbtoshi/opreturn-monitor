@@ -200,8 +200,19 @@ describe('reparseContent (legacy rows)', () => {
 
 describe('residue detectors', () => {
   it('files indexer tags, lottery draws, session ids and pwt ops as protocols, not text', () => {
-    expect(detectFromText('pwt1:list5:eyJhbW91bnRNb2RlbCI6ImNhbm9uaWNhbCJ9')).toMatchObject({ protocol: 'pwt', op: 'list5' });
-    expect(detectFromText('pwt1:seal5:db3e58…:eyJ')).toMatchObject({ protocol: 'pwt', op: 'seal5' });
+    expect(detectFromText('pwt1:list5:eyJhbW91bnRNb2RlbCI6ImNhbm9uaWNhbCJ9')).toMatchObject({ protocol: 'pw', op: 'pwt:list5' });
+    expect(detectFromText('pwt1:seal5:db3e58…:eyJ')).toMatchObject({ protocol: 'pw', op: 'pwt:seal5' });
+    expect(detectFromText('pwdns1:r1:Mg:1J8fGE9yNfaqBjdHNxGwWwUpfKiZfLfGg8:1J8f')).toMatchObject({ protocol: 'pw', op: 'pwdns:r1' });
+    expect(detectFromText('pwb1:profile:eyJpbWFnZSI6')).toMatchObject({ protocol: 'pw', op: 'pwb:profile' });
+    expect(reparseContent('pwm1:m:incb\npwt1:send3:d4e5eb:1800').protocol).toBe('pw');
+    expect(detectFromText('DIO funding')).toMatchObject({ protocol: 'dio', op: 'funding' });
+    expect(detectFromText('CNTRPRTY')).toMatchObject({ protocol: 'counterparty' });
+    expect(detectFromText('VLGR|2026-09-27|w176|f0|j7|o0|x331|48bfcbbc8cbcdeed')).toMatchObject({ protocol: 'vlgr' });
+    expect(detectFromText('atlnotice:ae777f3568d3e31627dc984ffa07fda90fbb1969b5008444944e7538590a6835')).toMatchObject({ protocol: 'atlnotice' });
+    expect(detectFromText('BERNSTEIN 2.1 REG f93427ee-1b83-41ba-b69d-946ca5bf2706')).toMatchObject({ protocol: 'bernstein', op: 'reg' });
+    expect(detectFromText('ANCHOR-W05 f868075b79545f240ed1efd7801e13f358a54108cbd7dde6cbbc6d1fd83d38d9')).toMatchObject({ protocol: 'anchor' });
+    expect(detectFromText('CB|6685707424b14c6953f8f5e5384cb2afd34077ea8fb67fc95e476828130099949537304d0b1acfb3a9becd2243f6e2ea6ab4a0e7e7b')).toMatchObject({ protocol: 'cb-hash' });
+    expect(detectFromText('StmpHash260920_830626a60e817fff3b5f6a02211410c29946f0bf9df15a4fbadb6f6fe231859a')).toMatchObject({ protocol: 'stamphash' });
     expect(detectFromText('MTLD_395720')).toMatchObject({ protocol: 'mtld', op: null });
     expect(detectFromText('MTLD_BATCH_3_395171_395177')).toMatchObject({ protocol: 'mtld', op: 'batch' });
     expect(detectFromText('SODA #8470 - Drawn Jun 4, 2026')).toMatchObject({ protocol: 'soda', op: 'draw' });
@@ -212,7 +223,7 @@ describe('residue detectors', () => {
     expect(detectFromText('bitfee')).toMatchObject({ protocol: 'bitfee' });
   });
   it('does not mistake prose that starts with a marker word for the protocol', () => {
-    for (const t of ['bitfee is a scam', 'SODA #1 - Drawn by me yesterday', 'MTLD_ is what they call it', 'pwt1: what is this']) {
+    for (const t of ['bitfee is a scam', 'SODA #1 - Drawn by me yesterday', 'MTLD_ is what they call it', 'pwt1: what is this', 'DIO funding is a scam', 'CB| is not a hash']) {
       expect(detectFromText(t), t).toBeNull();
       expect(reparseContent(t).protocol, t).toBe('text');
     }
@@ -221,6 +232,11 @@ describe('residue detectors', () => {
     const h = '0x8cb90e6fdf021816d59d0dc36d6f786e4dee679685d2a2624b051ef34b78470d';
     expect(detectFromText(`${h}|depositor=bc1qc0u3r24f8`)).toMatchObject({ protocol: 'evm-hash', op: 'deposit' });
     expect(detectFromText(`${h}|k=v|x=1`)).toMatchObject({ protocol: 'evm-hash', op: 'fields' });
+    expect(detectFromText(`${h}|depositor=bc1qmcxg88mrjrstttgxd7ej5dh4juul78rg6d0apf|`)).toMatchObject({ protocol: 'evm-hash', op: 'deposit' });
+    expect(detectFromText('0x0EACE3577f013699322972Eda811AC781BC0DB84')).toMatchObject({ protocol: 'evm-hash', op: 'address' });
+    expect(detectFromText('110f905;')).toMatchObject({ protocol: 'hash' });
+    expect(detectFromText('10e8ecc')).toMatchObject({ protocol: 'hash' });
+    for (const word of ['decade', 'facade', 'beaded', 'Deadbeef']) expect(detectFromText(word), word).toBeNull();
     expect(detectFromText('be2e5527aa5103056603f1d5a2abc73deda5785a3bc338d2fc203900a458df5f')).toMatchObject({ protocol: 'hash' });
     expect(detectFromText('52494646fa0500005745425056503820ee0500001024009d012a800080003eed6aad')).toMatchObject({ protocol: 'hash' });
   });

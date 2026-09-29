@@ -191,8 +191,17 @@ const MARKER_TAGS: Record<string, string> = {
  * Each becomes a storable protocol row so it is reachable from /p/<slug>.
  */
 const PREFIX_PROTOCOLS: Array<{ re: RegExp; protocol: string; op?: (m: RegExpExecArray) => string | null }> = [
-  { re: /^pwt1:(list\d*|send\d*|seal\d*|[a-z]+\d*):/i, protocol: 'pwt', op: (m) => m[1].toLowerCase() },
+  // The pw* family: pwt1 (tokens), pwdns1, pwid1, pwb1 (profiles), pwm1 ... "<name>1:<op>:..."
+  { re: /^(pw[a-z]{0,6})1:([a-z0-9]+):/i, protocol: 'pw', op: (m) => `${m[1].toLowerCase()}:${m[2].toLowerCase()}` },
   { re: /^MTLD_(BATCH_)?\d/, protocol: 'mtld', op: (m) => (m[1] ? 'batch' : null) },
+  { re: /^DIO funding$/, protocol: 'dio', op: () => 'funding' },
+  { re: /^CNTRPRTY/, protocol: 'counterparty' },
+  { re: /^VLGR\|\d{4}-\d{2}-\d{2}\|/, protocol: 'vlgr' },
+  { re: /^atlnotice:[0-9a-f]{64}$/, protocol: 'atlnotice' },
+  { re: /^BERNSTEIN [\d.]+ REG [0-9a-f-]{36}$/, protocol: 'bernstein', op: () => 'reg' },
+  { re: /^ANCHOR-W\d+ [0-9a-f]{64}$/, protocol: 'anchor' },
+  { re: /^CB\|[0-9a-f]{64}/, protocol: 'cb-hash' },
+  { re: /^StmpHash\d+_[0-9a-f]{64}$/, protocol: 'stamphash' },
   { re: /^SODA #\d+ - Drawn [A-Z][a-z]{2} \d{1,2}, \d{4}$/, protocol: 'soda', op: () => 'draw' },
   { re: /^SENTINEL\|([A-Z]+)\|/, protocol: 'sentinel', op: (m) => m[1].toLowerCase() },
   { re: /^lEdge[0-9a-f]{64}/, protocol: 'ledge' },
@@ -200,9 +209,11 @@ const PREFIX_PROTOCOLS: Array<{ re: RegExp; protocol: string; op?: (m: RegExpExe
 ];
 
 /** 0x-prefixed 32-byte hash, optionally followed by |key=value fields (bridge deposit receipts). */
-const RE_EVM_HASH_FIELDS = /^0x([0-9a-fA-F]{64})((?:\|[A-Za-z0-9_]+=[^|\s]*)+)$/;
-/** A bare hex digest (sha256, txid, hash160...) with nothing else. */
-const RE_BARE_HEX = /^(?:[0-9a-f]{32,}|[0-9A-F]{32,})$/;
+const RE_EVM_HASH_FIELDS = /^0x([0-9a-fA-F]{64})((?:\|[A-Za-z0-9_]+=[^|\s]*)+)\|?$/;
+/** A bare 20-byte EVM address. */
+const RE_EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+/** A bare hex digest (sha256, txid, short commit hash...) with nothing else; needs a digit so words like "decade" stay prose. */
+const RE_BARE_HEX = /^(?=.*\d)[0-9a-fA-F]{7,};?$/;
 /** Nothing a person would read: only digits, punctuation and whitespace (emoji still count as a message). */
 const RE_NO_LETTERS = /^[\p{N}\p{P}\p{Z}\p{Cc}$+<=>^`|~]*$/u;
 
@@ -276,6 +287,9 @@ export function detectFromText(text: string): Omit<DecodedOp, 'vout' | 'payload_
   if (hashFields) {
     const op = /\|depositor=/i.test(hashFields[2]) ? 'deposit' : 'fields';
     return { protocol: 'evm-hash', op, tick: null, amount: null, text: t };
+  }
+  if (RE_EVM_ADDRESS.test(t)) {
+    return { protocol: 'evm-hash', op: 'address', tick: null, amount: null, text: t };
   }
 
   const data = RE_DATA_URI.exec(t);
@@ -489,8 +503,22 @@ export function protocolLabel(protocol: string): string {
       return 'EVM hash';
     case 'hash':
       return 'Hash';
-    case 'pwt':
-      return 'PWT';
+    case 'pw':
+      return 'PW family';
+    case 'counterparty':
+      return 'Counterparty';
+    case 'vlgr':
+      return 'VLGR';
+    case 'atlnotice':
+      return 'atlnotice';
+    case 'bernstein':
+      return 'Bernstein';
+    case 'anchor':
+      return 'Anchor';
+    case 'cb-hash':
+      return 'CB hash';
+    case 'stamphash':
+      return 'StmpHash';
     case 'mtld':
       return 'MTLD';
     case 'soda':
