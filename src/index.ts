@@ -90,8 +90,9 @@ async function refreshShell(d1: D1Database, origin: string): Promise<void> {
       db.getChainStats(d1),
       db.listRecentBlocks(d1, 6),
       // The two aggregations over ops are the heaviest reads; share them across isolates via the edge cache.
-      cachedValue<Awaited<ReturnType<typeof db.listProtocols>>>(origin, 'protocols:0', 300, () => db.listProtocols(d1)),
-      cachedValue<db.CategoryStat[]>(origin, 'categories', 300, () => db.listCategories(d1)),
+      cachedValue(origin, 'protocols:0', 300, protocolStats(d1, 0)),
+      // Not an API key (the categories endpoint is uncached); shell-only.
+      cachedValue<db.CategoryStat[]>(origin, 'shell:categories', 300, () => db.listCategories(d1)),
     ]);
     shellCache = {
       at: Date.now(),
@@ -255,20 +256,26 @@ function cacheRequest(origin: string, cacheKey: string): Request {
   return new Request(`${origin}/__cache/${cacheKey}`, { method: 'GET' });
 }
 
-/** The value behind a cached JSON entry (same keys as cachedJson), for server-side consumers. */
+function jsonHeaders(ttlSeconds: number): Record<string, string> {
+  return {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`,
+    'access-control-allow-origin': '*',
+  };
+}
+
+/**
+ * The single edge-cache store for aggregation results. Every entry is the
+ * public API's own Response (same body shape, same headers), so a route and
+ * the shell refresh reading the same key can never see different things.
+ */
 async function cachedValue<T>(origin: string, cacheKey: string, ttlSeconds: number, compute: () => Promise<T>): Promise<T> {
   const cache = (caches as unknown as { default: Cache }).default;
   const key = cacheRequest(origin, cacheKey);
   const hit = await cache.match(key).catch(() => undefined);
   if (hit) return (await hit.json()) as T;
   const value = await compute();
-  const res = new Response(JSON.stringify(value), {
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      'cache-control': `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`,
-    },
-  });
-  await cache.put(key, res).catch(() => undefined);
+  await cache.put(key, new Response(JSON.stringify(value), { headers: jsonHeaders(ttlSeconds) })).catch(() => undefined);
   return value;
 }
 
@@ -278,20 +285,16 @@ async function cachedJson(
   cacheKey: string,
   compute: () => Promise<unknown>
 ): Promise<Response> {
-  const cache = (caches as unknown as { default: Cache }).default;
-  const key = cacheRequest(new URL(c.req.url).origin, cacheKey);
-  const hit = await cache.match(key).catch(() => undefined);
-  if (hit) return hit;
-  const body = JSON.stringify(await compute());
-  const res = new Response(body, {
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      'cache-control': `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`,
-      'access-control-allow-origin': '*',
-    },
-  });
-  c.executionCtx.waitUntil(cache.put(key, res.clone()).catch(() => {}));
-  return res;
+  const value = await cachedValue(new URL(c.req.url).origin, cacheKey, ttlSeconds, compute);
+  return new Response(JSON.stringify(value), { headers: jsonHeaders(ttlSeconds) });
+}
+
+/** What /api/protocols serves; the shell reads the same key, so the shape must be this one. */
+function protocolStats(d1: D1Database, days: number) {
+  return async () => {
+    const stats = await db.listProtocols(d1, days);
+    return stats.map((s) => ({ ...s, label: protocolLabel(s.protocol) }));
+  };
 }
 
 /** Aggregation windows are quantised so the cache has a handful of keys, not one per query string. 0 = all time (default). */
@@ -303,10 +306,7 @@ function daysParam(raw: string | undefined): number {
 
 app.get('/api/protocols', (c) => {
   const days = daysParam(c.req.query('days'));
-  return cachedJson(c, 300, `protocols:${days}`, async () => {
-    const stats = await db.listProtocols(c.env.DB, days);
-    return stats.map((s) => ({ ...s, label: protocolLabel(s.protocol) }));
-  });
+  return cachedJson(c, 300, `protocols:${days}`, protocolStats(c.env.DB, days));
 });
 
 app.get('/api/ticks', (c) => {
@@ -711,20 +711,6 @@ async function feedViewFor(
   // The client forces kind=all on a/p/tick/block; c and cat keep the query's kind for the SHOW toggle.
   const kind: 'text' | 'all' = c.req.query('kind') === 'all' || route === 'a' || route === 'p' || route === 'tick' || route === 'block' ? 'all' : 'text';
   const q = c.req.query('q') || '';
-  const scoped = Boolean(base.filter || base.address || base.category || base.protocol || base.tick || base.block);
-  const page = await db
-    .getMessages(c.env.DB, {
-      collectionId: base.filter || undefined,
-      address: base.address || undefined,
-      category: base.category || undefined,
-      protocol: base.protocol || undefined,
-      tick: base.tick || undefined,
-      blockHeight: base.block || undefined,
-      kind: scoped ? 'all' : kind,
-      sort,
-      limit: 50,
-    })
-    .catch(() => ({ messages: [] as import('./types').Message[], next_before: null as string | null }));
   const feed = shell.feed || { collections: [], categories: [], protocols: [], chain: null };
   const view: FeedView = {
     pathname: url.pathname,
@@ -739,8 +725,8 @@ async function feedViewFor(
     tick: base.tick ?? null,
     block: base.block ?? null,
     blockRow: base.blockRow ?? null,
-    feed: page.messages as unknown as FeedView['feed'],
-    nextBefore: page.next_before,
+    feed: [],
+    nextBefore: null,
     collections: feed.collections,
     categories: feed.categories,
     protocols: feed.protocols,
@@ -748,6 +734,25 @@ async function feedViewFor(
     chain: feed.chain,
     extraHtml: base.extraHtml || '',
   };
+  // The request is the shared module's definition of it (what the client's feedQuery() sends);
+  // the API's scoping rule (any filter => every kind) is applied the same way /api/messages does.
+  const p = FV.feedParams(view);
+  const scoped = Boolean(p.collection_id || p.address || p.category || p.protocol || p.tick || p.block);
+  const page = await db
+    .getMessages(c.env.DB, {
+      collectionId: p.collection_id || undefined,
+      address: p.address || undefined,
+      category: p.category || undefined,
+      protocol: p.protocol || undefined,
+      tick: p.tick || undefined,
+      blockHeight: p.block || undefined,
+      kind: scoped ? 'all' : p.kind,
+      sort: p.sort,
+      limit: p.limit,
+    })
+    .catch(() => ({ messages: [] as import('./types').Message[], next_before: null as string | null }));
+  view.feed = page.messages as unknown as FeedView['feed'];
+  view.nextBefore = page.next_before;
   return { view, shell };
 }
 

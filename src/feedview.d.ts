@@ -48,7 +48,12 @@ export interface FeedView {
   chain?: { blocks: number; opreturn_outputs: number; runes_outputs: number; highest_height?: number | null; stored_txs?: number; recent?: Array<{ height: number; time: number; stored_count: number }> } | null;
   voted?: Record<string, string>;
   liked?: Record<string, boolean>;
-  /** Trusted server-rendered HTML appended after the list (collection address cards). */
+  /**
+   * Server-trusted HTML appended after the list (collection address cards).
+   * Never put message-derived or user-supplied content here: it is inserted
+   * unescaped by both the Worker and the client (which re-emits the block it
+   * captured from the server DOM).
+   */
   extraHtml?: string;
   /** Fixed "now" for deterministic relative times (tests). */
   now?: number;

@@ -183,7 +183,12 @@ evaluates the inlined copy and asserts it renders byte-identically to the
 module, so server and client markup cannot drift; a Playwright pass
 (scratchpad `feed-shift.mjs`) compares each page's element outline with
 JavaScript off and on. The landing page is rendered server-side in
-`src/seo.ts` and adopted by the client (`data-ssr="about"`).
+`src/seo.ts` and adopted by the client (`data-ssr="about"`). Chat rooms and the
+message page still use the older `renderMessageListSsr` rows and their compat
+CSS on the server; moving them onto the shared renderer is a follow-up, so do
+not delete that renderer or the `.msg` styles yet. Collection address cards are
+server-rendered only: after in-app navigation to a collection they appear on
+the next full load.
 
 ## Notes
 
