@@ -13,7 +13,7 @@ To etch data into Bitcoin, create a transaction that includes an **OP_RETURN** o
 
 There is no undo. Anything you write is public forever, tied to the transaction that carried it and therefore to the address that funded it. It costs a real fee, and the fee is not refunded if you change your mind a block later.
 
-Never include private keys, seed phrases, passwords or anything that identifies another person without their consent. Do not include anything illegal to publish where you live. Assume the text will be indexed, quoted and screenshotted. This site will index it within a few minutes of it appearing in a block.
+Never include private keys, seed phrases, passwords or anything that identifies another person without their consent, and think twice before including anything that identifies you. Do not include anything illegal to publish where you live. Assume the text will be indexed, quoted and screenshotted. This site will index it within a few minutes of it appearing in a block.
 
 This guide never asks for your keys and cannot broadcast anything for you. Every step happens in software you control.
 
