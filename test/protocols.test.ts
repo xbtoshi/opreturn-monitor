@@ -228,6 +228,13 @@ describe('residue detectors', () => {
       expect(reparseContent(t).protocol, t).toBe('text');
     }
   });
+  it('files known bare tags as tag rows but leaves the same word inside prose alone', () => {
+    expect(detectFromText('LIHG1')).toMatchObject({ protocol: 'tag', op: 'LIHG1' });
+    expect(detectFromText('burn')).toMatchObject({ protocol: 'tag', op: 'burn' });
+    expect(detectFromText('burn it all down')).toBeNull();
+    expect(detectFromText('Dump the bags')).toBeNull();
+    expect(reparseContent('GGJD').protocol).toBe('tag');
+  });
   it('recognises 0x hashes with |key=value fields and bare hex digests', () => {
     const h = '0x8cb90e6fdf021816d59d0dc36d6f786e4dee679685d2a2624b051ef34b78470d';
     expect(detectFromText(`${h}|depositor=bc1qc0u3r24f8`)).toMatchObject({ protocol: 'evm-hash', op: 'deposit' });

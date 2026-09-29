@@ -126,6 +126,7 @@ export async function runCron(env: Env): Promise<RunSummary> {
 
   lap('poll');
   const reparsed = await reparseLegacy(env.DB, REPARSE_PER_RUN);
+  await sweepTags(env.DB);
   lap('reparse');
   await db.reconcileMonitored(env.DB);
   lap('reconcile');
@@ -166,6 +167,21 @@ export async function reparseLegacy(d1: D1Database, limit: number): Promise<numb
   }
   await db.recomputeGroups(d1, groups);
   return rows.length;
+}
+
+/** Minimum repetitions of one short token to one address before it counts as a marker. */
+export const TAG_MIN_REPEATS = 20;
+
+/**
+ * Re-file short tokens repeated many times to one address (LIHG1, GGJD ...)
+ * as `tag` protocol rows so they stop flooding the human feed and the
+ * classifier. Returns the number of rows converted.
+ */
+export async function sweepTags(d1: D1Database, min = TAG_MIN_REPEATS): Promise<{ groups: number; rows: number }> {
+  const groups = await db.listFrequentTokenGroups(d1, min);
+  let rows = 0;
+  for (const g of groups) rows += await db.convertGroupToTag(d1, g);
+  return { groups: groups.length, rows };
 }
 
 /**

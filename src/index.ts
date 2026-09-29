@@ -7,7 +7,7 @@ import { runCron } from './cron';
 import * as db from './db';
 import { fetchHistoricalPriceUsd, mempoolHosts } from './mempool';
 import { ingestOne, ingestStatus, resetIngestCursors } from './ingest';
-import { backfillDetails, reparseLegacy, reparseTextRows } from './cron';
+import { TAG_MIN_REPEATS, backfillDetails, reparseLegacy, reparseTextRows, sweepTags } from './cron';
 import { protocolLabel } from './protocols';
 import { getGuide, guideJsonLd, guideMinutes, listGuides, loadFacts, renderGuide, renderGuideHtml, renderLearnIndexHtml } from './learn';
 import {
@@ -521,6 +521,10 @@ app.post('/api/admin/ai-test', adminGuard, async (c) => {
 app.post('/api/admin/reparse', adminGuard, async (c) => {
   // ?scope=text re-runs the detectors over rows already filed as text
   // (keyset: pass back next_after until it is null).
+  if (c.req.query('scope') === 'tags') {
+    const min = Math.max(Number(c.req.query('min')) || TAG_MIN_REPEATS, 5);
+    return c.json({ ok: true, ...(await sweepTags(c.env.DB, min)) });
+  }
   if (c.req.query('scope') === 'text') {
     const after = Math.max(Number(c.req.query('after')) || 0, 0);
     const limit = Math.min(Math.max(Number(c.req.query('limit')) || 500, 1), 1000);

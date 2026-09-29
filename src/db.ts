@@ -90,7 +90,7 @@ export async function listCategories(db: D1Database): Promise<CategoryStat[]> {
     .prepare(
       `SELECT m.category AS category, COUNT(*) AS count
          FROM messages m
-        WHERE m.category IS NOT NULL AND m.category != ''
+        WHERE m.category IS NOT NULL AND m.category != '' AND (m.protocol = 'text' OR m.protocol IS NULL)
         GROUP BY m.category
         ORDER BY count DESC, category ASC`
     )
@@ -928,8 +928,11 @@ export async function applyReparse(
   ops: DecodedOp[],
   replace = false
 ): Promise<void> {
+  // A row that stops being text also stops being a human message: drop its label.
   const stmts: D1PreparedStatement[] = [
-    db.prepare('UPDATE messages SET protocol = ?, content_hash = ? WHERE id = ?').bind(protocol, hash, row.id),
+    protocol === 'text'
+      ? db.prepare('UPDATE messages SET protocol = ?, content_hash = ? WHERE id = ?').bind(protocol, hash, row.id)
+      : db.prepare('UPDATE messages SET protocol = ?, content_hash = ?, category = NULL WHERE id = ?').bind(protocol, hash, row.id),
   ];
   let toInsert = ops.filter((op) => !COUNT_ONLY_PROTOCOLS.has(op.protocol));
   if (replace) {
@@ -944,6 +947,47 @@ export async function applyReparse(
   }
   for (const op of toInsert) stmts.push(insertOpStatement(db, row.txid, op, row.ts));
   await db.batch(stmts);
+}
+
+export interface TagGroup {
+  address: string;
+  content_hash: string;
+  content: string;
+  n: number;
+}
+
+/**
+ * Dedupe groups of text rows whose content is one short token repeated at
+ * least `min` times to the same address. Those are markers, not messages.
+ */
+export async function listFrequentTokenGroups(db: D1Database, min: number, limit = 50): Promise<TagGroup[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT address, content_hash, MIN(content) AS content, COUNT(*) AS n FROM messages
+        WHERE protocol = 'text' AND content_hash IS NOT NULL
+          AND length(content) BETWEEN 2 AND 12 AND content NOT LIKE '% %' AND content NOT LIKE '%' || char(10) || '%'
+        GROUP BY address, content_hash HAVING n >= ?
+        ORDER BY n DESC LIMIT ?`
+    )
+    .bind(min, limit)
+    .all<Record<string, unknown>>();
+  return results
+    .map((r) => ({ address: str(r, 'address'), content_hash: str(r, 'content_hash'), content: str(r, 'content'), n: num(r, 'n') }))
+    .filter((g) => /^[A-Za-z0-9_$#-]{2,12}$/.test(g.content.trim()));
+}
+
+/** Turn every row of a group into a `tag` protocol row (ops rewritten, labels cleared). */
+export async function convertGroupToTag(db: D1Database, g: TagGroup): Promise<number> {
+  const tag = g.content.trim();
+  const res = await db.batch([
+    db
+      .prepare(`UPDATE ops SET protocol = 'tag', op = ?, tick = NULL, amount = NULL WHERE txid IN (SELECT txid FROM messages WHERE address = ? AND content_hash = ? AND protocol = 'text')`)
+      .bind(tag, g.address, g.content_hash),
+    db
+      .prepare(`UPDATE messages SET protocol = 'tag', category = NULL WHERE address = ? AND content_hash = ? AND protocol = 'text'`)
+      .bind(g.address, g.content_hash),
+  ]);
+  return Number(res[1]?.meta?.changes ?? 0);
 }
 
 // ---- per-txid detail backfill --------------------------------------------

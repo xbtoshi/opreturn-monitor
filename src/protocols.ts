@@ -208,6 +208,13 @@ const PREFIX_PROTOCOLS: Array<{ re: RegExp; protocol: string; op?: (m: RegExpExe
   { re: /^bitfee(?::\S*)?(?:\s+bitfee:\S*)*$/, protocol: 'bitfee' },
 ];
 
+/**
+ * Bare tags sent hundreds of times to one address (inscription-style
+ * markers, burn labels). Exact whole-content match only, so "burn it all"
+ * stays prose. The cron's tag sweep finds new ones by repetition count.
+ */
+export const TAG_WORDS = new Set(['LIHG1', 'LIHG2', 'GGJD', 'FJNY', 'Ordis', 'UETCL', 'Dump', 'AFEC1', 'UEOLU', 'XSXS', 'burn', 'SIGNL', 'ORDI']);
+
 /** 0x-prefixed 32-byte hash, optionally followed by |key=value fields (bridge deposit receipts). */
 const RE_EVM_HASH_FIELDS = /^0x([0-9a-fA-F]{64})((?:\|[A-Za-z0-9_]+=[^|\s]*)+)\|?$/;
 /** A bare 20-byte EVM address. */
@@ -303,6 +310,10 @@ export function detectFromText(text: string): Omit<DecodedOp, 'vout' | 'payload_
     if (t.startsWith(tag) && (t.length === tag.length || t.charCodeAt(tag.length) < 0x20 || t.charCodeAt(tag.length) >= 0x80)) {
       return { protocol: MARKER_TAGS[tag], op: null, tick: null, amount: null, text: tag };
     }
+  }
+
+  if (TAG_WORDS.has(t)) {
+    return { protocol: 'tag', op: t, tick: null, amount: null, text: t };
   }
 
   for (const p of PREFIX_PROTOCOLS) {
@@ -505,6 +516,8 @@ export function protocolLabel(protocol: string): string {
       return 'Hash';
     case 'pw':
       return 'PW family';
+    case 'tag':
+      return 'Tag';
     case 'counterparty':
       return 'Counterparty';
     case 'vlgr':
