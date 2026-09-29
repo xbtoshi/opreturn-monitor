@@ -170,6 +170,21 @@ node scripts/loadtest-seed.mjs 400000      # seed local D1 with synthetic explor
 4. Set `INGEST_BACKFILL=1` and redeploy to walk back `BACKFILL_DAYS` (~1,000 blocks
    per week of history at 3 blocks per cron run, i.e. roughly a day per 30 days).
 
+## UI layout
+
+`src/ui.ts` is generated (stylesheet + inline client script + server shell); edit
+the scratchpad sources and re-run the assembler rather than the file itself.
+Feed-style screens (`/feed`, `/c/:slug`, `/a/:address`, `/p/:protocol`,
+`/tick/:tick`, `/block/:height`, `/cat/:slug`) are rendered by **one** module,
+`src/feedview.js`: the Worker imports it for the server-rendered page and the
+assembler inlines the same file into the client script between
+`/*__FEEDVIEW_START__*/` and `/*__FEEDVIEW_END__*/`. `test/feedview.test.ts`
+evaluates the inlined copy and asserts it renders byte-identically to the
+module, so server and client markup cannot drift; a Playwright pass
+(scratchpad `feed-shift.mjs`) compares each page's element outline with
+JavaScript off and on. The landing page is rendered server-side in
+`src/seo.ts` and adopted by the client (`data-ssr="about"`).
+
 ## Notes
 
 - AI classification is best-effort: batches of `AI_BATCH_SIZE` (default 10)

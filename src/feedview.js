@@ -1,0 +1,362 @@
+/**
+ * Feed view: the one renderer for feed-style screens (/feed, /c, /a, /p,
+ * /tick, /block, /cat), used verbatim by the Worker for the server-rendered
+ * page and by the inline client script after the assembler inlines this file.
+ *
+ * Rules: no imports, no DOM, no globals. Every function that needs page state
+ * takes a view object `s` (the client's state plus `pathname`/`search`).
+ * Keep it ES2015: the same bytes run in the browser and in the Worker.
+ * `test/feedview.test.ts` asserts the inlined copy in src/ui.ts renders
+ * byte-identically to this module.
+ */
+var FV = (function () {
+  var HOSTILE = { 'Prompt Injection': 1, 'Threats / Hostility': 1, 'Laundry / Service Ads': 1 };
+
+  /* ---- pure helpers ---- */
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+  function attr(s) { return esc(s); }
+  function fmt(n) { return Number(n || 0).toLocaleString('en-US'); }
+  function shortAddr(a) { a = String(a || ''); return a.length > 16 ? a.slice(0, 10) + '…' + a.slice(-4) : a; }
+  function catCode(c) { return 'COL-' + ('0' + c).slice(-2); }
+  function timeAgo(ts, now) {
+    if (ts == null || ts === '') return '';
+    var ms = typeof ts === 'number' ? ts * 1000 : new Date(String(ts).replace(' ', 'T') + (String(ts).indexOf('Z') < 0 ? 'Z' : '')).getTime();
+    if (isNaN(ms)) return '';
+    var diff = ((now || Date.now()) - ms) / 60000;
+    if (diff < 1) return 'just now';
+    if (diff < 60) return Math.floor(diff) + 'm ago';
+    if (diff < 1440) return Math.floor(diff / 60) + 'h ago';
+    return Math.floor(diff / 1440) + 'd ago';
+  }
+  function msgTime(m) { return m.block_time != null ? m.block_time : m.created_at; }
+  function tsOf(m) { if (m.block_time != null) return m.block_time; var t = new Date(String(m.created_at || '').replace(' ', 'T') + 'Z').getTime(); return isNaN(t) ? 0 : Math.floor(t / 1000); }
+  function feeText(m) { if (m.fee_rate != null) return m.fee_rate + ' sat/vB'; if (m.fee_sats != null) return fmt(m.fee_sats) + ' sats'; return ''; }
+  function whenText(m, now) { if (m.is_mempool) { var ago = timeAgo(m.created_at, now); return '◷ mempool · ' + (ago === 'just now' ? 'now' : ago.replace(' ago', '')); } return timeAgo(msgTime(m), now); }
+  function shortCol(c) { if (!c) return ''; var n = String(c.name).replace(/ Bulletin Board$| Notices$| Marking Campaign$| & Digital Graffiti$/, ''); if (/^Genesis/.test(n)) n = 'Genesis tribute'; if (/^Russian/.test(n)) n = 'Russian intel marking'; return n.length > 28 ? n.slice(0, 26) + '…' : n; }
+  function colSlug(c) { return (c && (c.slug || String(c.id))) || ''; }
+  function catSlug(c) { return String(c || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').replace(/--+/g, '-'); }
+  function catDot(c) { return HOSTILE[c] ? 'sig' : (c === 'Other' || !c ? 'mute' : ''); }
+  var PROTO_LABEL = { text: 'Message', binary: 'Binary', runes: 'Runes', omni: 'Omni Layer', thorchain: 'THORChain', 'bridge-memo': 'Bridge memo', 'evm-hash': 'EVM hash', 'witness-commitment': 'Witness commitment', rootstock: 'Rootstock', 'core-dao': 'Core DAO', exsat: 'exSat', stacks: 'Stacks', syscoin: 'Syscoin', lifi: 'LI.FI', 'data-uri': 'Inline file', nft: 'NFT', satflow: 'SATFLOW', 'brc20-prog': 'BRC20PROG', dio: 'DIO', alpn: 'ALPN', hash: 'Hash', pw: 'PW family', tag: 'Tag', counterparty: 'Counterparty', vlgr: 'VLGR', atlnotice: 'atlnotice', bernstein: 'Bernstein', anchor: 'Anchor', 'cb-hash': 'CB hash', stamphash: 'StmpHash', mtld: 'MTLD', soda: 'SODA', sentinel: 'Sentinel', ledge: 'lEdge', bitfee: 'bitfee' };
+  var PROTO_BLURB = { 'ico-20': 'JSON token operations such as the $LEAF mints sent to the Genesis address.', 'crc-20': 'JSON token operations such as the $LEAF mints sent to the Genesis address.', 'brc-20': 'JSON token operations.', omni: 'Omni Layer transfers, mostly Tether (USDT) simple sends.', thorchain: 'THORChain outbound (OUT:) and refund memos plus swap instructions.', 'bridge-memo': 'Cross-chain bridge memos naming the destination asset and address.', 'evm-hash': 'Bare 32-byte EVM transaction or commitment hashes.', lifi: 'LI.FI bridge routing markers.', rootstock: 'Rootstock merge-mining commitments (RSKBLOCK:).', stacks: 'Stacks block commits, leader keys and STX operations.', 'core-dao': 'Core DAO validator delegation tags.', exsat: 'exSat data-availability tags.', syscoin: 'Syscoin merge-mining commitments.', satflow: 'Bare protocol marker with no readable payload.', 'brc20-prog': 'Bare protocol marker with no readable payload.', dio: 'Bare protocol marker with no readable payload.', alpn: 'Bare protocol marker with no readable payload.', 'data-uri': 'Files etched as data: URIs, rendered inline when they are images.', nft: 'JSON NFT mints and transfers.' };
+  var TOKEN_PROTO = /-20$|^src-|^orc-|^brc|^drc-|^ltc-|^nft$/;
+  function protoLabel(p) { p = String(p || ''); return PROTO_LABEL[p] || p.toUpperCase(); }
+  function protoBlurb(p) { return PROTO_BLURB[p] || (/-20$/.test(p) ? 'JSON token operations.' : 'Structured protocol data decoded from the OP_RETURN payload.'); }
+  function isTokenProto(p) { return TOKEN_PROTO.test(String(p || '')); }
+  function isProto(m) { return !!(m && m.protocol && m.protocol !== 'text'); }
+  function fmtAmt(a) { if (a == null || a === '') return ''; var n = Number(a); if (!isFinite(n)) return String(a); if (Math.abs(n) >= 1) return n.toLocaleString('en-US', { maximumFractionDigits: 8 }); return String(a); }
+  function primaryOp(m) {
+    if (!isProto(m)) return null;
+    var ops = m.ops;
+    if (!ops) { ops = []; String(m.content || '').split('\n').forEach(function (line, i) { line = line.trim(); if (line.charAt(0) !== '{') return; try { var j = JSON.parse(line); if (j && typeof j.p === 'string') ops.push({ vout: i, protocol: String(j.p).toLowerCase(), op: j.op || null, tick: j.tick || j.name || null, amount: j.amt || j.amount || null }); } catch (e) { } }); }
+    for (var i = 0; i < ops.length; i++) { if (ops[i].protocol === m.protocol) return ops[i]; }
+    return ops[0] || { protocol: m.protocol, op: null, tick: null, amount: null };
+  }
+  var RE_DATA_IMG = /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml|bmp|avif);base64,[A-Za-z0-9+\/=\s]+$/;
+  var RE_DATA_ANY = /^data:([a-z0-9.+-]+\/[a-z0-9.+-]+)(?:;[a-z0-9=.-]+)*(?:;base64)?,/i;
+  function splitMedia(content) {
+    var lines = String(content || '').split('\n'), text = [], images = [], files = [];
+    lines.forEach(function (l) {
+      var t = l.trim(); var m = RE_DATA_ANY.exec(t);
+      if (!m) { text.push(l); return; }
+      if (RE_DATA_IMG.test(t)) images.push(t.replace(/\s+/g, '')); else files.push(m[1] + ' · ' + Math.round(t.length * 3 / 4 / 1024 * 10) / 10 + ' KB');
+    });
+    return { text: text.join('\n').trim(), images: images, files: files };
+  }
+  function mediaHTML(media) {
+    var h = '';
+    media.images.forEach(function (src) { h += '<div class="inline-media"><img src="' + attr(src) + '" alt="Image etched into an OP_RETURN output" loading="lazy" decoding="async"></div>'; });
+    media.files.forEach(function (f) { h += '<div class="inline-media file">📎 inline file · ' + esc(f) + '</div>'; });
+    return h;
+  }
+
+  /* Cryptographic envelope parser for OpenPGP & Electrum BIE1 ECIES messages */
+  function parseCryptoEnvelope(content) {
+    if (!content) return null;
+    var text = String(content).trim();
+    var hasPgpSigned = text.indexOf('-----BEGIN PGP SIGNED MESSAGE-----') !== -1;
+    var hasPgpMsg = text.indexOf('-----BEGIN PGP MESSAGE-----') !== -1;
+    var hasBie1 = text.indexOf('QklFMQ') !== -1;
+    if (!hasPgpSigned && !hasPgpMsg && !hasBie1) return null;
+    var res = { type: 'plain', leadText: '', bie1Payload: null, pgpArmor: null, isSigned: false, signer: null, signerKey: null, signerFp: null, recipient: null, recipientKey: null, raw: text };
+    if (text.indexOf('-----BEGIN PGP SIGNATURE-----') !== -1) {
+      res.isSigned = true;
+      res.signer = 'Blockstream Security';
+      res.signerKey = '4AC8CC886844A2D6';
+      res.signerFp = '1176 542D A98E 71E1 3372 2EF7 4AC8 CC88 6844 A2D6';
+    }
+    if (hasPgpSigned) {
+      var sigIdx = text.indexOf('-----BEGIN PGP SIGNATURE-----');
+      var headIdx = text.indexOf('-----BEGIN PGP SIGNED MESSAGE-----');
+      var body = text.slice(headIdx, sigIdx !== -1 ? sigIdx : text.length);
+      var sMarker = '-----BEGIN PGP SIGNED MESSAGE-----';
+      var mPos = body.indexOf(sMarker);
+      if (mPos !== -1) {
+        body = body.slice(mPos + sMarker.length).trim();
+        if (body.indexOf('Hash:') === 0) { var nl = body.indexOf(String.fromCharCode(10)); if (nl !== -1) body = body.slice(nl + 1).trim(); }
+      }
+      var bMatch = body.match(/QklFMQ[A-Za-z0-9+/=]+/);
+      if (bMatch) { res.type = 'bie1'; res.bie1Payload = bMatch[0]; res.leadText = body.slice(0, bMatch.index).trim(); res.recipient = 'Whitehat (bc1ql4mfu...jlte)'; }
+      else { res.type = 'pgp-signed'; res.leadText = body; }
+      res.pgpArmor = sigIdx !== -1 ? text.slice(sigIdx) : null;
+      return res;
+    }
+    if (hasPgpMsg) {
+      var msgIdx = text.indexOf('-----BEGIN PGP MESSAGE-----');
+      var lead = text.slice(0, msgIdx).trim();
+      var endIdx = text.indexOf('-----END PGP MESSAGE-----');
+      var armor = text.slice(msgIdx, endIdx !== -1 ? endIdx + 25 : text.length);
+      res.type = 'pgp-encrypted'; res.leadText = lead; res.pgpArmor = armor; res.recipient = 'Blockstream Security'; res.recipientKey = 'BB332D31CBA44EDF';
+      return res;
+    }
+    if (hasBie1) {
+      var bMatch2 = text.match(/QklFMQ[A-Za-z0-9+/=]+/);
+      if (bMatch2) {
+        res.type = 'bie1'; res.bie1Payload = bMatch2[0]; res.leadText = text.slice(0, bMatch2.index).trim(); res.recipient = 'Whitehat (bc1ql4mfu...jlte)';
+        if (res.isSigned) { var sIdx = text.indexOf('-----BEGIN PGP SIGNATURE-----'); if (sIdx !== -1) res.pgpArmor = text.slice(sIdx); }
+        return res;
+      }
+    }
+    return null;
+  }
+  function displayText(m) { var media = splitMedia(m.content); var env = parseCryptoEnvelope(m.content); var t = media.images.length || media.files.length ? (media.text || '[inline file]') : (m.content || ''); if (env && env.leadText) t = env.leadText; else if (env && env.type === 'bie1') t = '[Electrum BIE1 ECIES encrypted payload to ' + shortAddr(m.address) + ']'; else if (env && env.type === 'pgp-encrypted') t = '[OpenPGP encrypted transmission to Blockstream Security]'; return t; }
+  function opLine(m) {
+    var o = primaryOp(m); if (!o) return '';
+    var h = '<div class="opline">';
+    if (o.op) h += '<span>' + esc(String(o.op).toLowerCase()) + '</span>';
+    if (o.amount) h += '<span class="amt">' + esc(fmtAmt(o.amount)) + '</span>';
+    if (o.tick) h += '<a class="tk" href="/tick/' + encodeURIComponent(o.tick) + '">$' + esc(o.tick) + '</a>';
+    var to = m.recipient || (m.monitored_address && m.monitored_address !== m.sender ? m.monitored_address : null);
+    if (to) h += '<span class="arrow">→</span><a href="/a/' + attr(to) + '">' + esc(shortAddr(to)) + '</a>';
+    h += '</div>';
+    return h;
+  }
+  function envBadges(m) { var env = parseCryptoEnvelope(m.content); if (!env) return ''; if (env.isSigned) return '<span class="badge" style="color:var(--green)">🛡 PGP SIGNED</span>'; if (env.type === 'bie1') return '<span class="badge" style="color:var(--amber)">⚡ BIE1 ECIES</span>'; if (env.type === 'pgp-encrypted') return '<span class="badge" style="color:#3d6e8f">🔒 PGP ENCRYPTED</span>'; return ''; }
+
+  /* ---- view helpers (take the view `s`) ---- */
+  function colById(s, cid) { var cs = s.collections || []; for (var i = 0; i < cs.length; i++) { if (cs[i].id === cid) return cs[i]; } return null; }
+  function colName(s, cid) { var c = colById(s, cid); return c ? c.name : ''; }
+  function colBySlug(s, slug) { var cs = s.collections || []; for (var i = 0; i < cs.length; i++) { if (cs[i].slug && cs[i].slug.toLowerCase() === String(slug).toLowerCase()) return cs[i]; } return null; }
+  function colIndex(s, id) { var cs = s.collections || []; for (var i = 0; i < cs.length; i++) { if (cs[i].id === id) return i; } return 0; }
+  function catName(s, slug) { var cs = s.categories || []; for (var i = 0; i < cs.length; i++) { if (catSlug(cs[i].category) === String(slug).toLowerCase()) return cs[i].category; } return null; }
+  function voteGroup(s, m, big) {
+    var voted = (s.voted && s.voted[m.id]) || (s.liked && s.liked[m.id] ? 'up' : null);
+    var h = '<span class="vg' + (big ? ' big' : '') + '">';
+    h += '<button class="up' + (voted === 'up' ? ' voted' : '') + '" data-action="vote" data-dir="up" data-id="' + m.id + '" title="Upvote (mines a proof-of-work nonce)">▲' + (big ? ' Upvote' : '') + '</button>';
+    h += '<span class="score' + (voted ? ' voted' : '') + '" data-lc="' + m.id + '">' + fmt(m.likes || 0) + '</span>';
+    h += '<button class="down' + (voted === 'down' ? ' voted' : '') + '" data-action="vote" data-dir="down" data-id="' + m.id + '" title="Downvote">▼</button></span>';
+    return h;
+  }
+
+  /* ---- routing parity ---- */
+  function routeName(pathname) { var parts = String(pathname || '/').split('/').filter(Boolean); if (parts.length > 2 && parts[parts.length - 1] === 'chat') parts = parts.slice(0, -1); return parts[0] || 'about'; }
+  function defaultSort(name) { return name === 'c' || name === 'cat' || name === 'a' ? 'hot' : 'new'; }
+  function query(s) { var q = {}; String(s.search || '').replace(/^\?/, '').split('&').forEach(function (kv) { if (!kv) return; var i = kv.indexOf('='); var k = decodeURIComponent(i < 0 ? kv : kv.slice(0, i)); var v = decodeURIComponent(i < 0 ? '' : kv.slice(i + 1).replace(/\+/g, ' ')); if (!(k in q)) q[k] = v; }); return q; }
+  function buildQuery(q) { var parts = []; for (var k in q) { if (q[k] == null) continue; parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(q[k]).replace(/%20/g, '+')); } return parts.join('&'); }
+  function withQuery(pathname, q) { var qs = buildQuery(q); return pathname + (qs ? '?' + qs : ''); }
+  /** Request parameters the feed needs, derived from the view the same way on both sides. */
+  function feedParams(s) {
+    return { sort: s.sort === 'hot' ? 'hot' : 'new', limit: 50, kind: s.kind === 'all' ? 'all' : 'text', collection_id: s.filter || null, address: s.address || null, category: s.category || null, protocol: s.protocol || null, tick: s.tick || null, block: s.block || null };
+  }
+  function feedQuery(s, limit, before) {
+    var p = feedParams(s);
+    var q = '/api/messages?sort=' + p.sort + '&limit=' + (limit || p.limit);
+    if (p.collection_id) q += '&collection_id=' + p.collection_id;
+    if (p.address) q += '&address=' + encodeURIComponent(p.address);
+    if (p.category) q += '&category=' + encodeURIComponent(catSlug(p.category));
+    if (p.protocol) q += '&protocol=' + encodeURIComponent(p.protocol);
+    if (p.tick) q += '&tick=' + encodeURIComponent(p.tick);
+    if (p.block) q += '&block=' + p.block;
+    if (p.kind === 'all') q += '&kind=all';
+    if (before) q += '&before=' + encodeURIComponent(before);
+    return q;
+  }
+  function sortHref(s, sort) { var q = query(s); if (sort === defaultSort(routeName(s.pathname))) delete q.sort; else q.sort = sort; return withQuery(s.pathname, q); }
+  function kindHref(s, kind) { var q = query(s); if (kind === 'all') q.kind = 'all'; else delete q.kind; var path = s.pathname; if (s.protocol || s.tick || s.block) path = '/feed'; return withQuery(path, q); }
+  function withKind(s, path) { return path + (s.kind === 'all' ? '?kind=all' : ''); }
+  function feedFilters(s) {
+    var f = [];
+    if (s.filter) f.push({ label: shortCol(colById(s, s.filter)), href: '/feed' + (s.kind === 'all' ? '?kind=all' : '') });
+    if (s.category) f.push({ label: s.category, href: '/feed' });
+    if (s.protocol) f.push({ label: 'Protocol: ' + s.protocol, href: '/feed?kind=all' });
+    if (s.tick) f.push({ label: '$' + s.tick, href: '/feed?kind=all' });
+    if (s.block) f.push({ label: 'Block #' + fmt(s.block), href: '/feed?kind=all' });
+    if (s.address) f.push({ label: shortAddr(s.address), href: '/feed' });
+    if (s.q) f.push({ label: '“' + s.q + '”', href: s.pathname + (s.kind === 'all' ? '?kind=all' : '') });
+    return f;
+  }
+  function visibleFeed(s) { var q = String(s.q || '').toLowerCase(); var feed = s.feed || []; if (!q) return feed; return feed.filter(function (m) { return String(m.content || '').toLowerCase().indexOf(q) >= 0 || String(m.address || '').toLowerCase().indexOf(q) >= 0 || String(m.sender || '').toLowerCase().indexOf(q) >= 0; }); }
+  function feedTitle(s) {
+    if (s.address) return s.address;
+    if (s.filter) return colName(s, s.filter);
+    if (s.category) return s.category;
+    if (s.protocol) return protoLabel(s.protocol);
+    if (s.tick) return '$' + s.tick;
+    if (s.block) return 'Block #' + fmt(s.block);
+    return 'All transmissions';
+  }
+  function feedKicker(s) {
+    var scope = s.kind === 'all' || s.protocol || s.tick || s.block ? 'EVERY PROTOCOL' : 'HUMAN MESSAGES';
+    if (s.protocol) return (isTokenProto(s.protocol) ? 'TOKEN PROTOCOL' : 'OP_RETURN PROTOCOL') + ' · ' + s.protocol.toUpperCase();
+    if (s.tick) return 'TOKEN TICKER';
+    if (s.block) return 'BLOCK CENSUS';
+    if (s.address) return 'ADDRESS RECORD';
+    return scope + ' · ' + (s.filter ? catCode(colIndex(s, s.filter) + 1) : 'ALL COLLECTIONS');
+  }
+
+  /* ---- sidebar filters and the mobile control bar ---- */
+  function filtersHTML(s, sheet) {
+    var cols = s.collections || [], cats = s.categories || [];
+    var h = '';
+    h += '<div class="sgroup"><span class="slabel">SHOW</span><div class="seg2"><a href="' + attr(kindHref(s, 'text')) + '" class="' + (s.kind !== 'all' ? 'active' : '') + '">Messages</a><a href="' + attr(kindHref(s, 'all')) + '" class="' + (s.kind === 'all' ? 'active' : '') + '">All protocols</a></div></div>';
+    if (sheet) {
+      h += '<div class="grp"><span class="slabel">COLLECTION</span><div class="chips"><a class="chip' + (!s.filter ? ' active' : '') + '" href="' + attr(withKind(s, '/feed')) + '">All collections</a>';
+      cols.forEach(function (c) { h += '<a class="chip' + (s.filter === c.id ? ' active' : '') + '" href="' + attr(withKind(s, '/c/' + colSlug(c))) + '">' + esc(shortCol(c)) + '</a>'; });
+      h += '</div></div>';
+      h += '<div class="grp"><span class="slabel">CATEGORY</span><div class="chips">';
+      cats.forEach(function (c) { var a = s.category === c.category; h += '<a class="chip' + (a ? ' active' : '') + '" href="' + attr(a ? '/feed' : '/cat/' + encodeURIComponent(catSlug(c.category))) + '"><span class="dot ' + catDot(c.category) + '"></span>' + esc(c.category) + '</a>'; });
+      h += '</div></div>';
+      return h;
+    }
+    var total = cols.reduce(function (t, c) { return t + (c.message_count || 0); }, 0);
+    h += '<div class="sgroup"><span class="slabel">COLLECTION</span>';
+    h += '<a class="srow' + (!s.filter && !s.address ? ' active' : '') + '" href="' + attr(withKind(s, '/feed')) + '"><span class="nm">All collections</span><span class="n">' + fmt(total) + '</span></a>';
+    cols.forEach(function (c) { h += '<a class="srow' + (s.filter === c.id ? ' active' : '') + '" href="' + attr(withKind(s, '/c/' + colSlug(c))) + '" title="' + attr(c.name) + '"><span class="nm">' + esc(shortCol(c)) + '</span><span class="n">' + fmt(c.message_count || 0) + '</span></a>'; });
+    h += '</div>';
+    if (cats.length) {
+      h += '<div class="sgroup"><span class="slabel">CATEGORY</span>';
+      cats.forEach(function (c) { var a = s.category === c.category; h += '<a class="srow cat' + (a ? ' active' : '') + '" href="' + attr(a ? '/feed' : '/cat/' + encodeURIComponent(catSlug(c.category))) + '"><span class="dot ' + catDot(c.category) + '"></span><span class="nm">' + esc(c.category) + '</span><span class="n">' + fmt(c.count || 0) + '</span></a>'; });
+      h += '</div>';
+    }
+    return h;
+  }
+  function mobileCtlHTML(s) {
+    var n = feedFilters(s).length;
+    return '<div class="seg2"><a href="' + attr(sortHref(s, 'hot')) + '" class="' + (s.sort === 'hot' ? 'active' : '') + '">Hottest</a><a href="' + attr(sortHref(s, 'new')) + '" class="' + (s.sort === 'new' ? 'active' : '') + '">Newest</a></div><button class="fbtn" data-action="sheet-open">Filter' + (n ? ' · ' + n : '') + '</button>';
+  }
+
+  /* ---- rows ---- */
+  function rowHTML(s, m) {
+    var proto = isProto(m); var hostile = HOSTILE[m.category];
+    var col = m.collection_id ? colById(s, m.collection_id) : null;
+    var h = '<article class="row" data-id="' + m.id + '"><div class="meta">';
+    h += '<span class="dot ' + (proto ? 'tok' : catDot(m.category)) + '"></span>';
+    if (proto) h += '<a class="cat tok" href="/p/' + encodeURIComponent(m.protocol) + '">' + esc(protoLabel(m.protocol)) + '</a>';
+    else if (m.category) h += '<a class="cat' + (hostile ? ' sig' : '') + '" href="/cat/' + encodeURIComponent(catSlug(m.category)) + '">' + esc(m.category) + '</a>';
+    else h += '<span class="cat">Unclassified</span>';
+    h += '<span class="sep">·</span>';
+    if (col) h += '<a class="col" href="' + attr(withKind(s, '/c/' + colSlug(col))) + '">' + esc(shortCol(col)) + '</a>'; else h += '<span class="col">Unmonitored</span>';
+    h += envBadges(m);
+    if (m.dup_count > 1) h += '<span class="badge" title="Same message broadcast in ' + m.dup_count + ' transactions">×' + m.dup_count + '</span>';
+    h += '<span class="when' + (m.is_mempool ? ' mem' : '') + '">' + esc(whenText(m, s.now)) + '</span></div>';
+    if (proto) h += opLine(m);
+    var text = displayText(m);
+    h += '<h3 class="content' + (proto ? ' proto' : '') + '"><a href="/m/' + attr(m.txid) + '">' + esc(text) + '</a></h3>';
+    if (text.length > 420) h += '<span class="readmore">… read full message →</span>';
+    h += mediaHTML(splitMedia(m.content));
+    h += '<div class="foot">' + voteGroup(s, m, false);
+    h += '<span class="chain">' + (m.block_height != null ? '<a href="/block/' + m.block_height + '">#' + fmt(m.block_height) + '</a>' : 'unconfirmed') + ' · <a href="/a/' + attr(m.address) + '">' + esc(shortAddr(m.address)) + '</a>' + (feeText(m) ? ' · ' + esc(feeText(m)) : '') + '</span>';
+    h += '<a class="open" href="/m/' + attr(m.txid) + '">Open →</a></div></article>';
+    return h;
+  }
+
+  /* ---- page heads, tail and rail ---- */
+  function protocolHeadHTML(s) {
+    var p = null; (s.protocols || []).forEach(function (x) { if (x.protocol === s.protocol) p = x; });
+    var ticks = (s.ticks || []).filter(function (t) { return t.protocol === s.protocol; });
+    var feed = s.feed || [];
+    var h = '<div class="stats"><div class="stat"><span class="v">' + fmt(p ? p.count : 0) + '</span><span class="l">Transactions, all scanned blocks</span></div><div class="stat"><span class="v">' + fmt(ticks.length) + '</span><span class="l">Tickers seen</span></div><div class="stat"><span class="v">' + (feed.length ? fmt(feed.length) + (s.nextBefore ? '+' : '') : '0') + '</span><span class="l">Loaded below</span></div></div>';
+    if (ticks.length) { h += '<div class="sgroup"><span class="slabel">TICKERS ON ' + esc(s.protocol.toUpperCase()) + '</span><div class="chips">'; ticks.forEach(function (t) { h += '<a class="chip" href="/tick/' + encodeURIComponent(t.tick) + '">$' + esc(t.tick) + ' <span style="opacity:.55">' + fmt(t.count) + '</span></a>'; }); h += '</div></div>'; }
+    return h;
+  }
+  function protocolTailHTML(s) { var ex = null; (s.feed || []).forEach(function (m) { if (!ex && m.content) ex = m; }); if (!ex) return ''; return '<div class="sgroup"><span class="slabel">RAW EXAMPLE</span><div class="rawbox">' + esc(String(ex.content).slice(0, 600)) + '</div></div>'; }
+  function tickHeadHTML(s) {
+    var mine = (s.ticks || []).filter(function (t) { return t.tick === s.tick; });
+    var protos = mine.map(function (t) { return t.protocol; }); var total = mine.reduce(function (n, t) { return n + t.count; }, 0);
+    var first = null; (s.feed || []).forEach(function (m) { if (m.block_height != null && (first == null || m.block_height < first)) first = m.block_height; });
+    var h = '<p class="lede">Token ticker' + (protos.length ? ' · ' + esc(protos.map(protoLabel).join(', ')) : '') + (first != null ? ' · first seen block ' + fmt(first) + ' (of the loaded operations)' : '') + '</p>';
+    h += '<div class="stats"><div class="stat"><span class="v">' + fmt(total) + '</span><span class="l">Operations, all scanned blocks</span></div>';
+    mine.forEach(function (t) { h += '<a class="stat" href="/p/' + encodeURIComponent(t.protocol) + '"><span class="v">' + fmt(t.count) + '</span><span class="l">via ' + esc(protoLabel(t.protocol)) + '</span></a>'; });
+    h += '</div>';
+    return h;
+  }
+  function blockHeadHTML(s) {
+    var b = s.blockRow; var hh = s.block;
+    var h = '<div class="pills"><a class="chip" href="/block/' + (hh - 1) + '">← #' + fmt(hh - 1) + '</a><a class="chip" href="/block/' + (hh + 1) + '">#' + fmt(hh + 1) + ' →</a><a class="chip" href="https://mempool.space/block/' + hh + '" target="_blank" rel="noopener">mempool.space ↗</a></div>';
+    if (!b) { return h + '<p class="lede">This block has not been scanned by the explorer yet.</p>'; }
+    h += '<p class="lede">Mined ' + esc(new Date(b.time * 1000).toUTCString().replace(' GMT', ' UTC')) + ' · ' + fmt(b.tx_count) + ' transactions · ' + fmt(b.opreturn_count) + ' OP_RETURN outputs</p>';
+    var text = 0, tok = 0; (s.feed || []).forEach(function (m) { if (!isProto(m)) text++; else if (isTokenProto(m.protocol)) tok++; });
+    var tot = b.opreturn_count || 1; var parts = [['Runes', b.runes_count, 'var(--chip)'], ['Opaque', b.binary_count, 'var(--line)'], ['Protocols', Math.max(0, b.stored_count - text - tok), 'var(--fg3)'], ['Tokens', tok, 'var(--tok)'], ['Human messages', text, 'var(--sig)']];
+    h += '<div class="sgroup"><span class="slabel">WHAT THE ' + fmt(b.opreturn_count) + ' OUTPUTS CARRIED</span><div class="compbar">';
+    parts.forEach(function (p) { if (p[1] > 0) h += '<i style="width:' + Math.max(0.5, p[1] / tot * 100) + '%;background:' + p[2] + '" title="' + attr(p[0] + ' ' + fmt(p[1])) + '"></i>'; });
+    h += '</div><div class="legend">'; parts.forEach(function (p) { h += '<span><i style="background:' + p[2] + '"></i>' + esc(p[0]) + ' ' + fmt(p[1]) + (p[0] === 'Runes' ? ' (counted only)' : '') + '</span>'; }); h += '</div></div>';
+    return h;
+  }
+  function railHTML(s) {
+    var ch = s.chain;
+    var h = '<aside class="rail">';
+    if (ch && ch.blocks) {
+      var pct = ch.opreturn_outputs ? Math.round(ch.runes_outputs / ch.opreturn_outputs * 100) : 0;
+      h += '<div class="grp"><span class="slabel">CHAIN CENSUS</span><div class="census">';
+      h += '<div><span class="v">' + fmt(ch.blocks) + '</span><span class="l">Blocks scanned</span></div>';
+      h += '<div><span class="v">' + (ch.opreturn_outputs >= 1e6 ? (ch.opreturn_outputs / 1e6).toFixed(2) + 'M' : fmt(ch.opreturn_outputs)) + '</span><span class="l">OP_RETURN outputs</span></div>';
+      h += '<div><span class="v">' + pct + '%</span><span class="l">Runes, counted only</span></div>';
+      h += '<div><span class="v">' + (s.protocols || []).length + '</span><span class="l">Protocols decoded</span></div>';
+      h += '</div></div>';
+      if (ch.recent && ch.recent.length) {
+        h += '<div class="grp" style="gap:6px"><span class="slabel" style="margin-bottom:4px">LATEST BLOCKS</span>';
+        ch.recent.slice(0, 6).forEach(function (b) { h += '<a class="blk" href="/block/' + b.height + '"><b>#' + fmt(b.height) + '</b><span>' + esc(timeAgo(b.time, s.now)) + '</span><span style="color:var(--fg2)">' + (b.stored_count ? b.stored_count + ' msg' + (b.stored_count > 1 ? 's' : '') : '—') + '</span></a>'; });
+        h += '</div>';
+      }
+    }
+    var cats = s.categories || [];
+    if (cats.length) {
+      var tot = cats.reduce(function (t, c) { return t + (c.count || 0); }, 0) || 1;
+      h += '<div class="grp" style="gap:10px"><span class="slabel">WHAT THEY’RE SAYING</span>';
+      cats.slice(0, 6).forEach(function (c) { var p = Math.round(c.count / tot * 100); h += '<a class="mix" href="/cat/' + encodeURIComponent(catSlug(c.category)) + '"><div class="t"><span>' + esc(c.category) + '</span><span>' + p + '%</span></div><div class="bar"><i class="' + (HOSTILE[c.category] ? 'sig' : '') + '" style="width:' + p + '%"></i></div></a>'; });
+      h += '</div>';
+    }
+    h += '<button class="sugcard" data-action="suggest-open" data-col="' + (s.filter || '') + '"><b>Know an address collecting messages?</b><span>SUGGEST IT →</span></button>';
+    h += '</aside>';
+    return h;
+  }
+
+  /* ---- the whole feed screen ---- */
+  function feedHTML(s) {
+    var wide = !s.protocol && !s.tick && !s.block;
+    var h = '<div class="feed-grid' + (wide ? ' wide' : '') + '"><main class="page">';
+    h += '<div class="phead"><div class="tt"><span class="kicker">' + esc(feedKicker(s)) + '</span><h2 class="title page-title">' + esc(feedTitle(s)) + '</h2>' + (s.protocol ? '<p class="lede">' + esc(protoBlurb(s.protocol)) + '</p>' : '') + '</div>';
+    h += '<div class="sorttabs"><a href="' + attr(sortHref(s, 'hot')) + '" class="' + (s.sort === 'hot' ? 'active' : '') + '">Hottest</a><a href="' + attr(sortHref(s, 'new')) + '" class="' + (s.sort === 'new' ? 'active' : '') + '">Newest</a></div></div>';
+    if (s.protocol) h += protocolHeadHTML(s);
+    if (s.tick) h += tickHeadHTML(s);
+    if (s.block) h += blockHeadHTML(s);
+    if (s.filter || s.address) { var c = colById(s, s.filter); h += '<div class="pills"><a class="chip active" href="' + attr(s.address ? '/a/' + encodeURIComponent(s.address) + '/chat' : '/c/' + colSlug(c) + '/chat') + '">💬 Open chat room</a>' + (c && c.description ? '<span class="caption" style="flex:1;min-width:200px">' + esc(c.description) + '</span>' : '') + '</div>'; }
+    var pills = feedFilters(s);
+    if (pills.length) { h += '<div class="pills">'; pills.forEach(function (p) { h += '<a class="pill" href="' + attr(p.href) + '">' + esc(p.label) + ' <span class="x">✕</span></a>'; }); h += '<a class="clearall" href="/feed">CLEAR ALL</a>' + (s.q ? '<span class="caption">search runs within the loaded messages</span>' : '') + '</div>'; }
+    if (s.newBlock && s.newBlock.rows.length) { h += '<button class="newbar" data-action="reveal-new"><span class="l"><span class="d"></span>Block #' + fmt(s.newBlock.height) + ' added ' + s.newBlock.rows.length + ' new message' + (s.newBlock.rows.length > 1 ? 's' : '') + '</span><span class="r">SHOW ↑</span></button>'; }
+    var list = visibleFeed(s);
+    h += '<div class="list" id="feed-list">';
+    if (!list.length) h += '<div class="empty">' + (s.feedError ? esc(s.feedError) + ' — retry in a moment.' : (s.q ? 'No loaded messages match “' + esc(s.q) + '”.' : 'No messages match these filters.')) + '</div>';
+    list.forEach(function (m) { h += rowHTML(s, m); });
+    h += '</div>';
+    if (s.nextBefore) h += '<button class="btn-more" data-action="more">Load more ↓</button>';
+    h += '<div class="status" id="status"></div>';
+    if (s.protocol) h += protocolTailHTML(s);
+    if (s.extraHtml) h += s.extraHtml;
+    h += '</main>';
+    if (wide) h += railHTML(s);
+    h += '</div>';
+    return h;
+  }
+
+  return {
+    HOSTILE: HOSTILE, PROTO_LABEL: PROTO_LABEL, PROTO_BLURB: PROTO_BLURB,
+    esc: esc, attr: attr, fmt: fmt, shortAddr: shortAddr, catCode: catCode, timeAgo: timeAgo, msgTime: msgTime, tsOf: tsOf, feeText: feeText, whenText: whenText,
+    shortCol: shortCol, colSlug: colSlug, catSlug: catSlug, catDot: catDot, protoLabel: protoLabel, protoBlurb: protoBlurb, isTokenProto: isTokenProto, isProto: isProto,
+    fmtAmt: fmtAmt, primaryOp: primaryOp, splitMedia: splitMedia, mediaHTML: mediaHTML, parseCryptoEnvelope: parseCryptoEnvelope, displayText: displayText, opLine: opLine, envBadges: envBadges,
+    colById: colById, colName: colName, colBySlug: colBySlug, colIndex: colIndex, catName: catName, voteGroup: voteGroup,
+    routeName: routeName, defaultSort: defaultSort, feedParams: feedParams, feedQuery: feedQuery, sortHref: sortHref, kindHref: kindHref, withKind: withKind,
+    feedFilters: feedFilters, visibleFeed: visibleFeed, feedTitle: feedTitle, feedKicker: feedKicker, filtersHTML: filtersHTML, mobileCtlHTML: mobileCtlHTML,
+    rowHTML: rowHTML, protocolHeadHTML: protocolHeadHTML, protocolTailHTML: protocolTailHTML, tickHeadHTML: tickHeadHTML, blockHeadHTML: blockHeadHTML, railHTML: railHTML, feedHTML: feedHTML
+  };
+})();
+export default FV;

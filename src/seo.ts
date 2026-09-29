@@ -1,4 +1,5 @@
 import type { CategoryStat, ChainStats } from './db';
+import FV, { type FeedView } from './feedview.js';
 import { CATEGORIES, CATEGORY_DEFINITIONS, categorySlug } from './classify';
 import { protocolLabel } from './protocols';
 import { CORE30, HISTORY_CAPS, SPARROW } from './facts';
@@ -1589,6 +1590,35 @@ export function renderMessageListSsr(
   return h;
 }
 
+/**
+ * Feed-style pages (/feed, /c, /a, /p, /tick, /block, /cat): exactly what the
+ * client's renderFeed() produces, from the shared module, so hydration is a
+ * no-op. Collection pages append their monitored-address cards as a block the
+ * client preserves across re-renders (data-ssr-extra).
+ */
+export function renderFeedPage(view: FeedView): string {
+  return FV.feedHTML(view);
+}
+
+export function renderCollectionExtras(col: CollectionWithStats, addresses: Address[]): string {
+  const slug = col.slug || String(col.id);
+  let h = '<section class="extra" data-ssr-extra style="display:flex;flex-direction:column;gap:14px;margin-top:10px">';
+  if (addresses.length) {
+    h += '<span class="slabel">MONITORED ADDRESSES IN THIS COLLECTION</span>';
+    h += '<div style="display:flex;flex-direction:column;gap:12px">';
+    for (const a of addresses) {
+      h += '<div style="border:1px solid var(--line);background:var(--card);padding:14px 18px">';
+      h += `<div style="font-family:'Martian Mono',monospace;font-size:13px;overflow-wrap:anywhere"><a href="/a/${escHtml(a.address)}">${escHtml(a.address)}</a></div>`;
+      if (a.label) h += `<div style="font-size:13px;color:var(--fg3);margin-top:4px">${escHtml(a.label)}</div>`;
+      h += '</div>';
+    }
+    h += '</div>';
+  }
+  h += `<div class="cta"><a class="btn" href="/c/${escHtml(slug)}/chat">View on-chain chat room 💬</a><a class="btn" href="/collections">← Back to collections</a></div>`;
+  h += '</section>';
+  return h;
+}
+
 export function renderCollectionSsr(col: CollectionWithStats, addresses: Address[], msgs: Message[] = []): string {
   const slug = col.slug || String(col.id);
   let h = '<section class="wrap wrap-narrow">';
@@ -1722,32 +1752,7 @@ export function renderMessageSsr(msg: Message, colName?: string, related: Messag
   return h;
 }
 
-export function renderCategorySsr(categoryName: string, count: number, msgs: Message[] = [], colNames?: Map<number, string>): string {
-  let h = '<section class="wrap wrap-narrow">';
-  h += '<div class="kicker">\u25c6 CATEGORY ARCHIVE</div>';
-  h += `<h2 class="title">${escHtml(categoryName)}</h2>`;
-  h += `<p class="lede" style="margin-top:12px">${count} archived Bitcoin OP_RETURN messages classified under this taxonomy.</p>`;
-  h += '<div class="cta" style="margin-top:20px">';
-  h += '<a class="btn btn-primary" href="/feed">Explore all transmissions \u2192</a>';
-  h += '</div>';
-  h += renderMessageListSsr(msgs, colNames, { heading: 'MOST UPVOTED IN THIS CATEGORY' });
-  h += '</section>';
-  return h;
-}
 
-export function renderFeedSsr(msgs: Message[] = [], colNames?: Map<number, string>): string {
-  let h = '<section class="wrap wrap-narrow">';
-  h += '<div class="kicker">\u25c6 EVERY BLOCK \u00b7 EVERY OP_RETURN</div>';
-  h += '<h2 class="title">All transmissions</h2>';
-  h += '<p class="lede" style="margin-top:12px">Human messages from every block of the Bitcoin chain, plus decoded token, bridge and sidechain protocols.</p>';
-  h += '<div class="cta" style="margin-top:20px">';
-  h += '<a class="btn" href="/collections">Browse collections</a>';
-  h += '<a class="btn" href="/guide">Etch manual \u2192</a>';
-  h += '</div>';
-  h += renderMessageListSsr(msgs, colNames, { heading: 'LATEST HUMAN MESSAGES FROM THE CHAIN' });
-  h += '</section>';
-  return h;
-}
 
 export function renderRoomsSsr(cols: CollectionWithStats[], best: CollectionWithStats | null, msgs: Message[]): string {
   let h = '<main class="page narrow"><div class="tt"><span class="kicker">CHAT ROOMS</span><h2 class="title">' + escHtml(best ? best.name : 'Chat rooms') + '</h2>';
@@ -1849,37 +1854,8 @@ export function protocolBlurb(protocol: string): string {
   }
 }
 
-export function renderProtocolSsr(protocol: string, label: string, count: number, msgs: Message[] = [], colNames?: Map<number, string>): string {
-  let h = '<section class="wrap wrap-narrow">';
-  h += '<div class="kicker">\u25c6 OP_RETURN PROTOCOL</div>';
-  h += `<h2 class="title">${escHtml(label)} <span class="mono" style="font-size:.5em;color:var(--fg4)">${escHtml(protocol)}</span></h2>`;
-  h += `<p class="lede" style="margin-top:12px">${count.toLocaleString()} transactions carrying ${escHtml(label)} OP_RETURN outputs, decoded from every scanned block.</p>`;
-  h += '<div class="cta" style="margin-top:20px"><a class="btn btn-primary" href="/feed?kind=all">All protocols \u2192</a></div>';
-  h += renderMessageListSsr(msgs, colNames, { heading: `LATEST ${label.toUpperCase()} TRANSACTIONS` });
-  h += '</section>';
-  return h;
-}
 
-export function renderTickSsr(tick: string, protocols: string[], count: number, msgs: Message[] = [], colNames?: Map<number, string>): string {
-  let h = '<section class="wrap wrap-narrow">';
-  h += '<div class="kicker">\u25c6 TOKEN TICKER</div>';
-  h += `<h2 class="title">$${escHtml(tick)}</h2>`;
-  h += `<p class="lede" style="margin-top:12px">${count.toLocaleString()} on-chain operations for ${escHtml(tick)}${protocols.length ? ' via ' + escHtml(protocols.join(', ')) : ''}.</p>`;
-  h += renderMessageListSsr(msgs, colNames, { heading: `LATEST $${tick.toUpperCase()} OPERATIONS` });
-  h += '</section>';
-  return h;
-}
 
-export function renderBlockSsr(block: { height: number; hash: string; time: number; tx_count: number; opreturn_count: number; runes_count: number; stored_count: number }, msgs: Message[] = [], colNames?: Map<number, string>): string {
-  let h = '<section class="wrap wrap-narrow">';
-  h += '<div class="kicker">\u25c6 BLOCK CENSUS</div>';
-  h += `<h2 class="title">Block ${block.height.toLocaleString()}</h2>`;
-  h += `<p class="lede" style="margin-top:12px">${block.tx_count.toLocaleString()} transactions, ${block.opreturn_count.toLocaleString()} OP_RETURN outputs (${block.runes_count.toLocaleString()} Runes), ${block.stored_count.toLocaleString()} decoded and archived.</p>`;
-  h += `<p class="mono" style="font-size:12px;color:var(--fg4);overflow-wrap:anywhere">${escHtml(block.hash)}</p>`;
-  h += renderMessageListSsr(msgs, colNames, { heading: 'OP_RETURN TRANSACTIONS IN THIS BLOCK' });
-  h += '</section>';
-  return h;
-}
 
 export function renderProtocolMarkdown(siteUrl: string, protocol: string, label: string, count: number): string {
   return `# Protocol: ${label} (${protocol})\n\n${count} transactions carrying ${label} OP_RETURN outputs across every scanned block.\n\n- Feed API: ${siteUrl}/api/messages?protocol=${encodeURIComponent(protocol)}\n- [All protocols](${siteUrl}/api/protocols)\n`;

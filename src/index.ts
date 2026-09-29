@@ -46,13 +46,13 @@ import {
   renderAddressMarkdown,
   renderAddressSsr,
   renderCategoryMarkdown,
-  renderCategorySsr,
   renderCollectionMarkdown,
   renderCollectionSsr,
+  renderCollectionExtras,
+  renderFeedPage,
   renderCollectionsMarkdown,
   renderCollectionsSsr,
   renderFeedMarkdown,
-  renderFeedSsr,
   renderGuideMarkdown,
   renderGuideSsr,
   renderLandingMarkdown,
@@ -63,20 +63,18 @@ import {
   messageExcerpt,
   renderNotFoundSsr,
   escHtml,
-  renderProtocolSsr,
   renderProtocolMarkdown,
   renderProtocolsSsr,
   renderProtocolsMarkdown,
   renderRoomsSsr,
-  renderTickSsr,
   renderTickMarkdown,
-  renderBlockSsr,
   renderBlockMarkdown,
 } from './seo';
 import { ensureSeeded, slugify } from './seed';
 import type { ChatCardData } from './og';
 import type { ChatMessage, CollectionWithStats, Env } from './types';
 import { renderIndex, type ShellData } from './ui';
+import FV, { type FeedView } from './feedview.js';
 
 // ---------------------------------------------------------------------------
 // App shell data (sidebar collection rows + chain tip). Cached per isolate and
@@ -85,9 +83,16 @@ import { renderIndex, type ShellData } from './ui';
 let shellCache: { at: number; data: ShellData } | null = null;
 let shellRefreshing: Promise<void> | null = null;
 
-async function refreshShell(d1: D1Database): Promise<void> {
+async function refreshShell(d1: D1Database, origin: string): Promise<void> {
   try {
-    const [cols, stats, protocols] = await Promise.all([db.listCollections(d1), db.getChainStats(d1), db.listProtocols(d1)]);
+    const [cols, stats, recent, protocols, categories] = await Promise.all([
+      db.listCollections(d1),
+      db.getChainStats(d1),
+      db.listRecentBlocks(d1, 6),
+      // The two aggregations over ops are the heaviest reads; share them across isolates via the edge cache.
+      cachedValue<Awaited<ReturnType<typeof db.listProtocols>>>(origin, 'protocols:0', 300, () => db.listProtocols(d1)),
+      cachedValue<db.CategoryStat[]>(origin, 'categories', 300, () => db.listCategories(d1)),
+    ]);
     shellCache = {
       at: Date.now(),
       data: {
@@ -98,6 +103,12 @@ async function refreshShell(d1: D1Database): Promise<void> {
           rooms: cols.length,
           protocols: protocols.length,
           collections: cols.length,
+        },
+        feed: {
+          collections: cols.map((col) => ({ id: col.id, name: col.name, slug: col.slug, description: col.description, message_count: col.message_count })),
+          categories,
+          protocols: protocols.filter((p) => p.protocol !== 'text'),
+          chain: { ...stats, recent },
         },
       },
     };
@@ -117,7 +128,7 @@ async function refreshShell(d1: D1Database): Promise<void> {
 async function shellFor(c: Context<Bindings>): Promise<ShellData> {
   const fresh = shellCache && Date.now() - shellCache.at < 60000;
   if (fresh) return shellCache!.data;
-  if (!shellRefreshing) shellRefreshing = refreshShell(c.env.DB);
+  if (!shellRefreshing) shellRefreshing = refreshShell(c.env.DB, originOf(c));
   if (!shellCache) {
     await shellRefreshing;
     return shellCache ? (shellCache as { data: ShellData }).data : {};
@@ -237,6 +248,30 @@ function tickParam(raw: string | undefined): string | undefined {
  * every row; serve them from the edge cache for a few minutes. Workers do not
  * cache their own responses unless asked, hence the explicit Cache API use.
  */
+/** One key builder for every edge-cache entry, so routes and the shell refresh share hits. */
+function cacheRequest(origin: string, cacheKey: string): Request {
+  // Key on a normalised name, not the raw query string, so callers cannot
+  // mint unlimited cache misses by varying parameters.
+  return new Request(`${origin}/__cache/${cacheKey}`, { method: 'GET' });
+}
+
+/** The value behind a cached JSON entry (same keys as cachedJson), for server-side consumers. */
+async function cachedValue<T>(origin: string, cacheKey: string, ttlSeconds: number, compute: () => Promise<T>): Promise<T> {
+  const cache = (caches as unknown as { default: Cache }).default;
+  const key = cacheRequest(origin, cacheKey);
+  const hit = await cache.match(key).catch(() => undefined);
+  if (hit) return (await hit.json()) as T;
+  const value = await compute();
+  const res = new Response(JSON.stringify(value), {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': `public, max-age=${ttlSeconds}, s-maxage=${ttlSeconds}, stale-while-revalidate=${ttlSeconds * 2}`,
+    },
+  });
+  await cache.put(key, res).catch(() => undefined);
+  return value;
+}
+
 async function cachedJson(
   c: Context<Bindings>,
   ttlSeconds: number,
@@ -244,9 +279,7 @@ async function cachedJson(
   compute: () => Promise<unknown>
 ): Promise<Response> {
   const cache = (caches as unknown as { default: Cache }).default;
-  // Key on a normalised name, not the raw query string, so callers cannot
-  // mint unlimited cache misses by varying parameters.
-  const key = new Request(`${new URL(c.req.url).origin}/__cache/${cacheKey}`, { method: 'GET' });
+  const key = cacheRequest(new URL(c.req.url).origin, cacheKey);
   const hit = await cache.match(key).catch(() => undefined);
   if (hit) return hit;
   const body = JSON.stringify(await compute());
@@ -658,6 +691,64 @@ async function collectionMap(db_inst: D1Database): Promise<Map<number, Collectio
 async function collectionNames(db_inst: D1Database): Promise<Map<number, string>> {
   const cols = await db.listCollections(db_inst).catch(() => []);
   return new Map(cols.map((c) => [c.id, c.name]));
+}
+
+/**
+ * The view for a feed-style page, built the way the client builds its state
+ * (same sort/kind defaults, same 50-row page) so the shared renderer emits
+ * the markup the script will re-render to. Returns null only when the shell
+ * cache is unavailable, which the caller treats as an empty rail.
+ */
+async function feedViewFor(
+  c: Context<Bindings>,
+  route: 'feed' | 'c' | 'a' | 'p' | 'tick' | 'block' | 'cat',
+  base: Partial<FeedView>
+): Promise<{ view: FeedView; shell: ShellData }> {
+  const shell = await shellFor(c);
+  const url = new URL(c.req.url);
+  const sp = c.req.query('sort');
+  const sort: 'hot' | 'new' = sp === 'hot' || sp === 'new' ? sp : FV.defaultSort(route);
+  // The client forces kind=all on a/p/tick/block; c and cat keep the query's kind for the SHOW toggle.
+  const kind: 'text' | 'all' = c.req.query('kind') === 'all' || route === 'a' || route === 'p' || route === 'tick' || route === 'block' ? 'all' : 'text';
+  const q = c.req.query('q') || '';
+  const scoped = Boolean(base.filter || base.address || base.category || base.protocol || base.tick || base.block);
+  const page = await db
+    .getMessages(c.env.DB, {
+      collectionId: base.filter || undefined,
+      address: base.address || undefined,
+      category: base.category || undefined,
+      protocol: base.protocol || undefined,
+      tick: base.tick || undefined,
+      blockHeight: base.block || undefined,
+      kind: scoped ? 'all' : kind,
+      sort,
+      limit: 50,
+    })
+    .catch(() => ({ messages: [] as import('./types').Message[], next_before: null as string | null }));
+  const feed = shell.feed || { collections: [], categories: [], protocols: [], chain: null };
+  const view: FeedView = {
+    pathname: url.pathname,
+    search: url.search,
+    sort,
+    kind,
+    q,
+    filter: base.filter ?? null,
+    address: base.address ?? null,
+    category: base.category ?? null,
+    protocol: base.protocol ?? null,
+    tick: base.tick ?? null,
+    block: base.block ?? null,
+    blockRow: base.blockRow ?? null,
+    feed: page.messages as unknown as FeedView['feed'],
+    nextBefore: page.next_before,
+    collections: feed.collections,
+    categories: feed.categories,
+    protocols: feed.protocols,
+    ticks: base.ticks || [],
+    chain: feed.chain,
+    extraHtml: base.extraHtml || '',
+  };
+  return { view, shell };
 }
 
 /** First page of records for a server-rendered listing; never throws. */
@@ -1216,8 +1307,7 @@ app.get('/feed', async (c) => {
   if (wantsMarkdown(c)) {
     return markdownResponse(renderFeedMarkdown(origin), origin);
   }
-  const all = c.req.query('kind') === 'all';
-  const list = await ssrList(c.env.DB, { kind: all ? 'all' : 'text', sort: 'new', limit: 30 });
+  const { view, shell } = await feedViewFor(c, 'feed', {});
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1230,9 +1320,9 @@ app.get('/feed', async (c) => {
       url: origin + '/feed',
       image: origin + '/og/default.png',
       jsonLd: crumbs,
-      feedSidebar: true,
-      initialHtml: renderFeedSsr(list.msgs, list.names),
-    }, await shellFor(c))
+      feedView: view,
+      initialHtml: renderFeedPage(view),
+    }, shell)
   );
 });
 
@@ -1524,7 +1614,7 @@ app.get('/c/:slug', async (c) => {
   if (wantsMarkdown(c)) {
     return markdownResponse(renderCollectionMarkdown(origin, col, colAddrs), origin);
   }
-  const list = await ssrList(c.env.DB, { collectionId: col.id, kind: 'all', sort: 'hot', limit: 30 });
+  const { view, shell } = await feedViewFor(c, 'c', { filter: col.id, extraHtml: renderCollectionExtras(col, colAddrs) });
 
   applyDiscoveryHeaders(c, origin);
   const colSchema = buildCollectionSchema(origin, col);
@@ -1541,9 +1631,9 @@ app.get('/c/:slug', async (c) => {
       url: `${origin}/c/${slug}`,
       image: `${origin}/og/collection/${slug}.png`,
       jsonLd: { '@context': 'https://schema.org', '@graph': [colSchema, crumbs] },
-      feedSidebar: true,
-      initialHtml: renderCollectionSsr(col, colAddrs, list.msgs),
-    }, await shellFor(c))
+      feedView: view,
+      initialHtml: renderFeedPage(view),
+    }, shell)
   );
 });
 
@@ -1619,7 +1709,9 @@ app.get('/a/:address', async (c) => {
   if (wantsMarkdown(c)) {
     return markdownResponse(renderAddressMarkdown(origin, address), origin);
   }
-  const { list, monitored, indexable } = await addressPageData(c.env.DB, address);
+  const [{ view, shell }, addrs] = await Promise.all([feedViewFor(c, 'a', { address }), db.listAddresses(c.env.DB).catch(() => [])]);
+  const monitored = addrs.find((a) => a.address === address);
+  const indexable = Boolean(monitored) || view.feed.length >= 3;
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1628,14 +1720,14 @@ app.get('/a/:address', async (c) => {
   return c.html(
     renderIndex({
       title: monitored?.label ? `${monitored.label} \u2014 ${shortAddr(address)} OP_RETURN record` : `Address record \u2014 ${address}`,
-      description: `${list.msgs.length ? list.msgs.length + '+' : 'Every'} archived OP_RETURN message${monitored?.label ? ' involving ' + monitored.label : ''} sent to or from ${address}.`,
+      description: `${view.feed.length ? view.feed.length + '+' : 'Every'} archived OP_RETURN message${monitored?.label ? ' involving ' + monitored.label : ''} sent to or from ${address}.`,
       url: `${origin}/a/${address}`,
       image: `${origin}/og/address/${encodeURIComponent(address)}.png`,
       noindex: !indexable,
       jsonLd: crumbs,
-      feedSidebar: true,
-      initialHtml: renderAddressSsr(address, list.msgs, list.names),
-    }, await shellFor(c))
+      feedView: view,
+      initialHtml: renderFeedPage(view),
+    }, shell)
   );
 });
 
@@ -1676,7 +1768,9 @@ app.get('/p/:protocol', async (c) => {
   const stats = await db.listProtocols(c.env.DB).catch(() => []);
   const count = stats.find((s) => s.protocol === protocol)?.count ?? 0;
   if (wantsMarkdown(c)) return markdownResponse(renderProtocolMarkdown(origin, protocol, label, count), origin);
-  const list = await ssrList(c.env.DB, { protocol, sort: 'new', limit: 30 });
+  // The client loads this protocol's top 40 tickers for the head; same query, same limit.
+  const ticks = await cachedValue<Awaited<ReturnType<typeof db.listTicks>>>(origin, `ticks:0:${protocol}:40`, 300, () => db.listTicks(c.env.DB, protocol, 0, 40)).catch(() => []);
+  const { view, shell } = await feedViewFor(c, 'p', { protocol, ticks });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1691,9 +1785,9 @@ app.get('/p/:protocol', async (c) => {
       image: `${origin}/og/protocol/${protocol}.png`,
       jsonLd: crumbs,
       noindex: count === 0,
-      feedSidebar: true,
-      initialHtml: renderProtocolSsr(protocol, label, count, list.msgs, list.names),
-    }, await shellFor(c))
+      feedView: view,
+      initialHtml: renderFeedPage(view),
+    }, shell)
   );
 });
 
@@ -1706,7 +1800,9 @@ app.get('/tick/:tick', async (c) => {
   const count = mine.reduce((n, s) => n + s.count, 0);
   const protocols = mine.map((s) => s.protocol);
   if (wantsMarkdown(c)) return markdownResponse(renderTickMarkdown(origin, tick, count), origin);
-  const list = await ssrList(c.env.DB, { tick, sort: 'new', limit: 30 });
+  // The client's tick head reads the same top-40 ticker list it loads for /protocols.
+  const top = await cachedValue<Awaited<ReturnType<typeof db.listTicks>>>(origin, 'ticks:0::40', 300, () => db.listTicks(c.env.DB, undefined, 0, 40)).catch(() => []);
+  const { view, shell } = await feedViewFor(c, 'tick', { tick, ticks: top });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1721,9 +1817,9 @@ app.get('/tick/:tick', async (c) => {
       image: `${origin}/og/tick/${encodeURIComponent(tick)}.png`,
       jsonLd: crumbs,
       noindex: count === 0,
-      feedSidebar: true,
-      initialHtml: renderTickSsr(tick, protocols, count, list.msgs, list.names),
-    }, await shellFor(c))
+      feedView: view,
+      initialHtml: renderFeedPage(view),
+    }, shell)
   );
 });
 
@@ -1751,7 +1847,7 @@ app.get('/block/:height', async (c) => {
     );
   }
   if (wantsMarkdown(c)) return markdownResponse(renderBlockMarkdown(origin, block), origin);
-  const list = await ssrList(c.env.DB, { blockHeight: height, kind: 'all', sort: 'new', limit: 50 });
+  const { view, shell } = await feedViewFor(c, 'block', { block: height, blockRow: block });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
     { name: 'Home', path: '/' },
@@ -1765,9 +1861,9 @@ app.get('/block/:height', async (c) => {
       url: `${origin}/block/${height}`,
       image: `${origin}/og/default.png`,
       jsonLd: crumbs,
-      feedSidebar: true,
-      initialHtml: renderBlockSsr(block, list.msgs, list.names),
-    }, await shellFor(c))
+      feedView: view,
+      initialHtml: renderFeedPage(view),
+    }, shell)
   );
 });
 
@@ -1803,7 +1899,7 @@ app.get('/cat/:slug', async (c) => {
   if (wantsMarkdown(c)) {
     return markdownResponse(renderCategoryMarkdown(origin, cat, count), origin);
   }
-  const list = await ssrList(c.env.DB, { category: cat, sort: 'hot', limit: 30 });
+  const { view, shell } = await feedViewFor(c, 'cat', { category: cat });
 
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
@@ -1818,9 +1914,9 @@ app.get('/cat/:slug', async (c) => {
       url: `${origin}/cat/${slug}`,
       image: `${origin}/og/category/${slug}.png`,
       jsonLd: crumbs,
-      feedSidebar: true,
-      initialHtml: renderCategorySsr(cat, count, list.msgs, list.names),
-    }, await shellFor(c))
+      feedView: view,
+      initialHtml: renderFeedPage(view),
+    }, shell)
   );
 });
 
