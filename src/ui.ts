@@ -1179,7 +1179,7 @@ var FV = (function () {
     h += '<div class="facts"><span class="h">ON-CHAIN RECORD</span>';
     h += factRow('TXID', m.txid, true);
     h += factRow('BLOCK', m.block_height != null ? '<a href="/block/' + m.block_height + '">#' + fmt(m.block_height) + '</a>' + (m.block_time != null ? ' · ' + dateOf(m.block_time) : '') : (m.is_mempool ? 'unconfirmed (in mempool)' : '—'));
-    h += factRow('FEE', (feeText(m) || '—') + (m.fee_sats != null ? ' · ' + fmtSats(m.fee_sats) + ' sats <span id="feeusd" style="display:block;min-height:1.4em;color:var(--fg4)">' + esc(s.feeUsd || '') + '</span>' : ''));
+    h += factRow('FEE', (feeText(m) || '—') + (m.fee_sats != null ? ' · ' + fmtSats(m.fee_sats) + ' sats <span id="feeusd" style="display:block;line-height:1.45em;min-height:1.45em;color:var(--fg4)">' + esc(s.feeUsd || '') + '</span>' : ''));
     h += factRow('ADDRESS', m.address, true);
     if (m.sender && m.sender !== m.address) h += factRow('SENDER', m.sender, true);
     if (m.recipient && m.recipient !== m.address) h += factRow('RECIPIENT', m.recipient, true);
@@ -1387,13 +1387,13 @@ var FV = (function () {
   }
 
   /* ---- detail ---- */
-  function loadFeeUsd(m){
-    state.feeUsd='';if(m.fee_sats==null)return Promise.resolve();
-    // Server-rendered page: reuse its figure so hydration cannot change the row (and skip the second lookup).
-    var ssr=document.getElementById('feeusd');if(ssr&&ssr.textContent){state.feeUsd=ssr.textContent;return Promise.resolve();}
+  function fillFeeUsd(m){
+    // The USD figure owns its own line, so filling it after render never moves the facts column.
+    if(m.fee_sats==null||state.feeUsd)return;
     var ts=m.block_time!=null?m.block_time:Math.floor(Date.now()/1000);
-    return fetchJSON('/api/price?ts='+ts).then(function(r){if(r.d&&typeof r.d.usd==='number')state.feeUsd='\\u2248 $'+(m.fee_sats/1e8*r.d.usd).toFixed(2);}).catch(function(){});
+    fetchJSON('/api/price?ts='+ts).then(function(r){if(!(r.d&&typeof r.d.usd==='number'))return;state.feeUsd='\\u2248 $'+(m.fee_sats/1e8*r.d.usd).toFixed(2);var el=document.getElementById('feeusd');if(el&&state.detailTx===m.txid)el.textContent=state.feeUsd;}).catch(function(){});
   }
+
 
 
   /* ---- collections & protocols ---- */
@@ -1547,7 +1547,7 @@ var FV = (function () {
     if(r.name==='tick'&&r.param){state.tick=r.param;state.kind='all';state.screen='feed';state.nextBefore=null;return Promise.all([loadFeed(false),loadTicks()]).then(render);}
     if(r.name==='block'&&r.param&&/^\\d+$/.test(r.param)){state.block=Number(r.param);state.kind='all';state.screen='feed';state.nextBefore=null;return Promise.all([loadFeed(false),loadBlock(state.block)]).then(render);}
     if(r.name==='a'&&r.param){state.address=r.param;state.kind='all';if(r.chat){state.screen='chat';resetChat();return loadChat(false).then(render);}return feedScreen();}
-    if(r.name==='m'&&r.param){state.screen='detail';state.detailTx=r.param;state.related=[];return ensureDetail().then(function(){var m=state.cache[r.param];if(!m){state.screen='notfound';render();return;}return Promise.all([loadRelated(m),loadFeeUsd(m)]).then(render);});}
+    if(r.name==='m'&&r.param){state.screen='detail';state.detailTx=r.param;state.related=[];var ssrFee=document.getElementById('feeusd');state.feeUsd=ssrFee&&ssrFee.textContent||'';return ensureDetail().then(function(){var m=state.cache[r.param];if(!m){state.screen='notfound';render();return;}return loadRelated(m).then(render).then(function(){fillFeeUsd(m);});});}
     if(r.name!=='about'){state.screen='notfound';return render();}
     state.screen='about';
     return (Object.keys(state.cache).length?Promise.resolve():fetchJSON('/api/messages?sort=new&limit=12').then(function(x){cacheMsgs((x.d&&x.d.messages)||[]);}).catch(function(){})).then(render);

@@ -406,7 +406,7 @@ var FV = (function () {
     h += '<div class="facts"><span class="h">ON-CHAIN RECORD</span>';
     h += factRow('TXID', m.txid, true);
     h += factRow('BLOCK', m.block_height != null ? '<a href="/block/' + m.block_height + '">#' + fmt(m.block_height) + '</a>' + (m.block_time != null ? ' · ' + dateOf(m.block_time) : '') : (m.is_mempool ? 'unconfirmed (in mempool)' : '—'));
-    h += factRow('FEE', (feeText(m) || '—') + (m.fee_sats != null ? ' · ' + fmtSats(m.fee_sats) + ' sats <span id="feeusd" style="display:block;min-height:1.4em;color:var(--fg4)">' + esc(s.feeUsd || '') + '</span>' : ''));
+    h += factRow('FEE', (feeText(m) || '—') + (m.fee_sats != null ? ' · ' + fmtSats(m.fee_sats) + ' sats <span id="feeusd" style="display:block;line-height:1.45em;min-height:1.45em;color:var(--fg4)">' + esc(s.feeUsd || '') + '</span>' : ''));
     h += factRow('ADDRESS', m.address, true);
     if (m.sender && m.sender !== m.address) h += factRow('SENDER', m.sender, true);
     if (m.recipient && m.recipient !== m.address) h += factRow('RECIPIENT', m.recipient, true);
