@@ -1,3 +1,4 @@
+import type { CategoryStat, ChainStats } from './db';
 import { CATEGORIES, CATEGORY_DEFINITIONS, categorySlug } from './classify';
 import { protocolLabel } from './protocols';
 import { CORE30, HISTORY_CAPS, SPARROW } from './facts';
@@ -1043,8 +1044,8 @@ export const FAQ_ITEMS = [
     a: 'Consensus sets no specific limit. ' + CORE30.summary + ' Full guide: /learn/bitcoin-core-30-op-return-datacarriersize',
   },
   {
-    q: 'What kinds of messages are monitored on The Permanent Record?',
-    a: 'The Permanent Record monitors high-profile Bitcoin addresses that have evolved into public bulletin boards: whitehat and hacker communications (such as the Bitget, Liquid Network and Coldcard incidents), dormant early wallet legal notices (including Mt. Gox 1Feex), Genesis block tributes to Satoshi Nakamoto, and geopolitical marking campaigns.',
+    q: 'What does The Permanent Record archive?',
+    a: 'Every block is scanned and every OP_RETURN output is decoded: human messages, token protocols such as ico-20 and crc-20, bridge and sidechain markers, inline files. Curated collections follow high-profile addresses that turned into public bulletin boards: whitehat and hacker negotiations, dormant-wallet notices, Genesis block tributes.',
   },
   {
     q: 'How does AI classification categorize transmissions?',
@@ -1381,49 +1382,87 @@ export function renderFeedMarkdown(siteUrl: string): string {
 // 9. Server-Side Rendering (SSR) Pre-rendered HTML for <main id="app">
 // ---------------------------------------------------------------------------
 
-export function renderLandingSsr(
-  collectionsCount: number,
-  addressesCount: number,
-  featuredMsg?: Message | null,
-  colName?: string
-): string {
-  let h = '<section class="wrap" style="padding-bottom:clamp(30px,4vw,56px)">';
-  h += '<div class="pill-live"><span class="d"></span>LIVE ON-CHAIN \u00b7 IMMUTABLE BITCOIN MONITOR</div>';
-  h += '<h1 class="hero-title">People are leaving messages inside Bitcoin. Forever.</h1>';
-  h += '<p class="lede">Every one of these was etched into an <span class="mono" style="font-size:.85em">OP_RETURN</span> output on the blockchain \u2014 threats, confessions, prayers, ads, haiku. Immutable. Unstoppable. We scan every block, decode every OP_RETURN protocol, and keep the human messages front and centre.</p>';
-  h += '<div class="cta"><a class="btn btn-primary" href="/feed">Enter the feed \u2192</a><a class="btn" href="/collections">Browse collections</a></div>';
-  h += '<p class="mono" style="margin-top:20px;font-size:13px;color:var(--fg4)">Want to leave your own mark? <a href="/guide" style="color:var(--sig);text-decoration:underline">Read the field manual \u2192</a></p>';
-  h += '</section>';
+export interface LandingData {
+  collectionsCount: number;
+  addressesCount: number;
+  featured?: Message | null;
+  colName?: string;
+  live: Message[];
+  chain: ChainStats | null;
+  protocolsCount: number;
+  categories: CategoryStat[];
+}
 
-  if (featuredMsg) {
-    h += `<section class="featured"><div class="inner"><div class="k">\u25c6 TRANSMISSION OF THE DAY</div>`;
-    h += `<blockquote>\u201c${escHtml(featuredMsg.content)}\u201d</blockquote>`;
-    h += `<div class="meta"><span class="strong">\u21b3 ${escHtml(colName || 'Monitored address')}</span><span>${escHtml(shortAddr(featuredMsg.address))}</span><span class="sig">\u2665 ${featuredMsg.likes}</span><a href="/m/${escHtml(featuredMsg.txid)}" style="color:inherit;text-decoration:underline">view artifact \u2192</a></div>`;
-    h += `</div></section>`;
+/** "4m ago" style relative time from a unix timestamp or SQL datetime; mirrors the client helper. */
+export function timeAgo(ts: number | string | null | undefined, now = Date.now()): string {
+  if (ts == null || ts === '') return '';
+  const ms = typeof ts === 'number' ? ts * 1000 : new Date(String(ts).replace(' ', 'T') + (String(ts).includes('Z') ? '' : 'Z')).getTime();
+  if (Number.isNaN(ms)) return '';
+  const diff = (now - ms) / 60000;
+  if (diff < 1) return 'just now';
+  if (diff < 60) return `${Math.floor(diff)}m ago`;
+  if (diff < 1440) return `${Math.floor(diff / 60)}h ago`;
+  return `${Math.floor(diff / 1440)}d ago`;
+}
+
+const fmtN = (n: number) => Number(n || 0).toLocaleString('en-US');
+const msgTime = (m: Message) => (m.block_time != null ? m.block_time : m.created_at);
+
+/**
+ * The landing page, in the same markup the client's renderAbout() builds, so
+ * the script's first render is a no-op instead of a layout shift. The client
+ * keeps this DOM (data-ssr="about") until the reader interacts with it.
+ */
+export function renderLandingSsr(d: LandingData): string {
+  const ch = d.chain;
+  let h = '<main data-ssr="about"><div class="hero"><div class="l">';
+  h += `<span class="pill-live"><span class="d"></span>${ch && ch.stored_txs ? `${fmtN(ch.stored_txs)} OP_RETURN TXS DECODED` : `${fmtN(d.collectionsCount)} COLLECTIONS ARCHIVED`} · UPDATING EVERY BLOCK</span>`;
+  h += '<h1>People are leaving messages inside Bitcoin. Forever.</h1>';
+  h += '<p class="lede">Every one of these was etched into an OP_RETURN output on the blockchain — threats, confessions, prayers, ads, haiku. Immutable. Unstoppable. We scan every block, decode every OP_RETURN protocol, and keep the human messages front and centre.</p>';
+  h += '<div class="cta"><a class="btn btn-primary" href="/feed">Enter the feed →</a><a class="btn" href="/guide">Etch your own</a><a class="btn" href="/learn">Read the guides</a></div></div>';
+  h += '<div class="livepanel"><span class="h">● LIVE FROM THE CHAIN</span>';
+  if (!d.live.length) h += '<a href="/feed"><span class="k">waiting for the next block</span><span class="c">The feed fills in as blocks arrive.</span></a>';
+  for (const m of d.live) {
+    h += `<a href="/m/${escHtml(m.txid)}"><span class="k">${escHtml(m.category || 'message')} · ${escHtml(timeAgo(msgTime(m)))}</span><span class="c">${escHtml(messageExcerpt(m, 200))}</span></a>`;
   }
+  h += '</div></div>';
 
-  h += '<section class="wrap" style="padding-top:clamp(32px,5vw,64px)">';
-  h += '<div class="stats">';
-  h += `<div class="stat"><div class="v">${collectionsCount}</div><div class="l">Collections tracked</div></div>`;
-  h += `<div class="stat"><div class="v">${addressesCount}</div><div class="l">Addresses monitored</div></div>`;
-  h += '<div class="stat"><div class="v">~3min</div><div class="l">Fresh every poll</div></div>';
-  h += '<div class="stat"><div class="v">\u221e</div><div class="l">Years it stays online</div></div>';
-  h += '</div>';
-
-  // FAQ section
-  h += '<div class="faq-wrap">';
-  h += '<div class="kicker">\u25c6 FREQUENTLY ASKED QUESTIONS \u00b7 THE PERMANENT RECORD</div>';
-  h += '<h2 class="title" style="font-size:clamp(24px,3.5vw,36px)">Understanding Bitcoin OP_RETURN Transmissions</h2>';
-  h += '<div class="faq-grid">';
-  for (const item of FAQ_ITEMS) {
-    h += '<div class="faq-item">';
-    h += `<h3 class="faq-q">${escHtml(item.q)}</h3>`;
-    h += `<p class="faq-a">${escHtml(item.a)}</p>`;
+  h += '<div class="about-sec"><div class="stats">';
+  if (ch && ch.blocks) {
+    const pct = ch.opreturn_outputs ? Math.round((ch.runes_outputs / ch.opreturn_outputs) * 100) : 0;
+    h += `<div class="stat"><span class="v">${fmtN(ch.blocks)}</span><span class="l">Blocks scanned</span></div>`;
+    h += `<div class="stat"><span class="v">${fmtN(ch.opreturn_outputs)}</span><span class="l">OP_RETURN outputs seen</span></div>`;
+    h += `<div class="stat"><span class="v">${pct}%</span><span class="l">Runes (counted, not shown)</span></div>`;
+    h += `<a class="stat" href="/protocols"><span class="v">${d.protocolsCount}</span><span class="l">Protocols decoded →</span></a>`;
+  } else {
+    h += `<div class="stat"><span class="v">${d.collectionsCount}</span><span class="l">Collections tracked</span></div>`;
+    h += `<div class="stat"><span class="v">${fmtN(d.addressesCount)}</span><span class="l">Addresses monitored</span></div>`;
+    h += '<div class="stat"><span class="v">~3min</span><span class="l">Fresh every poll</span></div>';
+    h += '<div class="stat"><span class="v">∞</span><span class="l">Years it stays online</span></div>';
+  }
+  h += '</div><div class="about-grid">';
+  const feat = d.featured;
+  if (feat) {
+    h += `<a class="featured" href="/m/${escHtml(feat.txid)}"><span class="k">◆ TRANSMISSION OF THE DAY</span><blockquote>“${escHtml(messageExcerpt(feat, 400))}”</blockquote>`;
+    h += `<span class="m"><span>↳ ${escHtml(d.colName || shortAddr(feat.address))}</span><span>${escHtml(timeAgo(msgTime(feat)))}</span><span style="color:var(--sig)">♥ ${fmtN(feat.likes || 0)}</span></span></a>`;
+  }
+  if (d.categories.length) {
+    const tot = d.categories.reduce((t, c) => t + (c.count || 0), 0) || 1;
+    h += '<div class="chart"><span class="slabel">WHAT THEY’RE SAYING · BY CATEGORY</span>';
+    for (const c of d.categories) {
+      const p = Math.round((c.count / tot) * 100);
+      h += `<a class="mix" href="/cat/${encodeURIComponent(categorySlug(c.category))}"><div class="t"><span>${escHtml(c.category)}</span><span>${p}%</span></div><div class="bar"><i class="${HOSTILE_CATEGORIES.has(c.category) ? 'sig' : ''}" style="width:${p}%"></i></div></a>`;
+    }
     h += '</div>';
   }
   h += '</div></div>';
-  h += '</section>';
 
+  h += '<div class="about-sec"><span class="kicker">◆ FAQ</span><div class="faq">';
+  FAQ_ITEMS.forEach((item, i) => {
+    const open = i === 0;
+    h += `<button class="faq-item${open ? ' open' : ''}" data-action="faq-toggle" data-i="${i}"><span class="faq-q"><span>${escHtml(item.q)}</span><span class="sign">${open ? '−' : '+'}</span></span><span class="faq-a">${escHtml(item.a)}</span></button>`;
+  });
+  h += '</div></div></main>';
   return h;
 }
 

@@ -19,12 +19,16 @@ export interface PageMeta {
   keywords?: string;
   jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
   initialHtml?: string;
+  /** Feed-style screens keep the sidebar collection/category filters; every other page hides them like the client does. */
+  feedSidebar?: boolean;
 }
 
 /** Optional server-side data for the app shell (sidebar collection rows, chain tip). */
 export interface ShellData {
   collections?: Array<{ slug: string; name: string; count: number }>;
   tip?: number | null;
+  /** Nav counts so the sidebar does not pop in after the script boots. */
+  counts?: { feed?: number; rooms?: number; protocols?: number; collections?: number };
 }
 
 function esc(s: string): string {
@@ -46,16 +50,17 @@ const NAV: Array<[string, string, string, string]> = [
   ['about', '/', 'About', ''],
 ];
 
-function sidebarHtml(s: ShellData): string {
+function sidebarHtml(s: ShellData, feedSidebar: boolean): string {
   let h = '<aside class="side" id="side">';
   h += '<a class="brand" href="/"><span class="logo">OP_RETURN</span><span class="tag">The Permanent Record</span></a>';
   h += '<div class="search"><input id="side-q" type="search" placeholder="Search messages" autocomplete="off" spellcheck="false" aria-label="Search messages" /><kbd>/</kbd></div>';
   h += '<nav class="snav" aria-label="Primary">';
   for (const [key, href, label, count] of NAV) {
-    h += `<a href="${href}" data-nav="${key}"><span>${label}</span>${count ? `<span class="n" data-count="${count}"></span>` : ''}</a>`;
+    const n = count && s.counts ? (s.counts as Record<string, number | undefined>)[count] : undefined;
+    h += `<a href="${href}" data-nav="${key}"><span>${label}</span>${count ? `<span class="n" data-count="${count}">${n == null ? '' : n.toLocaleString('en-US')}</span>` : ''}</a>`;
   }
   h += '</nav>';
-  h += '<div class="sfilters" id="side-filters">';
+  h += `<div class="sfilters" id="side-filters"${feedSidebar ? '' : ' hidden'}>`;
   if (s.collections && s.collections.length) {
     h += '<div class="sgroup"><span class="slabel">COLLECTION</span>';
     for (const c of s.collections) {
@@ -699,7 +704,7 @@ ${ogMeta}
 </head>
 <body>
 <div class="shell">
-${sidebarHtml(s)}
+${sidebarHtml(s, !!m.feedSidebar)}
 <div class="stage">
   <div class="mtop"><div class="mbar"><a class="brandm" href="/">OP_RETURN</a><div class="right"><button class="themebtn" data-action="theme" type="button">&#9790; Dark</button><span class="tip">&#9679; <span data-tip>${s.tip ? '#' + s.tip.toLocaleString('en-US') : '&mdash;'}</span></span></div></div><div class="mctl" id="mfeedctl" hidden></div></div>
   <div id="app">${m.initialHtml || ''}</div>
@@ -1308,6 +1313,8 @@ ${tabbarHtml()}
   ];
   function textFeed(){return Object.keys(state.cache).map(function(k){return state.cache[k];}).filter(function(m,i,a){return m&&m.txid&&!isProto(m)&&a.findIndex(function(x){return x.id===m.id;})===i;});}
   function renderAbout(){
+    // The server already rendered this exact layout; keep it until the reader interacts.
+    if(!state.aboutDirty&&app.querySelector('[data-ssr="about"]'))return;
     var all=textFeed();var live=all.slice().sort(function(a,b){return tsOf(b)-tsOf(a);}).slice(0,4);
     var feat=null;all.forEach(function(m){if(!feat||m.likes>feat.likes)feat=m;});
     var ch=state.chain;
@@ -1428,7 +1435,7 @@ ${tabbarHtml()}
     if(a==='share'){copyLink(t,'Share card');return;}
     if(a==='copy-hex'){try{navigator.clipboard.writeText(etchHex().hex);}catch(x){}t.textContent='Copied ✓';setTimeout(function(){t.textContent='Copy hex';},1400);return;}
     if(a==='step-toggle'){var i=Number(t.getAttribute('data-i'));state.stepOpen[i]=!state.stepOpen[i];renderEtch();return;}
-    if(a==='faq-toggle'){var j=Number(t.getAttribute('data-i'));state.faqOpen[j]=!state.faqOpen[j];renderAbout();return;}
+    if(a==='faq-toggle'){var j=Number(t.getAttribute('data-i'));state.faqOpen[j]=!state.faqOpen[j];state.aboutDirty=true;renderAbout();return;}
     if(a==='theme'){toggleTheme();return;}
     if(a==='sheet-open'){openSheet();return;}
     if(a==='sheet-close'){closeSheet();return;}

@@ -87,12 +87,18 @@ let shellRefreshing: Promise<void> | null = null;
 
 async function refreshShell(d1: D1Database): Promise<void> {
   try {
-    const [cols, stats] = await Promise.all([db.listCollections(d1), db.getChainStats(d1)]);
+    const [cols, stats, protocols] = await Promise.all([db.listCollections(d1), db.getChainStats(d1), db.listProtocols(d1)]);
     shellCache = {
       at: Date.now(),
       data: {
         collections: cols.map((col) => ({ slug: col.slug || String(col.id), name: col.name, count: col.message_count })),
         tip: stats.highest_height,
+        counts: {
+          feed: stats.stored_txs || cols.reduce((t, col) => t + (col.message_count || 0), 0),
+          rooms: cols.length,
+          protocols: protocols.length,
+          collections: cols.length,
+        },
       },
     };
   } catch {
@@ -1141,10 +1147,14 @@ app.all('/mcp', async (c) => {
 
 app.get('/', async (c) => {
   const origin = originOf(c);
-  const [cols, addrs, feedRes] = await Promise.all([
+  const [cols, addrs, feedRes, liveRes, chain, protocols, categories] = await Promise.all([
     db.listCollections(c.env.DB).catch(() => []),
     db.listAddresses(c.env.DB).catch(() => []),
     db.getMessages(c.env.DB, { sort: 'hot', limit: 1, kind: 'text' }).catch(() => ({ messages: [] })),
+    db.getMessages(c.env.DB, { sort: 'new', limit: 4, kind: 'text' }).catch(() => ({ messages: [] })),
+    db.getChainStats(c.env.DB).catch(() => null),
+    db.listProtocols(c.env.DB).catch(() => []),
+    db.listCategories(c.env.DB).catch(() => []),
   ]);
   const colsCount = cols.length || seedCollections.length;
   const addrsCount =
@@ -1163,7 +1173,16 @@ app.get('/', async (c) => {
 
   applyDiscoveryHeaders(c, origin);
   const graph = [...buildWebSiteGraph(origin), buildFaqSchema()];
-  const initialHtml = renderLandingSsr(colsCount, addrsCount, feat, colName);
+  const initialHtml = renderLandingSsr({
+    collectionsCount: colsCount,
+    addressesCount: addrsCount,
+    featured: feat,
+    colName,
+    live: liveRes.messages,
+    chain,
+    protocolsCount: protocols.length,
+    categories,
+  });
 
   return c.html(
     renderIndex({
@@ -1197,6 +1216,7 @@ app.get('/feed', async (c) => {
       url: origin + '/feed',
       image: origin + '/og/default.png',
       jsonLd: crumbs,
+      feedSidebar: true,
       initialHtml: renderFeedSsr(list.msgs, list.names),
     }, await shellFor(c))
   );
@@ -1507,6 +1527,7 @@ app.get('/c/:slug', async (c) => {
       url: `${origin}/c/${slug}`,
       image: `${origin}/og/collection/${slug}.png`,
       jsonLd: { '@context': 'https://schema.org', '@graph': [colSchema, crumbs] },
+      feedSidebar: true,
       initialHtml: renderCollectionSsr(col, colAddrs, list.msgs),
     }, await shellFor(c))
   );
@@ -1598,6 +1619,7 @@ app.get('/a/:address', async (c) => {
       image: `${origin}/og/address/${encodeURIComponent(address)}.png`,
       noindex: !indexable,
       jsonLd: crumbs,
+      feedSidebar: true,
       initialHtml: renderAddressSsr(address, list.msgs, list.names),
     }, await shellFor(c))
   );
@@ -1655,6 +1677,7 @@ app.get('/p/:protocol', async (c) => {
       image: `${origin}/og/protocol/${protocol}.png`,
       jsonLd: crumbs,
       noindex: count === 0,
+      feedSidebar: true,
       initialHtml: renderProtocolSsr(protocol, label, count, list.msgs, list.names),
     }, await shellFor(c))
   );
@@ -1684,6 +1707,7 @@ app.get('/tick/:tick', async (c) => {
       image: `${origin}/og/tick/${encodeURIComponent(tick)}.png`,
       jsonLd: crumbs,
       noindex: count === 0,
+      feedSidebar: true,
       initialHtml: renderTickSsr(tick, protocols, count, list.msgs, list.names),
     }, await shellFor(c))
   );
@@ -1727,6 +1751,7 @@ app.get('/block/:height', async (c) => {
       url: `${origin}/block/${height}`,
       image: `${origin}/og/default.png`,
       jsonLd: crumbs,
+      feedSidebar: true,
       initialHtml: renderBlockSsr(block, list.msgs, list.names),
     }, await shellFor(c))
   );
@@ -1779,6 +1804,7 @@ app.get('/cat/:slug', async (c) => {
       url: `${origin}/cat/${slug}`,
       image: `${origin}/og/category/${slug}.png`,
       jsonLd: crumbs,
+      feedSidebar: true,
       initialHtml: renderCategorySsr(cat, count, list.msgs, list.names),
     }, await shellFor(c))
   );
