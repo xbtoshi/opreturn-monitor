@@ -60,7 +60,8 @@ export function buildBatch(
     const slug = r.monitored_address ? addressToCollection.get(r.monitored_address) : undefined;
     if (slug) add(`/c/${slug}`);
   }
-  return out;
+  // The cap is on what we send, whatever a caller passed in.
+  return out.slice(0, BATCH_LIMIT);
 }
 
 export interface HubResult {
@@ -69,6 +70,11 @@ export interface HubResult {
   queued?: number;
   /** Status code plus a truncated body; never the request or its headers. */
   error?: string;
+}
+
+/** The stored error is what the hub said; the bearer token must never end up in ingest_state. */
+function redact(text: string, token: string): string {
+  return token ? text.split(token).join('[token]') : text;
 }
 
 /** Submit URLs to the hub. Never throws; a timeout or network failure is an error result. */
@@ -94,10 +100,10 @@ export async function submitToHub(fetchFn: typeof fetch, cfg: HubConfig, urls: s
       }
       return { ok: true, status: res.status, queued };
     }
-    return { ok: false, status: res.status, error: `hub ${res.status}: ${text.slice(0, 160)}` };
+    return { ok: false, status: res.status, error: redact(`hub ${res.status}: ${text.slice(0, 160)}`, cfg.token) };
   } catch (e) {
     const msg = ctl.signal.aborted ? `hub timeout after ${timeoutMs} ms` : `hub request failed: ${String((e as Error)?.message ?? e).slice(0, 120)}`;
-    return { ok: false, status: 0, error: msg };
+    return { ok: false, status: 0, error: redact(msg, cfg.token) };
   } finally {
     clearTimeout(timer);
   }
@@ -139,11 +145,16 @@ export async function pushIndexNow(env: Env, d1: D1Database, fetchFn: typeof fet
   }
   const urls = buildBatch(rows, addressToCollection, cfg.host);
   const result = await submitToHub(fetchFn, cfg, urls);
-  if (result.ok) {
+  const queued = result.queued ?? 0;
+  // Rows are stamped only when the hub took the whole batch. A partial accept
+  // (its daily cap) keeps every row for the next run; the 6 h per-URL cooldown
+  // on the hub side makes the re-send of the accepted ones harmless.
+  if (result.ok && queued >= urls.length) {
     await db.markIndexNowPushed(d1, rows.map((r) => r.id), now);
-    await db.setIngestState(d1, { indexnow_last_ok: new Date().toISOString(), indexnow_last_error: '', indexnow_last_batch: urls.length });
-    return { attempted: urls.length, queued: result.queued ?? urls.length };
+    await db.setIngestState(d1, { indexnow_last_ok: new Date().toISOString(), indexnow_last_error: '', indexnow_last_batch_urls: urls.length });
+    return { attempted: urls.length, queued };
   }
-  await db.setIngestState(d1, { indexnow_last_error: (result.error || `hub ${result.status}`).slice(0, 200), indexnow_last_error_at: new Date().toISOString() });
-  return { attempted: urls.length, queued: 0, error: result.error };
+  const error = result.ok ? `hub accepted ${queued} of ${urls.length} URLs (daily cap?)` : result.error || `hub ${result.status}`;
+  await db.setIngestState(d1, { indexnow_last_error: error.slice(0, 200), indexnow_last_error_at: new Date().toISOString() });
+  return { attempted: urls.length, queued: result.ok ? queued : 0, error };
 }

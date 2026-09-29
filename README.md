@@ -209,7 +209,8 @@ Cloudflare account). The hub serves our key file, polls `/sitemap.xml` every
   first run only sets `indexnow_bootstrap_id`: rows older than that are never
   pushed by the hook (the hub's sitemap watcher already covers the archive).
 - Health: `GET /api/admin/ingest/status` shows `indexnow_last_ok`,
-  `indexnow_last_error(_at)`, `indexnow_last_batch`, `indexnow_bootstrap_id`.
+  `indexnow_last_error(_at)`, `indexnow_last_batch_urls`, `indexnow_bootstrap_id`. A
+  partial accept (the hub's daily cap) stamps nothing and is retried.
 - Manual: `POST /api/admin/indexnow` with `{ "urls": ["/learn/x", ...] }` or
   `{ "all": true }` proxies to the hub. `all` counts against the hub's daily
   cap of 2,000 URLs, so the cron's pushes may be refused for the rest of that

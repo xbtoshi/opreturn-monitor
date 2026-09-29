@@ -1109,7 +1109,12 @@ export async function reconcileMonitored(db: D1Database): Promise<number> {
 // Activity dates (sitemap lastmod) and IndexNow bookkeeping
 // ---------------------------------------------------------------------------
 
-/** Newest message time per monitored address (bounded by the monitored list; uses idx_messages_monitored). */
+/**
+ * Newest message time per monitored address. Bounded by the monitored list and
+ * served by idx_messages_monitored (monitored_address, is_dup, ts DESC, id DESC):
+ * keep that index leading with monitored_address or this becomes a full scan
+ * of messages on every sitemap snapshot.
+ */
 export async function monitoredActivity(db: D1Database): Promise<Map<string, number>> {
   const { results } = await db
     .prepare(

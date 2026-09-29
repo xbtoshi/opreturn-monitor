@@ -53,6 +53,10 @@ describe('sitemap lastmod', () => {
     expect(lm.get('/a/bc1qcold')).toBe('2026-09-27');
     expect(lm.get('/a/bc1qempty/chat')).toBeNull();
     expect(lm.get('/m/' + 'a'.repeat(64))).toBe('2026-09-20');
+    // no guides -> no fabricated date on /guide and /learn
+    const bare = lastmods(generateSitemapXml('https://x.test', [], [], [], [], [], [], { today: '2026-09-30' }));
+    expect(bare.get('/guide')).toBeNull();
+    expect(bare.get('/learn')).toBeNull();
     // only the three live pages carry today's date
     expect([...lm.entries()].filter(([, v]) => v === '2026-09-30').map(([k]) => k).sort()).toEqual(['/', '/feed', '/rooms']);
   });

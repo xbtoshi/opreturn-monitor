@@ -352,10 +352,11 @@ export function generateSitemapXml(
   urls.push({ loc: `${siteUrl}/`, lastmod: today, changefreq: 'hourly', priority: '1.0' });
   urls.push({ loc: `${siteUrl}/feed`, lastmod: today, changefreq: 'hourly', priority: '0.9' });
   urls.push({ loc: `${siteUrl}/collections`, lastmod: dayOf(maxOf([...colLast.values()])) || today, changefreq: 'daily', priority: '0.9' });
-  urls.push({ loc: `${siteUrl}/guide`, lastmod: guides.reduce((m, g) => (g.updated > m ? g.updated : m), '2026-01-01'), changefreq: 'monthly', priority: '0.8' });
+  const guidesLast = guides.length ? guides.reduce((m, g) => (g.updated > m ? g.updated : m), guides[0].updated) : undefined;
+  urls.push({ loc: `${siteUrl}/guide`, lastmod: guidesLast, changefreq: 'monthly', priority: '0.8' });
   urls.push({ loc: `${siteUrl}/protocols`, lastmod: dayOf(maxOf(protocols.map((p) => p.last_ts))) || today, changefreq: 'hourly', priority: '0.9' });
   urls.push({ loc: `${siteUrl}/rooms`, lastmod: today, changefreq: 'hourly', priority: '0.8' });
-  urls.push({ loc: `${siteUrl}/learn`, lastmod: guides.reduce((m, g) => (g.updated > m ? g.updated : m), '2026-01-01'), changefreq: 'weekly', priority: '0.9' });
+  urls.push({ loc: `${siteUrl}/learn`, lastmod: guidesLast, changefreq: 'weekly', priority: '0.9' });
   for (const g of guides) urls.push({ loc: `${siteUrl}/learn/${g.slug}`, lastmod: g.updated, changefreq: 'weekly', priority: '0.8' });
 
   // Collections & Chat

@@ -20,9 +20,14 @@ describe('indexnow: batches', () => {
       'https://opreturn.xyz/c/coldcard-exploit-bulletin-board',
     ]);
   });
-  it('caps a batch at the limit', () => {
-    const many = Array.from({ length: BATCH_LIMIT + 50 }, (_, i) => ({ id: i, txid: String(i).padStart(64, '0'), monitored_address: null }));
+  it('caps a batch at the limit, collection pages included', () => {
+    const many = Array.from({ length: BATCH_LIMIT + 50 }, (_, i) => ({ id: i, txid: String(i).padStart(64, '0'), monitored_address: 'bc1qcold' }));
     expect(buildBatch(many, colOf, 'opreturn.xyz').length).toBe(BATCH_LIMIT);
+  });
+  it('reports a partial accept so the caller keeps the rows for retry', async () => {
+    const fetchFn = (async () => new Response(JSON.stringify({ queued: 1 }), { status: 202 })) as unknown as typeof fetch;
+    const r = await submitToHub(fetchFn, cfg, ['https://opreturn.xyz/m/x', 'https://opreturn.xyz/m/y']);
+    expect(r).toEqual({ ok: true, status: 202, queued: 1 });
   });
   it('reads the hub config from the environment and is off without a token', () => {
     expect(hubConfig({} as Env)).toBeNull();
@@ -52,12 +57,15 @@ describe('indexnow: hub submission', () => {
       expect(r.status).toBe(status);
       expect(r.error).toContain(String(status));
       expect(r.error!.length).toBeLessThan(200);
+      expect(r.error).not.toContain(cfg.token);
+      expect(r.error).toContain('[token]');
     }
     // the error is what the hub said; we never put our own request (token, headers) in it
     const failing = (async () => { throw new Error('boom ' + cfg.token); }) as unknown as typeof fetch;
     const r = await submitToHub(failing, cfg, ['https://opreturn.xyz/m/x']);
     expect(r.ok).toBe(false);
     expect(r.error).toContain('hub request failed');
+    expect(r.error).not.toContain(cfg.token);
   });
   it('times out instead of hanging, and sends nothing for an empty batch', async () => {
     const slow = ((_: string, init: RequestInit) => new Promise((_res, rej) => { (init.signal as AbortSignal).addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError'))); })) as unknown as typeof fetch;

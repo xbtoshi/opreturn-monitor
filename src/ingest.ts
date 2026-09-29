@@ -66,7 +66,8 @@ export interface IngestStatus {
   indexnow_last_ok: string | null;
   indexnow_last_error: string | null;
   indexnow_last_error_at: string | null;
-  indexnow_last_batch: number | null;
+  /** URL count of the last batch the hub accepted in full. */
+  indexnow_last_batch_urls: number | null;
   stats: db.ChainStats;
   recent: db.BlockRow[];
 }
@@ -94,7 +95,7 @@ export async function ingestStatus(env: Env, hosts: string[]): Promise<IngestSta
     indexnow_last_ok: state.indexnow_last_ok || null,
     indexnow_last_error: state.indexnow_last_error || null,
     indexnow_last_error_at: state.indexnow_last_error_at || null,
-    indexnow_last_batch: n('indexnow_last_batch'),
+    indexnow_last_batch_urls: n('indexnow_last_batch_urls'),
     stats,
     recent,
   };
