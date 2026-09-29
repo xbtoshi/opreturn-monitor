@@ -48,7 +48,7 @@ Boards are not equally lively, and the numbers on this page are read live from t
 - Liquid: {{count:liquid-network-peg-out-bulletin-board}} messages across {{addresses:liquid-network-peg-out-bulletin-board}} addresses. Dense, with both sides of a real negotiation visible.
 - Bitget: {{count:bitget-hack-bulletin-board}} messages across {{addresses:bitget-hack-bulletin-board}} addresses. A watchlist rather than a thread, for now.
 
-If you are building a story or a timeline, the Liquid board is the worked example and the Bitget board is the thing to keep an eye on.
+If you are building a story or a timeline, the Liquid board is the worked example and the Bitget board is the thing to keep an eye on. Both collections update automatically as new transactions touch the monitored addresses, so a page that is empty today may be the busiest room on the site next week; the counts above will move with it, and the chat rooms keep every message in the order it arrived.
 
 ## Limits of interpretation
 

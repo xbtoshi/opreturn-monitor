@@ -37,7 +37,7 @@ The practical rule for anyone considering writing one: assume it will be readabl
 
 How much data fits is a question of relay policy rather than consensus. For a decade the default Bitcoin Core node relayed at most 80 bytes of OP_RETURN data. Since Bitcoin Core 30.0 (October 2025) the default is 100,000 bytes, effectively uncapped, and multiple OP_RETURN outputs per transaction relay too. The details, the history and the revert flag are covered in [Bitcoin Core 30 OP_RETURN changes explained](/learn/bitcoin-core-30-op-return-datacarriersize).
 
-Cost is the real limit. Every byte competes for block space and pays the going fee rate. A tweet-length note costs a few hundred sats on a quiet day; a kilobyte of PGP armour costs several thousand.
+Cost is the real limit. Every byte competes for block space and pays the going fee rate, and a message that no node is willing to relay simply never reaches a miner, so shorter is always the safer choice. A tweet-length note costs a few hundred sats on a quiet day; a kilobyte of PGP armour costs several thousand.
 
 ## What people use it for
 

@@ -91,6 +91,12 @@ The global feed defaults to `kind=text`, which is human-readable messages only. 
 
 Runes are never returned as messages. The scanner counts runestones per block, currently about {{chain:runes_pct}} of all OP_RETURN outputs, and reports them through `/api/chain` and `/api/block/:height`, but a Runes indexer is the right source for token state. The same goes for opaque binary payloads.
 
+## Errors and edge cases
+
+The API is deliberately boring about failure. An unknown message id or block height returns 404 with a JSON body of the form `{"ok": false, "error": "…"}`. Invalid parameters, a non-numeric height, a malformed cursor, a limit over 100, return 400 with the same shape, or are clamped where clamping is harmless. Aggregation endpoints are served from an edge cache for a few minutes, so two requests a second apart may return identical bodies with a small `age`; that is expected, not staleness. Cursors do not expire, but a cursor from a filtered request only makes sense with the same filters, so keep the query string and the cursor together.
+
+Unconfirmed messages appear with `block_height` null and `is_mempool` set; if the transaction is replaced or evicted before confirming, the row disappears on the next poll, so treat unconfirmed rows as provisional in anything you persist. Confirmed rows are permanent, except in the rare case of a chain reorganisation, when the scanner rolls back the affected heights and re-ingests them.
+
 ## Attribution and responsible use
 
 The API is free to read and carries permissive cache headers; the aggregation endpoints are cached for a few minutes. There are no published rate limits, but the service runs on shared infrastructure, so poll the feed on the order of minutes rather than seconds, use the `before` cursor rather than deep offsets, and cache what you fetch. If you build something public with the data, a link back to the message pages is appreciated: they are the citation that lets a reader verify the bytes on chain.

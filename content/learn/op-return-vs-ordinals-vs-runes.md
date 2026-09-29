@@ -51,7 +51,7 @@ The registry currently decodes {{protocols}} protocols. In rough order of volume
 
 ### The Runes caveat
 
-Because runestones are binary and only meaningful to a Runes indexer, storing each one as a "message" would make the archive unreadable and multiply its size by fifty for no benefit. So they are counted per block, shown in the chain census and on each block page, and otherwise excluded. Anyone who needs Runes token state should use a Runes indexer; this site is not one.
+Because runestones are binary and only meaningful to a Runes indexer, storing each one as a "message" would make the archive unreadable and multiply its size by fifty for no benefit. So they are counted per block, shown in the chain census and on each block page, and otherwise excluded. Anyone who needs Runes token state, balances, etchings or transfers resolved against the protocol's rules, should use a Runes indexer; this site is not one and does not try to be.
 
 ## How to navigate
 
