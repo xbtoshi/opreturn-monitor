@@ -310,79 +310,81 @@ export interface SitemapMessage {
   created_at: string;
 }
 
+export interface SitemapActivity {
+  /** Categories with the newest row's unix time. */
+  categories?: Array<{ category: string; last_ts?: number | null }>;
+  /** Newest message time per monitored address. */
+  addressActivity?: ReadonlyMap<string, number>;
+  /** Fixed "today" for tests. */
+  today?: string;
+}
+
+const dayOf = (ts: number | null | undefined): string | undefined => (ts ? new Date(ts * 1000).toISOString().slice(0, 10) : undefined);
+
+/**
+ * lastmod is the page's real last activity wherever we know it (a crawler
+ * that catches us stamping "today" on everything stops trusting the file).
+ * Only the pages that genuinely change with every block keep today's date.
+ */
 export function generateSitemapXml(
   siteUrl: string,
   collections: CollectionWithStats[],
   addresses: Address[],
   topMessages: SitemapMessage[],
-  protocols: string[] = [],
-  ticks: Array<{ tick: string }> = [],
-  guides: Array<{ slug: string; updated: string }> = []
+  protocols: Array<{ protocol: string; last_ts?: number | null }> = [],
+  ticks: Array<{ tick: string; last_ts?: number | null }> = [],
+  guides: Array<{ slug: string; updated: string }> = [],
+  activity: SitemapActivity = {}
 ): string {
   const urls: Array<{ loc: string; lastmod?: string; changefreq: string; priority: string }> = [];
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = activity.today || new Date().toISOString().slice(0, 10);
+  const addrLast = activity.addressActivity || new Map<string, number>();
+  const colLast = new Map<number, number>();
+  for (const a of addresses) {
+    const t = addrLast.get(a.address);
+    if (t && t > (colLast.get(a.collection_id) || 0)) colLast.set(a.collection_id, t);
+  }
+  const maxOf = (xs: Array<number | null | undefined>): number | undefined => xs.reduce<number | undefined>((m, x) => (x && (!m || x > m) ? x : m), undefined);
+  const catLast = new Map((activity.categories || []).map((c) => [c.category, c.last_ts ?? undefined]));
 
   // Core pages
   urls.push({ loc: `${siteUrl}/`, lastmod: today, changefreq: 'hourly', priority: '1.0' });
   urls.push({ loc: `${siteUrl}/feed`, lastmod: today, changefreq: 'hourly', priority: '0.9' });
-  urls.push({ loc: `${siteUrl}/collections`, lastmod: today, changefreq: 'daily', priority: '0.9' });
-  urls.push({ loc: `${siteUrl}/guide`, lastmod: today, changefreq: 'monthly', priority: '0.8' });
-  urls.push({ loc: `${siteUrl}/protocols`, lastmod: today, changefreq: 'hourly', priority: '0.9' });
+  urls.push({ loc: `${siteUrl}/collections`, lastmod: dayOf(maxOf([...colLast.values()])) || today, changefreq: 'daily', priority: '0.9' });
+  urls.push({ loc: `${siteUrl}/guide`, lastmod: guides.reduce((m, g) => (g.updated > m ? g.updated : m), '2026-01-01'), changefreq: 'monthly', priority: '0.8' });
+  urls.push({ loc: `${siteUrl}/protocols`, lastmod: dayOf(maxOf(protocols.map((p) => p.last_ts))) || today, changefreq: 'hourly', priority: '0.9' });
   urls.push({ loc: `${siteUrl}/rooms`, lastmod: today, changefreq: 'hourly', priority: '0.8' });
-  urls.push({ loc: `${siteUrl}/learn`, lastmod: guides.reduce((m, g) => (g.updated > m ? g.updated : m), today), changefreq: 'weekly', priority: '0.9' });
+  urls.push({ loc: `${siteUrl}/learn`, lastmod: guides.reduce((m, g) => (g.updated > m ? g.updated : m), '2026-01-01'), changefreq: 'weekly', priority: '0.9' });
   for (const g of guides) urls.push({ loc: `${siteUrl}/learn/${g.slug}`, lastmod: g.updated, changefreq: 'weekly', priority: '0.8' });
 
   // Collections & Chat
   for (const col of collections) {
     const slug = col.slug || String(col.id);
-    urls.push({
-      loc: `${siteUrl}/c/${slug}`,
-      lastmod: today,
-      changefreq: 'daily',
-      priority: '0.8',
-    });
-    urls.push({
-      loc: `${siteUrl}/c/${slug}/chat`,
-      lastmod: today,
-      changefreq: 'daily',
-      priority: '0.8',
-    });
+    const lastmod = dayOf(colLast.get(col.id));
+    urls.push({ loc: `${siteUrl}/c/${slug}`, lastmod, changefreq: 'daily', priority: '0.8' });
+    urls.push({ loc: `${siteUrl}/c/${slug}/chat`, lastmod, changefreq: 'daily', priority: '0.8' });
   }
 
-  // Categories
+  // Categories (no lastmod for an empty category rather than a made-up date)
   for (const cat of CATEGORIES) {
-    urls.push({
-      loc: `${siteUrl}/cat/${categorySlug(cat)}`,
-      lastmod: today,
-      changefreq: 'daily',
-      priority: '0.7',
-    });
+    urls.push({ loc: `${siteUrl}/cat/${categorySlug(cat)}`, lastmod: dayOf(catLast.get(cat)), changefreq: 'daily', priority: '0.7' });
   }
 
   // Protocol & ticker pages (full-chain explorer)
   for (const p of protocols) {
-    if (p === 'text') continue;
-    urls.push({ loc: `${siteUrl}/p/${encodeURIComponent(p)}`, lastmod: today, changefreq: 'hourly', priority: '0.7' });
+    if (p.protocol === 'text') continue;
+    urls.push({ loc: `${siteUrl}/p/${encodeURIComponent(p.protocol)}`, lastmod: dayOf(p.last_ts), changefreq: 'hourly', priority: '0.7' });
   }
   for (const t of ticks) {
-    urls.push({ loc: `${siteUrl}/tick/${encodeURIComponent(t.tick)}`, lastmod: today, changefreq: 'daily', priority: '0.6' });
+    urls.push({ loc: `${siteUrl}/tick/${encodeURIComponent(t.tick)}`, lastmod: dayOf(t.last_ts), changefreq: 'daily', priority: '0.6' });
   }
 
   // Monitored Addresses & Chat
   for (const addr of addresses) {
-    urls.push({
-      loc: `${siteUrl}/a/${encodeURIComponent(addr.address)}`,
-      lastmod: today,
-      changefreq: 'daily',
-      priority: '0.7',
-    });
-    urls.push({
-      loc: `${siteUrl}/a/${encodeURIComponent(addr.address)}/chat`,
-      lastmod: today,
-      changefreq: 'daily',
-      priority: '0.7',
-    });
+    const lastmod = dayOf(addrLast.get(addr.address));
+    urls.push({ loc: `${siteUrl}/a/${encodeURIComponent(addr.address)}`, lastmod, changefreq: 'daily', priority: '0.7' });
+    urls.push({ loc: `${siteUrl}/a/${encodeURIComponent(addr.address)}/chat`, lastmod, changefreq: 'daily', priority: '0.7' });
   }
 
   // Top / Recent Messages

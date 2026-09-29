@@ -73,6 +73,7 @@ import type { ChatCardData } from './og';
 import type { ChatMessage, CollectionWithStats, Env } from './types';
 import { renderIndex, type ShellData } from './ui';
 import FV, { type FeedView } from './feedview.js';
+import { hubConfig } from './indexnow';
 
 // ---------------------------------------------------------------------------
 // App shell data (sidebar collection rows + chain tip). Cached per isolate and
@@ -88,9 +89,9 @@ async function refreshShell(d1: D1Database, origin: string): Promise<void> {
       db.getChainStats(d1),
       db.listRecentBlocks(d1, 6),
       // The two aggregations over ops are the heaviest reads; share them across isolates via the edge cache.
-      cachedValue(origin, 'protocols:0', 300, protocolStats(d1, 0)),
+      cachedValue(origin, 'protocols:1:0', 300, protocolStats(d1, 0)),
       // Not an API key (the categories endpoint is uncached); shell-only.
-      cachedValue<db.CategoryStat[]>(origin, 'shell:categories', 300, () => db.listCategories(d1)),
+      cachedValue<db.CategoryStat[]>(origin, 'shell:categories:1', 300, () => db.listCategories(d1)),
     ]);
     shellCache = {
       at: Date.now(),
@@ -333,14 +334,15 @@ function daysParam(raw: string | undefined): number {
 
 app.get('/api/protocols', (c) => {
   const days = daysParam(c.req.query('days'));
-  return cachedJson(c, 300, `protocols:${days}`, protocolStats(c.env.DB, days));
+  // Key version 1: the shape gained last_ts (sitemap lastmod). Bump on every shape change.
+  return cachedJson(c, 300, `protocols:1:${days}`, protocolStats(c.env.DB, days));
 });
 
 app.get('/api/ticks', (c) => {
   const days = daysParam(c.req.query('days'));
   const protocol = slugParam(c.req.query('protocol'));
   const limit = Number(c.req.query('limit')) > 100 ? 500 : 100;
-  return cachedJson(c, 300, `ticks:${days}:${protocol ?? ''}:${limit}`, () =>
+  return cachedJson(c, 300, `ticks:1:${days}:${protocol ?? ''}:${limit}`, () =>
     db.listTicks(c.env.DB, protocol, days, limit)
   );
 });
@@ -537,6 +539,44 @@ app.delete('/api/admin/collections/:id', adminGuard, async (c) => {
 app.post('/api/admin/seed', adminGuard, async (c) => {
   await ensureSeeded(c.env.DB);
   return c.json({ ok: true });
+});
+
+/**
+ * Manual IndexNow push: { urls: string[] } (site-relative or absolute on our
+ * host) or { all: true } to re-announce everything the hub knows. `all`
+ * counts against the hub's daily cap (2,000), so the cron's own pushes may
+ * be refused for the rest of the day after a large re-announce.
+ */
+app.post('/api/admin/indexnow', adminGuard, async (c) => {
+  const cfg = hubConfig(c.env);
+  if (!cfg) return jsonError('INDEXNOW_HUB_TOKEN not configured', 503);
+  const body = (await c.req.json().catch(() => null)) as { urls?: unknown; all?: unknown } | null;
+  let payload: { host: string; urls?: string[]; all?: true };
+  if (body?.all === true) payload = { host: cfg.host, all: true };
+  else {
+    if (!Array.isArray(body?.urls) || !body.urls.length || body.urls.length > 10000) return jsonError('send urls: string[] (1-10000) or all: true', 400);
+    const urls: string[] = [];
+    for (const raw of body.urls) {
+      if (typeof raw !== 'string') return jsonError('urls must be strings', 400);
+      const u = raw.startsWith('/') ? `https://${cfg.host}${raw}` : raw;
+      let parsed: URL;
+      try {
+        parsed = new URL(u);
+      } catch {
+        return jsonError(`not a URL: ${raw}`, 400);
+      }
+      if (parsed.protocol !== 'https:' || parsed.host.toLowerCase() !== cfg.host) return jsonError(`not on ${cfg.host}: ${raw}`, 400);
+      urls.push(parsed.toString());
+    }
+    payload = { host: cfg.host, urls: [...new Set(urls)] };
+  }
+  const res = await fetch(cfg.url, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${cfg.token}`, 'content-type': 'application/json', 'user-agent': 'opreturn-indexnow/1.0 (+https://opreturn.xyz)' },
+    body: JSON.stringify(payload),
+  }).catch((e) => new Response(JSON.stringify({ error: String(e).slice(0, 120) }), { status: 502 }));
+  const text = await res.text();
+  return new Response(text, { status: res.status, headers: { 'content-type': 'application/json' } });
 });
 
 app.post('/api/admin/classify', adminGuard, async (c) => {
@@ -852,25 +892,30 @@ app.get('/llms-full.txt', async (c) => {
 
 app.get('/sitemap.xml', async (c) => {
   const origin = originOf(c);
-  const [cols, addrs, feedRes, protocols, ticks] = await Promise.all([
-    db.listCollections(c.env.DB).catch(() => []),
-    db.listAddresses(c.env.DB).catch(() => []),
-    db.getMessages(c.env.DB, { sort: 'hot', limit: 100, kind: 'text' }).then(async (hot) => {
-      // Hottest human messages plus the newest ones, so fresh records get discovered too.
-      const recent = await db.getMessages(c.env.DB, { sort: 'new', limit: 200, kind: 'text' }).catch(() => ({ messages: [] }));
-      const seen = new Set<string>();
-      return { messages: [...hot.messages, ...recent.messages].filter((m) => !seen.has(m.txid) && seen.add(m.txid)) };
-    }).catch(() => ({ messages: [] })),
-    db.listProtocols(c.env.DB).catch(() => []),
-    db.listTicks(c.env.DB, undefined, 0, 200).catch(() => []),
-  ]);
-  const finalCols = cols.length ? cols : (seedCollections as unknown as CollectionWithStats[]);
-  const topMsgs = feedRes.messages.map((m) => ({
-    txid: m.txid,
-    block_time: m.block_time,
-    created_at: m.created_at,
-  }));
-  const xml = generateSitemapXml(origin, finalCols, addrs, topMsgs, protocols.map((p) => p.protocol), ticks, listGuides().map((g) => ({ slug: g.meta.slug, updated: g.meta.updated })));
+  // One snapshot per ten minutes for everyone (the IndexNow hub, crawlers): the
+  // aggregations behind the lastmod dates run once per TTL, not per request.
+  const xml = await cachedValue<string>(origin, 'sitemap:1', 600, async () => {
+    const [cols, addrs, feedRes, protocols, ticks, categories, activity] = await Promise.all([
+      db.listCollections(c.env.DB).catch(() => []),
+      db.listAddresses(c.env.DB).catch(() => []),
+      db.getMessages(c.env.DB, { sort: 'hot', limit: 100, kind: 'text' }).then(async (hot) => {
+        // Hottest human messages plus the newest ones, so fresh records get discovered too.
+        const recent = await db.getMessages(c.env.DB, { sort: 'new', limit: 200, kind: 'text' }).catch(() => ({ messages: [] }));
+        const seen = new Set<string>();
+        return { messages: [...hot.messages, ...recent.messages].filter((m) => !seen.has(m.txid) && seen.add(m.txid)) };
+      }).catch(() => ({ messages: [] })),
+      db.listProtocols(c.env.DB).catch(() => []),
+      db.listTicks(c.env.DB, undefined, 0, 200).catch(() => []),
+      db.listCategories(c.env.DB).catch(() => []),
+      db.monitoredActivity(c.env.DB).catch(() => new Map<string, number>()),
+    ]);
+    const finalCols = cols.length ? cols : (seedCollections as unknown as CollectionWithStats[]);
+    const topMsgs = feedRes.messages.map((m) => ({ txid: m.txid, block_time: m.block_time, created_at: m.created_at }));
+    return generateSitemapXml(origin, finalCols, addrs, topMsgs, protocols, ticks, listGuides().map((g) => ({ slug: g.meta.slug, updated: g.meta.updated })), {
+      categories,
+      addressActivity: activity,
+    });
+  });
   return new Response(xml, {
     headers: {
       'content-type': 'application/xml; charset=utf-8',
@@ -1826,7 +1871,7 @@ app.get('/p/:protocol', async (c) => {
   const count = stats.find((s) => s.protocol === protocol)?.count ?? 0;
   if (wantsMarkdown(c)) return markdownResponse(renderProtocolMarkdown(origin, protocol, label, count), origin);
   // The client loads this protocol's top 40 tickers for the head; same query, same limit.
-  const ticks = await cachedValue<Awaited<ReturnType<typeof db.listTicks>>>(origin, `ticks:0:${protocol}:40`, 300, () => db.listTicks(c.env.DB, protocol, 0, 40)).catch(() => []);
+  const ticks = await cachedValue<Awaited<ReturnType<typeof db.listTicks>>>(origin, `ticks:1:0:${protocol}:40`, 300, () => db.listTicks(c.env.DB, protocol, 0, 40)).catch(() => []);
   const { view, shell } = await feedViewFor(c, 'p', { protocol, ticks });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [
@@ -1858,7 +1903,7 @@ app.get('/tick/:tick', async (c) => {
   const protocols = mine.map((s) => s.protocol);
   if (wantsMarkdown(c)) return markdownResponse(renderTickMarkdown(origin, tick, count), origin);
   // The client's tick head reads the same top-40 ticker list it loads for /protocols.
-  const top = await cachedValue<Awaited<ReturnType<typeof db.listTicks>>>(origin, 'ticks:0::40', 300, () => db.listTicks(c.env.DB, undefined, 0, 40)).catch(() => []);
+  const top = await cachedValue<Awaited<ReturnType<typeof db.listTicks>>>(origin, 'ticks:1:0::40', 300, () => db.listTicks(c.env.DB, undefined, 0, 40)).catch(() => []);
   const { view, shell } = await feedViewFor(c, 'tick', { tick, ticks: top });
   applyDiscoveryHeaders(c, origin);
   const crumbs = buildBreadcrumbSchema(origin, [

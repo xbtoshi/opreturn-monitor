@@ -1,4 +1,5 @@
 import { classifyBatch } from './classify';
+import { pushIndexNow } from './indexnow';
 import * as db from './db';
 import { ingestBlocks } from './ingest';
 import {
@@ -135,6 +136,9 @@ export async function runCron(env: Env): Promise<RunSummary> {
   lap('details');
   const classified = await classifyNewMessages(env.DB, env, aiMax);
   lap('classify');
+  // Announce new message pages to the IndexNow hub; failures are recorded and retried next run.
+  const indexnow = await pushIndexNow(env, env.DB).catch((e) => ({ attempted: 0, queued: 0, error: String(e).slice(0, 120) }));
+  lap('indexnow');
 
   return {
     scanned_txs: scannedTxs,
@@ -145,6 +149,7 @@ export async function runCron(env: Env): Promise<RunSummary> {
     reparsed,
     details_filled: detailsFilled,
     blocks_ingested: blocksIngested,
+    indexnow,
     took_ms: Date.now() - started,
     phase_ms: phase,
   };

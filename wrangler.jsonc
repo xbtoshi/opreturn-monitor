@@ -54,7 +54,11 @@
     "INGEST_BACKFILL": "1",
     "INGEST_MAX_BLOCKS_PER_RUN": "3",
     "INGEST_TIME_BUDGET_MS": "60000",
-    "BACKFILL_DAYS": "30"
+    "BACKFILL_DAYS": "30",
+    // IndexNow hub: new human-message pages are pushed here every cron run
+    // (secret INDEXNOW_HUB_TOKEN enables it; see README "IndexNow").
+    "INDEXNOW_HUB_URL": "https://indexnow.kyc.rip/v1/submit",
+    "INDEXNOW_HOST": "opreturn.xyz"
     // Set these to real values in production, ideally via wrangler secret put.
   },
 

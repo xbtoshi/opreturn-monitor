@@ -10,3 +10,6 @@ opencode.json
 
 
 .loadtest/
+
+# Keep these out of git: .env is not read by wrangler; secrets live in .dev.vars (local) and `wrangler secret put` (production).
+.env

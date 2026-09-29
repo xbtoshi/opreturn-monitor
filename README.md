@@ -192,6 +192,33 @@ is rendered server-side in `src/seo.ts` and adopted by the client
 (`data-ssr="about"`). Collection address cards are server-rendered only: after
 in-app navigation to a collection they appear on the next full load.
 
+## IndexNow
+
+New human-message pages are announced to Bing, Yandex, Seznam and Naver through
+the eco-wide IndexNow hub (`indexnow.kyc.rip`, a separate Worker in the same
+Cloudflare account). The hub serves our key file, polls `/sitemap.xml` every
+30 minutes for new URLs, and accepts pushes. Google does not use IndexNow.
+
+- Secret `INDEXNOW_HUB_TOKEN` (site token issued by the hub) enables the push;
+  vars `INDEXNOW_HUB_URL` and `INDEXNOW_HOST` are in `wrangler.jsonc`. Without
+  the token the hook is a no-op.
+- Every cron run (`src/indexnow.ts`, after classification) submits up to 200
+  not-yet-pushed human-message representatives (`/m/<txid>`) plus the
+  collection pages they landed in, then stamps `messages.indexnow_pushed_at`
+  (migration 0009). A failed hub call is recorded and retried next run. The
+  first run only sets `indexnow_bootstrap_id`: rows older than that are never
+  pushed by the hook (the hub's sitemap watcher already covers the archive).
+- Health: `GET /api/admin/ingest/status` shows `indexnow_last_ok`,
+  `indexnow_last_error(_at)`, `indexnow_last_batch`, `indexnow_bootstrap_id`.
+- Manual: `POST /api/admin/indexnow` with `{ "urls": ["/learn/x", ...] }` or
+  `{ "all": true }` proxies to the hub. `all` counts against the hub's daily
+  cap of 2,000 URLs, so the cron's pushes may be refused for the rest of that
+  day.
+- The sitemap's `lastmod` values are real activity dates (newest op per
+  protocol and ticker, newest message per collection, address and category);
+  only `/`, `/feed` and `/rooms` carry today's date. The sitemap is served from
+  a ten-minute edge-cached snapshot.
+
 ## Notes
 
 - AI classification is best-effort: batches of `AI_BATCH_SIZE` (default 10)

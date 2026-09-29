@@ -81,6 +81,8 @@ export async function getCollectionBySlug(db: D1Database, slug: string): Promise
 }
 
 export interface CategoryStat {
+  /** Unix time of the newest row, for sitemap lastmod. */
+  last_ts?: number | null;
   category: string;
   count: number;
 }
@@ -88,7 +90,7 @@ export interface CategoryStat {
 export async function listCategories(db: D1Database): Promise<CategoryStat[]> {
   const { results } = await db
     .prepare(
-      `SELECT m.category AS category, COUNT(*) AS count
+      `SELECT m.category AS category, COUNT(*) AS count, MAX(m.ts) AS last_ts
          FROM messages m
         WHERE m.category IS NOT NULL AND m.category != '' AND (m.protocol = 'text' OR m.protocol IS NULL)
         GROUP BY m.category
@@ -99,6 +101,7 @@ export async function listCategories(db: D1Database): Promise<CategoryStat[]> {
   return results.map((r) => ({
     category: str(r, 'category'),
     count: num(r, 'count'),
+    last_ts: nullableNum(r, 'last_ts'),
   }));
 }
 
@@ -130,7 +133,7 @@ export async function listProtocols(db: D1Database, days = 0): Promise<ProtocolS
   const since = days > 0 ? nowSeconds() - days * 86400 : 0;
   const { results } = await db
     .prepare(
-      `SELECT protocol, COUNT(DISTINCT txid) AS count
+      `SELECT protocol, COUNT(DISTINCT txid) AS count, MAX(ts) AS last_ts
          FROM ops
         WHERE ts >= ?
         GROUP BY protocol
@@ -138,7 +141,7 @@ export async function listProtocols(db: D1Database, days = 0): Promise<ProtocolS
     )
     .bind(since)
     .all<Record<string, unknown>>();
-  return results.map((r) => ({ protocol: str(r, 'protocol'), count: num(r, 'count') }));
+  return results.map((r) => ({ protocol: str(r, 'protocol'), count: num(r, 'count'), last_ts: nullableNum(r, 'last_ts') }));
 }
 
 export async function listTicks(db: D1Database, protocol?: string, days = 0, limit = 100): Promise<TickStat[]> {
@@ -152,7 +155,7 @@ export async function listTicks(db: D1Database, protocol?: string, days = 0, lim
   params.push(limit);
   const { results } = await db
     .prepare(
-      `SELECT protocol, tick, COUNT(DISTINCT txid) AS count
+      `SELECT protocol, tick, COUNT(DISTINCT txid) AS count, MAX(ts) AS last_ts
          FROM ops
          ${where}
         GROUP BY protocol, tick
@@ -161,7 +164,7 @@ export async function listTicks(db: D1Database, protocol?: string, days = 0, lim
     )
     .bind(...params)
     .all<Record<string, unknown>>();
-  return results.map((r) => ({ protocol: str(r, 'protocol'), tick: str(r, 'tick'), count: num(r, 'count') }));
+  return results.map((r) => ({ protocol: str(r, 'protocol'), tick: str(r, 'tick'), count: num(r, 'count'), last_ts: nullableNum(r, 'last_ts') }));
 }
 
 // ---------------------------------------------------------------------------
@@ -1100,6 +1103,50 @@ export async function reconcileMonitored(db: D1Database): Promise<number> {
     for (const r of res) changed += r.meta.changes;
   }
   return changed;
+}
+
+// ---------------------------------------------------------------------------
+// Activity dates (sitemap lastmod) and IndexNow bookkeeping
+// ---------------------------------------------------------------------------
+
+/** Newest message time per monitored address (bounded by the monitored list; uses idx_messages_monitored). */
+export async function monitoredActivity(db: D1Database): Promise<Map<string, number>> {
+  const { results } = await db
+    .prepare(
+      `SELECT monitored_address AS address, MAX(ts) AS last_ts FROM messages
+        WHERE monitored_address IN (SELECT address FROM addresses)
+        GROUP BY monitored_address`
+    )
+    .all<{ address: string; last_ts: number }>();
+  return new Map(results.map((r) => [r.address, Number(r.last_ts)]));
+}
+
+export async function maxMessageId(db: D1Database): Promise<number> {
+  const row = await db.prepare('SELECT COALESCE(MAX(id), 0) AS n FROM messages').first<{ n: number }>();
+  return Number(row?.n ?? 0);
+}
+
+/** Human-message representatives past the bootstrap watermark that the hub has not accepted yet. */
+export async function listIndexNowCandidates(db: D1Database, afterId: number, limit: number): Promise<Array<{ id: number; txid: string; monitored_address: string | null }>> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, txid, monitored_address FROM messages
+        WHERE indexnow_pushed_at IS NULL AND protocol = 'text' AND is_dup = 0 AND id > ?
+        ORDER BY id ASC LIMIT ?`
+    )
+    .bind(afterId, limit)
+    .all<Record<string, unknown>>();
+  return results.map((r) => ({ id: num(r, 'id'), txid: str(r, 'txid'), monitored_address: nullableStr(r, 'monitored_address') }));
+}
+
+export async function markIndexNowPushed(db: D1Database, ids: number[], at: number): Promise<void> {
+  for (let i = 0; i < ids.length; i += 90) {
+    const chunk = ids.slice(i, i + 90);
+    await db
+      .prepare(`UPDATE messages SET indexnow_pushed_at = ? WHERE id IN (${chunk.map(() => '?').join(',')})`)
+      .bind(at, ...chunk)
+      .run();
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -61,6 +61,12 @@ export interface IngestStatus {
   ai_last_ok: string | null;
   ai_last_error: string | null;
   ai_last_error_at: string | null;
+  /** IndexNow push bookkeeping (see src/indexnow.ts). */
+  indexnow_bootstrap_id: number | null;
+  indexnow_last_ok: string | null;
+  indexnow_last_error: string | null;
+  indexnow_last_error_at: string | null;
+  indexnow_last_batch: number | null;
   stats: db.ChainStats;
   recent: db.BlockRow[];
 }
@@ -84,6 +90,11 @@ export async function ingestStatus(env: Env, hosts: string[]): Promise<IngestSta
     ai_last_ok: state.ai_last_ok || null,
     ai_last_error: state.ai_last_error || null,
     ai_last_error_at: state.ai_last_error_at || null,
+    indexnow_bootstrap_id: n('indexnow_bootstrap_id'),
+    indexnow_last_ok: state.indexnow_last_ok || null,
+    indexnow_last_error: state.indexnow_last_error || null,
+    indexnow_last_error_at: state.indexnow_last_error_at || null,
+    indexnow_last_batch: n('indexnow_last_batch'),
     stats,
     recent,
   };

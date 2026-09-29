@@ -79,12 +79,15 @@ export interface ChatParticipant {
 export interface ProtocolStat {
   protocol: string;
   count: number;
+  /** Unix time of the newest op, for sitemap lastmod. */
+  last_ts?: number | null;
 }
 
 export interface TickStat {
   protocol: string;
   tick: string;
   count: number;
+  last_ts?: number | null;
 }
 
 export interface Env {
@@ -108,6 +111,11 @@ export interface Env {
   INGEST_MAX_BLOCKS_PER_RUN?: string;
   INGEST_TIME_BUDGET_MS?: string;
   BACKFILL_DAYS?: string;
+  /** IndexNow hub (indexnow.kyc.rip) submit token; unset = no pushes. */
+  INDEXNOW_HUB_TOKEN?: string;
+  INDEXNOW_HUB_URL?: string;
+  /** The host the hub enrolled us under (defaults to SITE_URL's host). */
+  INDEXNOW_HOST?: string;
 }
 
 export interface RunSummary {
@@ -125,4 +133,6 @@ export interface RunSummary {
   took_ms: number;
   /** Wall-clock per pipeline phase, for tuning the cron budget. */
   phase_ms: Record<string, number>;
+  /** IndexNow push result for this run (see src/indexnow.ts). */
+  indexnow?: { skipped?: string; attempted: number; queued: number; error?: string };
 }
