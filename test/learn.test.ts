@@ -78,6 +78,7 @@ describe('landing SSR', () => {
     expect(contact).toBeGreaterThan(html.indexOf('class="faq-item open"'));
     expect(html.slice(contact)).toContain('href="https://x.com/xbtoshi" rel="me noopener" target="_blank">@xbtoshi</a>');
     expect(html.slice(contact)).toContain('data-action="suggest-open"');
+    expect(html.slice(contact)).toContain('href="https://github.com/xbtoshi/opreturn-monitor" rel="me noopener" target="_blank">Source on GitHub');
     expect(html.endsWith('</div></main>')).toBe(true);
     expect(html).toContain('75%');
     expect(html).toContain('4m ago');
@@ -85,6 +86,8 @@ describe('landing SSR', () => {
     expect(timeAgo(now - 3700)).toBe('1h ago');
   });
 });
+
+const llmsHas = (txt: string, needle: string) => txt.includes(needle);
 
 describe('site graph and llms.txt', () => {
   it('links the maintainer profile from exactly one Organization node and from llms.txt', async () => {
@@ -95,6 +98,8 @@ describe('site graph and llms.txt', () => {
     walk(graph);
     expect(orgs.length).toBeGreaterThan(0);
     expect(orgs.filter((o) => Array.isArray(o.sameAs) && (o.sameAs as string[]).includes('https://x.com/xbtoshi')).length).toBe(1);
+    expect(orgs.find((o) => Array.isArray(o.sameAs))?.sameAs).toEqual(['https://x.com/xbtoshi', 'https://github.com/xbtoshi/opreturn-monitor']);
+    expect(llmsHas(generateLlmsTxt('https://x.test'), 'https://github.com/xbtoshi/opreturn-monitor')).toBe(true);
     const llms = generateLlmsTxt('https://x.test');
     expect(llms).toContain('## Contact');
     expect(llms).toContain('@xbtoshi on X (https://x.com/xbtoshi)');

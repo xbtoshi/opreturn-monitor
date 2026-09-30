@@ -79,7 +79,7 @@ export interface FeedParams {
 }
 
 declare const FV: {
-  CONTACT: { handle: string; url: string; who: string; how: string };
+  CONTACT: { handle: string; url: string; repo: string; who: string; how: string };
   contactHTML(): string;
   HOSTILE: Record<string, number>;
   PROTO_LABEL: Record<string, string>;

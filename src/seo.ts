@@ -143,6 +143,7 @@ Protocol pages: ${siteUrl}/p/{protocol} · Ticker pages: ${siteUrl}/tick/{TICK} 
 ## Contact
 
 - Maintainer: ${FV.CONTACT.handle} on X (${FV.CONTACT.url}). ${FV.CONTACT.how}
+- Source code: ${FV.CONTACT.repo} (issues and pull requests welcome).
 - Address suggestions go through the site's suggest form and are reviewed by a human before an address is monitored.
 
 ## AI Classification Taxonomy
@@ -1082,7 +1083,7 @@ export function buildWebSiteGraph(siteUrl: string): Record<string, unknown>[] {
         name: 'The Permanent Record',
         url: siteUrl,
         logo: `${siteUrl}/icon-512.png`,
-        sameAs: [FV.CONTACT.url],
+        sameAs: [FV.CONTACT.url, FV.CONTACT.repo],
       },
     },
     {
