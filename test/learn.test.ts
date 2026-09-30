@@ -73,10 +73,31 @@ describe('landing SSR', () => {
     let pos = -1;
     for (const needle of order) { const i = html.indexOf(needle, pos + 1); expect(i, needle).toBeGreaterThan(pos); pos = i; }
     expect(html).toContain('50 OP_RETURN TXS DECODED');
+    // the contact block closes the page, after the FAQ, with the maintainer's profile as a rel=me link
+    const contact = html.indexOf('<div class="about-sec" id="contact">');
+    expect(contact).toBeGreaterThan(html.indexOf('class="faq-item open"'));
+    expect(html.slice(contact)).toContain('href="https://x.com/xbtoshi" rel="me noopener" target="_blank">@xbtoshi</a>');
+    expect(html.slice(contact)).toContain('data-action="suggest-open"');
+    expect(html.endsWith('</div></main>')).toBe(true);
     expect(html).toContain('75%');
     expect(html).toContain('4m ago');
     expect(html).not.toContain('<script');
     expect(timeAgo(now - 3700)).toBe('1h ago');
+  });
+});
+
+describe('site graph and llms.txt', () => {
+  it('links the maintainer profile from exactly one Organization node and from llms.txt', async () => {
+    const { buildWebSiteGraph, generateLlmsTxt } = await import('../src/seo');
+    const graph = buildWebSiteGraph('https://x.test');
+    const orgs: Array<Record<string, unknown>> = [];
+    const walk = (v: unknown) => { if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === 'object') { const o = v as Record<string, unknown>; if (o['@type'] === 'Organization') orgs.push(o); Object.values(o).forEach(walk); } };
+    walk(graph);
+    expect(orgs.length).toBeGreaterThan(0);
+    expect(orgs.filter((o) => Array.isArray(o.sameAs) && (o.sameAs as string[]).includes('https://x.com/xbtoshi')).length).toBe(1);
+    const llms = generateLlmsTxt('https://x.test');
+    expect(llms).toContain('## Contact');
+    expect(llms).toContain('@xbtoshi on X (https://x.com/xbtoshi)');
   });
 });
 

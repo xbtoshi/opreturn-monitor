@@ -67,7 +67,8 @@ function sidebarHtml(s: ShellData, feedView?: FeedView): string {
   // Feed screens get the same filter groups the client builds; other pages keep the block hidden, as the client does.
   h += feedView ? `<div class="sfilters" id="side-filters">${FV.filtersHTML(feedView, false)}</div>` : '<div class="sfilters" id="side-filters" hidden></div>';
   h += '<div class="sfoot"><span class="live"><span class="d"></span>LIVE \u00b7 TIP <span data-tip>' + (s.tip ? '#' + s.tip.toLocaleString('en-US') : '\u2014') + '</span></span>';
-  h += '<button class="themebtn" data-action="theme" type="button">\u263e Dark</button></div>';
+  h += '<button class="themebtn" data-action="theme" type="button">\u263e Dark</button>';
+  h += `<span class="credit">created by <a href="${FV.CONTACT.url}" rel="me noopener" target="_blank">${FV.CONTACT.handle}</a> \u00b7 <a href="/#contact">contact</a></span></div>`;
   h += '</aside>';
   return h;
 }
@@ -220,6 +221,9 @@ ${ogMeta}
   .srow .dot.sig{background:var(--sig)}
   .srow .dot.mute{background:var(--chip)}
   .sfoot{margin-top:auto;border-top:1px solid var(--line);padding:14px 22px;display:flex;flex-direction:column;gap:10px;font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg3)}
+  .sfoot .credit{color:var(--fg4);letter-spacing:.04em}
+  .sfoot .credit a{color:var(--fg3)}
+  .sfoot .credit a:hover{color:var(--sig)}
   .live{display:flex;align-items:center;gap:8px;color:var(--sig);font-weight:600;letter-spacing:.08em}
   .live .d{width:7px;height:7px;border-radius:50%;background:var(--sig);animation:pulse 1.6s infinite}
   .themebtn{align-self:flex-start;background:none;border:1px solid var(--line);color:var(--fg);padding:5px 10px;font-family:'Martian Mono',monospace;font-size:11px;cursor:pointer}
@@ -1249,7 +1253,24 @@ var FV = (function () {
     return h;
   }
 
+  /* ---- about & contact (landing page and llms.txt share these strings) ---- */
+  var CONTACT = {
+    handle: '@xbtoshi',
+    url: 'https://x.com/xbtoshi',
+    who: 'The Permanent Record is built and run by @xbtoshi. It reads public Bitcoin data from open nodes, decodes every OP_RETURN output, and labels human-readable messages with an AI classifier; the labels are a reading aid, not a judgement, and nothing here is financial advice.',
+    how: 'Corrections, questions about a monitored address, press, or anything else: send a direct message on X. Know an address that is collecting messages? Suggest it and a human reviews it before it is monitored.'
+  };
+  function contactHTML() {
+    var h = '<div class="about-sec" id="contact"><span class="kicker">\\u25c6 ABOUT &amp; CONTACT</span>';
+    h += '<p class="lede">' + esc(CONTACT.who).replace(esc(CONTACT.handle), '<a href="' + attr(CONTACT.url) + '" rel="me noopener" target="_blank">' + esc(CONTACT.handle) + '</a>') + '</p>';
+    h += '<p class="lede">' + esc(CONTACT.how).replace('direct message on X', '<a href="' + attr(CONTACT.url) + '" rel="me noopener" target="_blank">direct message on X</a>') + '</p>';
+    h += '<div class="cta"><a class="btn" href="' + attr(CONTACT.url) + '" rel="me noopener" target="_blank">' + esc(CONTACT.handle) + ' on X \\u2197</a><button class="btn" type="button" data-action="suggest-open" data-col="">+ Suggest an address</button></div>';
+    h += '</div>';
+    return h;
+  }
+
   return {
+    CONTACT: CONTACT, contactHTML: contactHTML,
     HOSTILE: HOSTILE, PROTO_LABEL: PROTO_LABEL, PROTO_BLURB: PROTO_BLURB,
     esc: esc, attr: attr, fmt: fmt, shortAddr: shortAddr, catCode: catCode, timeAgo: timeAgo, msgTime: msgTime, tsOf: tsOf, feeText: feeText, whenText: whenText,
     shortCol: shortCol, colSlug: colSlug, catSlug: catSlug, catDot: catDot, protoLabel: protoLabel, protoBlurb: protoBlurb, isTokenProto: isTokenProto, isProto: isProto,
@@ -1486,7 +1507,9 @@ var FV = (function () {
     h+='</div></div>';
     h+='<div class="about-sec"><span class="kicker">◆ FAQ</span><div class="faq">';
     FAQ.forEach(function(f,i){var open=!!state.faqOpen[i];h+='<button class="faq-item'+(open?' open':'')+'" data-action="faq-toggle" data-i="'+i+'"><span class="faq-q"><span>'+esc(f[0])+'</span><span class="sign">'+(open?'−':'+')+'</span></span><span class="faq-a">'+esc(f[1])+'</span></button>';});
-    h+='</div></div></main>';
+    h+='</div></div>';
+    h+=FV.contactHTML();
+    h+='</main>';
     app.innerHTML=h;
   }
   var _learnHtml={};
@@ -1552,7 +1575,13 @@ var FV = (function () {
     state.screen='about';
     return (Object.keys(state.cache).length?Promise.resolve():fetchJSON('/api/messages?sort=new&limit=12').then(function(x){cacheMsgs((x.d&&x.d.messages)||[]);}).catch(function(){})).then(render);
   }
-  function navigate(path){if(location.pathname+location.search===path)route();else{history.pushState({},'',path);_inApp++;route();window.scrollTo(0,0);}}
+  function scrollToHash(hash){var el=hash&&document.getElementById(hash.replace(/^#/,''));if(el)el.scrollIntoView({block:'start'});return !!el;}
+  function navigate(path){
+    var hash=path.indexOf('#')>=0?path.slice(path.indexOf('#')):'';var base=hash?path.slice(0,path.indexOf('#')):path;
+    if(location.pathname+location.search===base){if(hash){history.replaceState({},'',path);if(!scrollToHash(hash))route();}else route();return;}
+    history.pushState({},'',path);_inApp++;
+    Promise.resolve(route()).then(function(){if(!scrollToHash(hash))window.scrollTo(0,0);});
+  }
   function goBack(){if(_inApp>0){_inApp--;history.back();}else navigate('/feed');}
 
   /* ---- sheet & theme ---- */

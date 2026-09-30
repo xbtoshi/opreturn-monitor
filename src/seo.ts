@@ -140,6 +140,11 @@ Every block's OP_RETURN outputs are scanned, not only monitored addresses. Each 
 
 Protocol pages: ${siteUrl}/p/{protocol} · Ticker pages: ${siteUrl}/tick/{TICK} · Block pages: ${siteUrl}/block/{height}
 
+## Contact
+
+- Maintainer: ${FV.CONTACT.handle} on X (${FV.CONTACT.url}). ${FV.CONTACT.how}
+- Address suggestions go through the site's suggest form and are reviewed by a human before an address is monitored.
+
 ## AI Classification Taxonomy
 
 Human-readable transmissions are classified into ${CATEGORIES.length} discrete categories:
@@ -1077,6 +1082,7 @@ export function buildWebSiteGraph(siteUrl: string): Record<string, unknown>[] {
         name: 'The Permanent Record',
         url: siteUrl,
         logo: `${siteUrl}/icon-512.png`,
+        sameAs: [FV.CONTACT.url],
       },
     },
     {
@@ -1469,7 +1475,9 @@ export function renderLandingSsr(d: LandingData): string {
     const open = i === 0;
     h += `<button class="faq-item${open ? ' open' : ''}" data-action="faq-toggle" data-i="${i}"><span class="faq-q"><span>${escHtml(item.q)}</span><span class="sign">${open ? '−' : '+'}</span></span><span class="faq-a">${escHtml(item.a)}</span></button>`;
   });
-  h += '</div></div></main>';
+  h += '</div></div>';
+  h += FV.contactHTML();
+  h += '</main>';
   return h;
 }
 

@@ -476,7 +476,24 @@ var FV = (function () {
     return h;
   }
 
+  /* ---- about & contact (landing page and llms.txt share these strings) ---- */
+  var CONTACT = {
+    handle: '@xbtoshi',
+    url: 'https://x.com/xbtoshi',
+    who: 'The Permanent Record is built and run by @xbtoshi. It reads public Bitcoin data from open nodes, decodes every OP_RETURN output, and labels human-readable messages with an AI classifier; the labels are a reading aid, not a judgement, and nothing here is financial advice.',
+    how: 'Corrections, questions about a monitored address, press, or anything else: send a direct message on X. Know an address that is collecting messages? Suggest it and a human reviews it before it is monitored.'
+  };
+  function contactHTML() {
+    var h = '<div class="about-sec" id="contact"><span class="kicker">\u25c6 ABOUT &amp; CONTACT</span>';
+    h += '<p class="lede">' + esc(CONTACT.who).replace(esc(CONTACT.handle), '<a href="' + attr(CONTACT.url) + '" rel="me noopener" target="_blank">' + esc(CONTACT.handle) + '</a>') + '</p>';
+    h += '<p class="lede">' + esc(CONTACT.how).replace('direct message on X', '<a href="' + attr(CONTACT.url) + '" rel="me noopener" target="_blank">direct message on X</a>') + '</p>';
+    h += '<div class="cta"><a class="btn" href="' + attr(CONTACT.url) + '" rel="me noopener" target="_blank">' + esc(CONTACT.handle) + ' on X \u2197</a><button class="btn" type="button" data-action="suggest-open" data-col="">+ Suggest an address</button></div>';
+    h += '</div>';
+    return h;
+  }
+
   return {
+    CONTACT: CONTACT, contactHTML: contactHTML,
     HOSTILE: HOSTILE, PROTO_LABEL: PROTO_LABEL, PROTO_BLURB: PROTO_BLURB,
     esc: esc, attr: attr, fmt: fmt, shortAddr: shortAddr, catCode: catCode, timeAgo: timeAgo, msgTime: msgTime, tsOf: tsOf, feeText: feeText, whenText: whenText,
     shortCol: shortCol, colSlug: colSlug, catSlug: catSlug, catDot: catDot, protoLabel: protoLabel, protoBlurb: protoBlurb, isTokenProto: isTokenProto, isProto: isProto,
