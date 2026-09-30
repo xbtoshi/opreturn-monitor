@@ -90,7 +90,7 @@ function tabbarHtml(): string {
 export function renderIndex(meta?: PageMeta, shell?: ShellData): string {
   const s: ShellData = shell || {};
   const m: PageMeta = meta || {};
-  const ogTitle = m.title || 'The Permanent Record — messages inside Bitcoin';
+  const ogTitle = (m.title || 'The Permanent Record — messages inside Bitcoin') + (m.feedView && m.feedView.before ? ' \u00b7 older' : '');
   const ogDesc =
     m.description ||
     'People are leaving messages inside Bitcoin. Forever. Threats, confessions, prayers, ads, haiku — archived live from the chain.';
@@ -265,6 +265,7 @@ ${ogMeta}
   .status{font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4);min-height:16px}
   .btn-more{align-self:center;background:none;border:1px solid var(--line);color:var(--fg);padding:10px 18px;font-family:'Martian Mono',monospace;font-size:12px;cursor:pointer}
   .btn-more:hover{border-color:var(--fg)}
+  a.btn-more{display:inline-block;text-decoration:none;line-height:normal}
   .pills{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
   .pill{display:inline-flex;gap:8px;align-items:center;background:var(--inv-bg);color:var(--inv-fg);border:none;padding:6px 10px;font-size:13px;cursor:pointer}
   .pill .x{opacity:.7}
@@ -764,7 +765,7 @@ ${tabbarHtml()}
   var state={screen:'feed',filter:null,address:null,category:null,protocol:null,tick:null,block:null,kind:'text',q:'',sort:'new',
     liked:{},voted:{},mining:{},collections:[],categories:[],protocols:[],ticks:[],chain:null,feed:[],nextBefore:null,feedError:null,
     detailTx:null,cache:{},related:[],chat:{messages:[],participants:[],nextBefore:null},chatScroll:null,
-    newBlock:null,watermark:null,blockRow:null,etch:'gm, permanent record',stepOpen:{0:true},faqOpen:{0:true},sheet:false,extras:{},pathname:'/',search:'',extraHtml:''};
+    newBlock:null,watermark:null,blockRow:null,etch:'gm, permanent record',stepOpen:{0:true},faqOpen:{0:true},sheet:false,extras:{},pathname:'/',search:'',extraHtml:'',before:null};
   var POW_BITS=16;
   var _inApp=0;
   try{state.liked=JSON.parse(localStorage.getItem('opreturn_liked')||'{}');}catch(e){}
@@ -931,12 +932,16 @@ var FV = (function () {
   function query(s) { var q = {}; String(s.search || '').replace(/^\\?/, '').split('&').forEach(function (kv) { if (!kv) return; var i = kv.indexOf('='); var k = decodeURIComponent(i < 0 ? kv : kv.slice(0, i)); var v = decodeURIComponent(i < 0 ? '' : kv.slice(i + 1).replace(/\\+/g, ' ')); if (!(k in q)) q[k] = v; }); return q; }
   function buildQuery(q) { var parts = []; for (var k in q) { if (q[k] == null) continue; parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(q[k]).replace(/%20/g, '+')); } return parts.join('&'); }
   function withQuery(pathname, q) { var qs = buildQuery(q); return pathname + (qs ? '?' + qs : ''); }
-  /** Request parameters the feed needs, derived from the view the same way on both sides. */
+  /** A keyset cursor is "likes:ts:id"; anything else is ignored rather than turned into a duplicate page. */
+  function validCursor(raw) { return typeof raw === 'string' && /^\\d{1,12}:\\d{1,12}:\\d{1,12}$/.test(raw) ? raw : null; }
+  /** Request parameters the feed needs, derived from the view the same way on both sides. \`before\` is the page's own cursor (from ?before=). */
   function feedParams(s) {
-    return { sort: s.sort === 'hot' ? 'hot' : 'new', limit: 50, kind: s.kind === 'all' ? 'all' : 'text', collection_id: s.filter || null, address: s.address || null, category: s.category || null, protocol: s.protocol || null, tick: s.tick || null, block: s.block || null };
+    return { sort: s.sort === 'hot' ? 'hot' : 'new', limit: 50, kind: s.kind === 'all' ? 'all' : 'text', collection_id: s.filter || null, address: s.address || null, category: s.category || null, protocol: s.protocol || null, tick: s.tick || null, block: s.block || null, before: validCursor(s.before) };
   }
+  /** The API URL for a page: an explicit \`before\` (an append) wins over the page's own cursor; never both. */
   function feedQuery(s, limit, before) {
     var p = feedParams(s);
+    before = before || p.before;
     var q = '/api/messages?sort=' + p.sort + '&limit=' + (limit || p.limit);
     if (p.collection_id) q += '&collection_id=' + p.collection_id;
     if (p.address) q += '&address=' + encodeURIComponent(p.address);
@@ -948,8 +953,10 @@ var FV = (function () {
     if (before) q += '&before=' + encodeURIComponent(before);
     return q;
   }
-  function sortHref(s, sort) { var q = query(s); if (sort === defaultSort(routeName(s.pathname))) delete q.sort; else q.sort = sort; return withQuery(s.pathname, q); }
-  function kindHref(s, kind) { var q = query(s); if (kind === 'all') q.kind = 'all'; else delete q.kind; var path = s.pathname; if (s.protocol || s.tick || s.block) path = '/feed'; return withQuery(path, q); }
+  function sortHref(s, sort) { var q = query(s); delete q.before; if (sort === defaultSort(routeName(s.pathname))) delete q.sort; else q.sort = sort; return withQuery(s.pathname, q); }
+  function kindHref(s, kind) { var q = query(s); delete q.before; if (kind === 'all') q.kind = 'all'; else delete q.kind; var path = s.pathname; if (s.protocol || s.tick || s.block) path = '/feed'; return withQuery(path, q); }
+  /** The next page of this feed as a real URL (same sort, kind and search; the next cursor). */
+  function nextHref(s) { if (!s.nextBefore) return null; var q = query(s); q.before = s.nextBefore; return withQuery(s.pathname, q); }
   function withKind(s, path) { return path + (s.kind === 'all' ? '?kind=all' : ''); }
   function feedFilters(s) {
     var f = [];
@@ -1116,7 +1123,8 @@ var FV = (function () {
     if (!list.length) h += '<div class="empty">' + (s.feedError ? esc(s.feedError) + ' — retry in a moment.' : (s.q ? 'No loaded messages match “' + esc(s.q) + '”.' : 'No messages match these filters.')) + '</div>';
     list.forEach(function (m) { h += rowHTML(s, m); });
     h += '</div>';
-    if (s.nextBefore) h += '<button class="btn-more" data-action="more">Load more ↓</button>';
+    // A real link, so crawlers can walk the whole feed; the client intercepts it to append in place.
+    if (s.nextBefore) h += '<a class="btn-more" href="' + attr(nextHref(s)) + '" data-action="more">Load more ↓</a>';
     h += '<div class="status" id="status"></div>';
     if (s.protocol) h += protocolTailHTML(s);
     if (s.extraHtml) h += s.extraHtml;
@@ -1278,7 +1286,7 @@ var FV = (function () {
     shortCol: shortCol, colSlug: colSlug, catSlug: catSlug, catDot: catDot, protoLabel: protoLabel, protoBlurb: protoBlurb, isTokenProto: isTokenProto, isProto: isProto,
     fmtAmt: fmtAmt, primaryOp: primaryOp, splitMedia: splitMedia, mediaHTML: mediaHTML, parseCryptoEnvelope: parseCryptoEnvelope, displayText: displayText, opLine: opLine, envBadges: envBadges,
     colById: colById, colName: colName, colBySlug: colBySlug, colIndex: colIndex, catName: catName, voteGroup: voteGroup,
-    routeName: routeName, defaultSort: defaultSort, feedParams: feedParams, feedQuery: feedQuery, sortHref: sortHref, kindHref: kindHref, withKind: withKind,
+    routeName: routeName, defaultSort: defaultSort, validCursor: validCursor, feedParams: feedParams, feedQuery: feedQuery, sortHref: sortHref, kindHref: kindHref, nextHref: nextHref, withKind: withKind,
     feedFilters: feedFilters, visibleFeed: visibleFeed, feedTitle: feedTitle, feedKicker: feedKicker, filtersHTML: filtersHTML, mobileCtlHTML: mobileCtlHTML,
     rowHTML: rowHTML, protocolHeadHTML: protocolHeadHTML, protocolTailHTML: protocolTailHTML, tickHeadHTML: tickHeadHTML, blockHeadHTML: blockHeadHTML, railHTML: railHTML, feedHTML: feedHTML,
     clock: clock, dateOf: dateOf, fmtSats: fmtSats, factRow: factRow, detailHTML: detailHTML,
@@ -1388,7 +1396,7 @@ var FV = (function () {
   /* ---- new-block bar ---- */
   var _pollTimer=null;
   function pollNewBlocks(){
-    if(!isFeedScreen()||document.visibilityState!=='visible'||feedFilters().length||!state.watermark)return;
+    if(!isFeedScreen()||document.visibilityState!=='visible'||feedFilters().length||state.before||!state.watermark)return;
     var prevTip=state.chain&&state.chain.highest_height;
     fetchJSON('/api/chain').then(function(r){
       if(!r.d||r.d.blocks==null)return;state.chain=r.d;
@@ -1559,6 +1567,7 @@ var FV = (function () {
     resetFilters();
     state.kind=qs.get('kind')==='all'?'all':'text';
     state.q=qs.get('q')||'';
+    state.before=FV.validCursor(qs.get('before'));
     closeSheet();
     if(r.name==='collections'){state.screen='collections';return render();}
     if(r.name==='protocols'){state.screen='protocols';return Promise.all([loadProtocols(),loadTicks(),loadChain()]).then(render);}
@@ -1598,6 +1607,8 @@ var FV = (function () {
   document.addEventListener('click',function(e){
     var t=e.target.closest?e.target.closest('[data-action]'):null;
     var a=t?t.getAttribute('data-action'):null;
+    // An action that is also a real link (Load more): plain clicks act in-app, modified clicks open the URL as usual.
+    if(a&&t.tagName==='A'){if(e.metaKey||e.ctrlKey||e.shiftKey||e.button===1)return;e.preventDefault();}
     if(!a){
       var link=e.target.closest?e.target.closest('a[href^="/"]'):null;
       if(link&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&link.getAttribute('target')!=='_blank'){var href=link.getAttribute('href');if(href&&href.indexOf('/api/')!==0&&!/\\.(png|xml|txt|json)$/.test(href)){e.preventDefault();navigate(href);}}

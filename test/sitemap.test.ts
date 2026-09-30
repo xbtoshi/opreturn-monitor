@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateSitemapXml } from '../src/seo';
+import { generateMessagesSitemapXml, generateSitemapIndexXml, generateSitemapXml } from '../src/seo';
 import type { Address, CollectionWithStats } from '../src/types';
 
 const day = (s: string) => Math.floor(Date.parse(s + 'T12:00:00Z') / 1000);
@@ -59,5 +59,23 @@ describe('sitemap lastmod', () => {
     expect(bare.get('/learn')).toBeNull();
     // only the three live pages carry today's date
     expect([...lm.entries()].filter(([, v]) => v === '2026-09-30').map(([k]) => k).sort()).toEqual(['/', '/feed', '/rooms']);
+  });
+});
+
+describe('sitemap index and monthly message files', () => {
+  it('lists the pages file and one file per non-empty month with the month\'s newest date', () => {
+    const xml = generateSitemapIndexXml('https://x.test', [{ month: '2026-08', count: 12, last_ts: day('2026-08-30') }, { month: '2026-09', count: 0, last_ts: 0 }, { month: 'bogus', count: 3, last_ts: day('2026-09-01') }], '2026-09-30');
+    const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map((m) => m[1]);
+    expect(locs).toEqual(['https://x.test/sitemap-pages.xml', 'https://x.test/sitemap-messages-2026-08.xml']);
+    expect(xml).toContain('<lastmod>2026-08-30</lastmod>');
+    expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex')).toBe(true);
+  });
+  it('writes one URL per message with its block date, no duplicates, and the pages file carries no messages', () => {
+    const rows = [{ txid: 'a'.repeat(64), ts: day('2026-08-02') }, { txid: 'b'.repeat(64), ts: day('2026-08-03') }, { txid: 'a'.repeat(64), ts: day('2026-08-02') }];
+    const xml = generateMessagesSitemapXml('https://x.test', rows);
+    expect((xml.match(/<url>/g) || []).length).toBe(2);
+    expect(xml).toContain('<loc>https://x.test/m/' + 'b'.repeat(64) + '</loc>\n    <lastmod>2026-08-03</lastmod>');
+    const pages = generateSitemapXml('https://x.test', cols, addrs, [], [], [], [], { today: '2026-09-30' });
+    expect(pages).not.toContain('/m/');
   });
 });

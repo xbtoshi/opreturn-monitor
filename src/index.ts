@@ -48,6 +48,8 @@ import {
   renderCollectionMarkdown,
   renderCollectionExtras,
   renderFeedPage,
+  generateSitemapIndexXml,
+  generateMessagesSitemapXml,
   renderDetailPage,
   renderChatPage,
   renderCollectionsMarkdown,
@@ -774,6 +776,7 @@ async function feedViewFor(
   // The client forces kind=all on a/p/tick/block; c and cat keep the query's kind for the SHOW toggle.
   const kind: 'text' | 'all' = c.req.query('kind') === 'all' || route === 'a' || route === 'p' || route === 'tick' || route === 'block' ? 'all' : 'text';
   const q = c.req.query('q') || '';
+  const before = FV.validCursor(c.req.query('before'));
   const feed = shell.feed || { collections: [], categories: [], protocols: [], chain: null };
   const view: FeedView = {
     pathname: url.pathname,
@@ -781,6 +784,7 @@ async function feedViewFor(
     sort,
     kind,
     q,
+    before,
     filter: base.filter ?? null,
     address: base.address ?? null,
     category: base.category ?? null,
@@ -812,6 +816,7 @@ async function feedViewFor(
       kind: scoped ? 'all' : p.kind,
       sort: p.sort,
       limit: p.limit,
+      before: p.before || undefined,
     })
     .catch(() => ({ messages: [] as import('./types').Message[], next_before: null as string | null }));
   view.feed = page.messages as unknown as FeedView['feed'];
@@ -841,6 +846,19 @@ async function pageViewFor(c: Context<Bindings>, base: Partial<FeedView>): Promi
     chat: base.chat ?? null,
   };
   return { view, shell };
+}
+
+/**
+ * Canonical URL for a feed-style page: the path plus only the parameters that
+ * change the content (non-default sort, explicit kind, a valid cursor), in a
+ * fixed order. Page one is the bare path; every cursor page is its own page.
+ */
+function feedCanonical(origin: string, route: 'feed' | 'c' | 'a' | 'p' | 'tick' | 'block' | 'cat', view: FeedView): string {
+  const q: string[] = [];
+  if (view.sort !== FV.defaultSort(route)) q.push(`sort=${view.sort}`);
+  if (view.kind === 'all' && route !== 'a' && route !== 'p' && route !== 'tick' && route !== 'block') q.push('kind=all');
+  if (view.before) q.push(`before=${encodeURIComponent(view.before)}`);
+  return origin + view.pathname + (q.length ? '?' + q.join('&') : '');
 }
 
 /** The client's loadRelated(): the message's collection if it has one, else its address; newest 6, minus itself, keep 5. */
@@ -890,28 +908,48 @@ app.get('/llms-full.txt', async (c) => {
   });
 });
 
+const SITEMAP_HEADERS = {
+  'content-type': 'application/xml; charset=utf-8',
+  'cache-control': 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400',
+};
+
+/**
+ * /sitemap.xml is an index: the pages file plus one file per month of human
+ * messages, so every human message page has a crawl path regardless of how
+ * deep it sits in a feed. Each file is a ten-minute edge-cached snapshot.
+ */
 app.get('/sitemap.xml', async (c) => {
   const origin = originOf(c);
-  // One snapshot per ten minutes for everyone (the IndexNow hub, crawlers): the
-  // aggregations behind the lastmod dates run once per TTL, not per request.
-  const xml = await cachedValue<string>(origin, 'sitemap:1', 600, async () => {
-    const [cols, addrs, feedRes, protocols, ticks, categories, activity] = await Promise.all([
+  const xml = await cachedValue<string>(origin, 'sitemap:2:index', 600, async () => {
+    const months = await db.humanMessageMonths(c.env.DB).catch(() => []);
+    return generateSitemapIndexXml(origin, months, new Date().toISOString().slice(0, 10));
+  });
+  return new Response(xml, { headers: SITEMAP_HEADERS });
+});
+
+app.get('/sitemap-messages-:month{[0-9]{4}-[0-9]{2}}.xml', async (c) => {
+  const origin = originOf(c);
+  const month = c.req.param('month') ?? '';
+  const xml = await cachedValue<string>(origin, `sitemap:2:m:${month}`, 600, async () =>
+    generateMessagesSitemapXml(origin, await db.humanMessagesInMonth(c.env.DB, month).catch(() => []))
+  );
+  return new Response(xml, { headers: SITEMAP_HEADERS });
+});
+
+app.get('/sitemap-pages.xml', async (c) => {
+  const origin = originOf(c);
+  // The aggregations behind the lastmod dates run once per TTL, not per request.
+  const xml = await cachedValue<string>(origin, 'sitemap:2:pages', 600, async () => {
+    const [cols, addrs, protocols, ticks, categories, activity] = await Promise.all([
       db.listCollections(c.env.DB).catch(() => []),
       db.listAddresses(c.env.DB).catch(() => []),
-      db.getMessages(c.env.DB, { sort: 'hot', limit: 100, kind: 'text' }).then(async (hot) => {
-        // Hottest human messages plus the newest ones, so fresh records get discovered too.
-        const recent = await db.getMessages(c.env.DB, { sort: 'new', limit: 200, kind: 'text' }).catch(() => ({ messages: [] }));
-        const seen = new Set<string>();
-        return { messages: [...hot.messages, ...recent.messages].filter((m) => !seen.has(m.txid) && seen.add(m.txid)) };
-      }).catch(() => ({ messages: [] })),
       db.listProtocols(c.env.DB).catch(() => []),
       db.listTicks(c.env.DB, undefined, 0, 200).catch(() => []),
       db.listCategories(c.env.DB).catch(() => []),
       db.monitoredActivity(c.env.DB).catch(() => new Map<string, number>()),
     ]);
     const finalCols = cols.length ? cols : (seedCollections as unknown as CollectionWithStats[]);
-    const topMsgs = feedRes.messages.map((m) => ({ txid: m.txid, block_time: m.block_time, created_at: m.created_at }));
-    return generateSitemapXml(origin, finalCols, addrs, topMsgs, protocols, ticks, listGuides().map((g) => ({ slug: g.meta.slug, updated: g.meta.updated })), {
+    return generateSitemapXml(origin, finalCols, addrs, [], protocols, ticks, listGuides().map((g) => ({ slug: g.meta.slug, updated: g.meta.updated })), {
       categories,
       addressActivity: activity,
     });
@@ -1417,6 +1455,8 @@ app.get('/feed', async (c) => {
       image: origin + '/og/default.png',
       jsonLd: crumbs,
       feedView: view,
+      canonical: feedCanonical(origin, 'feed', view),
+      ...(view.q ? { noindex: true } : {}),
       initialHtml: renderFeedPage(view),
     }, shell)
   );
@@ -1680,7 +1720,8 @@ app.get('/m/:txid', async (c) => {
       description: descBits.filter(Boolean).join(' \u00b7 '),
       url: `${origin}/m/${txid}`,
       canonical: rep && rep !== txid ? `${origin}/m/${rep}` : undefined,
-      noindex: !previewText.trim(),
+      // Protocol rows (bridge receipts, token ops, hashes) are thin and repetitive: crawlable and linked, not indexed.
+      noindex: !previewText.trim() || isProto,
       image: `${origin}/og/message/${txid}.png`,
       type: 'article',
       jsonLd: { '@context': 'https://schema.org', '@graph': [postSchema, crumbs] },
@@ -1739,6 +1780,8 @@ app.get('/c/:slug', async (c) => {
       image: `${origin}/og/collection/${slug}.png`,
       jsonLd: { '@context': 'https://schema.org', '@graph': [colSchema, crumbs] },
       feedView: view,
+      canonical: feedCanonical(origin, 'c', view),
+      ...(view.q ? { noindex: true } : {}),
       initialHtml: renderFeedPage(view),
     }, shell)
   );
@@ -1821,6 +1864,8 @@ app.get('/a/:address', async (c) => {
       noindex: !indexable,
       jsonLd: crumbs,
       feedView: view,
+      canonical: feedCanonical(origin, 'a', view),
+      ...(view.q ? { noindex: true } : {}),
       initialHtml: renderFeedPage(view),
     }, shell)
   );
@@ -1888,6 +1933,8 @@ app.get('/p/:protocol', async (c) => {
       jsonLd: crumbs,
       noindex: count === 0,
       feedView: view,
+      canonical: feedCanonical(origin, 'p', view),
+      ...(view.q ? { noindex: true } : {}),
       initialHtml: renderFeedPage(view),
     }, shell)
   );
@@ -1920,6 +1967,8 @@ app.get('/tick/:tick', async (c) => {
       jsonLd: crumbs,
       noindex: count === 0,
       feedView: view,
+      canonical: feedCanonical(origin, 'tick', view),
+      ...(view.q ? { noindex: true } : {}),
       initialHtml: renderFeedPage(view),
     }, shell)
   );
@@ -1964,6 +2013,8 @@ app.get('/block/:height', async (c) => {
       image: `${origin}/og/default.png`,
       jsonLd: crumbs,
       feedView: view,
+      canonical: feedCanonical(origin, 'block', view),
+      ...(view.q ? { noindex: true } : {}),
       initialHtml: renderFeedPage(view),
     }, shell)
   );
@@ -2017,6 +2068,8 @@ app.get('/cat/:slug', async (c) => {
       image: `${origin}/og/category/${slug}.png`,
       jsonLd: crumbs,
       feedView: view,
+      canonical: feedCanonical(origin, 'cat', view),
+      ...(view.q ? { noindex: true } : {}),
       initialHtml: renderFeedPage(view),
     }, shell)
   );

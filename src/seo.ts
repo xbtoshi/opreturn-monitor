@@ -332,6 +332,30 @@ const dayOf = (ts: number | null | undefined): string | undefined => (ts ? new D
  * that catches us stamping "today" on everything stops trusting the file).
  * Only the pages that genuinely change with every block keep today's date.
  */
+/** The sitemap index: the pages file plus one file per month of human messages (skipping empty months). */
+export function generateSitemapIndexXml(siteUrl: string, months: Array<{ month: string; count: number; last_ts: number }>, pagesLastmod: string): string {
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+  xml += `  <sitemap>\n    <loc>${siteUrl}/sitemap-pages.xml</loc>\n    <lastmod>${pagesLastmod}</lastmod>\n  </sitemap>\n`;
+  for (const m of months) {
+    if (!m.count || !/^\d{4}-\d{2}$/.test(m.month)) continue;
+    xml += `  <sitemap>\n    <loc>${siteUrl}/sitemap-messages-${m.month}.xml</loc>\n    <lastmod>${new Date(m.last_ts * 1000).toISOString().slice(0, 10)}</lastmod>\n  </sitemap>\n`;
+  }
+  return xml + '</sitemapindex>\n';
+}
+
+/** One month of human-message pages. */
+export function generateMessagesSitemapXml(siteUrl: string, rows: Array<{ txid: string; ts: number }>): string {
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (seen.has(r.txid)) continue;
+    seen.add(r.txid);
+    xml += `  <url>\n    <loc>${siteUrl}/m/${escXml(r.txid)}</loc>\n    <lastmod>${new Date(r.ts * 1000).toISOString().slice(0, 10)}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>\n`;
+  }
+  return xml + '</urlset>\n';
+}
+
+/** The pages sitemap: everything except individual messages, which live in the monthly files. */
 export function generateSitemapXml(
   siteUrl: string,
   collections: CollectionWithStats[],

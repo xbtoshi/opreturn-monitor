@@ -51,6 +51,23 @@ describe('feedview: request parity', () => {
     expect(FV.feedQuery(view({ filter: 1, sort: 'hot', kind: 'all' }), 50, 'cur sor')).toBe('/api/messages?sort=hot&limit=50&collection_id=1&kind=all&before=cur%20sor');
     expect(FV.feedQuery(view({ category: 'Threats / Hostility' }))).toBe('/api/messages?sort=new&limit=50&category=threats-hostility');
   });
+  it('turns the next cursor into a real link, keeps the page cursor out of sort and kind links, and validates cursors', () => {
+    const v = view({ pathname: '/c/coldcard', search: '?kind=all&before=3:1700000000:41', sort: 'hot', kind: 'all', filter: 1, before: '3:1700000000:41', nextBefore: '2:1699990000:40', feed: [text] });
+    expect(FV.validCursor('3:1700000000:41')).toBe('3:1700000000:41');
+    expect(FV.validCursor('../etc')).toBeNull();
+    expect(FV.validCursor('a:b:c')).toBeNull();
+    expect(FV.validCursor(undefined)).toBeNull();
+    expect(FV.feedParams(v).before).toBe('3:1700000000:41');
+    expect(FV.feedQuery(v)).toBe('/api/messages?sort=hot&limit=50&collection_id=1&kind=all&before=3%3A1700000000%3A41');
+    expect(FV.feedQuery(v, 50, '2:1699990000:40')).toBe('/api/messages?sort=hot&limit=50&collection_id=1&kind=all&before=2%3A1699990000%3A40');
+    expect(FV.nextHref(v)).toBe('/c/coldcard?kind=all&before=2%3A1699990000%3A40');
+    expect(FV.sortHref(v, 'new')).toBe('/c/coldcard?kind=all&sort=new');
+    expect(FV.kindHref(v, 'text')).toBe('/c/coldcard');
+    const h = FV.feedHTML(v);
+    expect(h).toContain('<a class="btn-more" href="/c/coldcard?kind=all&amp;before=2%3A1699990000%3A40" data-action="more">Load more');
+    expect(FV.feedHTML(view({ feed: [text] }))).not.toContain('btn-more');
+  });
+
   it('filters the visible feed by the search box on both sides', () => {
     const v = view({ feed: [text, proto], q: 'hello' });
     expect(FV.visibleFeed(v).map((m) => m.id)).toEqual([11]);
@@ -94,7 +111,7 @@ describe('feedview: rows', () => {
 describe('feedview: page', () => {
   it('builds the feed screen skeleton per route type', () => {
     const feed = FV.feedHTML(view({ feed: [text, proto], nextBefore: 'x' }));
-    for (const n of ['<div class="feed-grid wide"><main class="page">', 'class="kicker">HUMAN MESSAGES · ALL COLLECTIONS<', 'page-title">All transmissions<', 'class="sorttabs"', '<div class="list" id="feed-list">', 'data-id="11"', 'data-id="12"', '<button class="btn-more" data-action="more">', '<div class="status" id="status"></div>', '</main><aside class="rail">', 'CHAIN CENSUS', '1,490', 'LATEST BLOCKS', 'WHAT THEY’RE SAYING', 'data-action="suggest-open"']) expect(feed, n).toContain(n);
+    for (const n of ['<div class="feed-grid wide"><main class="page">', 'class="kicker">HUMAN MESSAGES · ALL COLLECTIONS<', 'page-title">All transmissions<', 'class="sorttabs"', '<div class="list" id="feed-list">', 'data-id="11"', 'data-id="12"', '<a class="btn-more" href="/feed?before=x" data-action="more">', '<div class="status" id="status"></div>', '</main><aside class="rail">', 'CHAIN CENSUS', '1,490', 'LATEST BLOCKS', 'WHAT THEY’RE SAYING', 'data-action="suggest-open"']) expect(feed, n).toContain(n);
     const col = FV.feedHTML(view({ pathname: '/c/coldcard-exploit-bulletin-board', sort: 'hot', filter: 1, feed: [text], extraHtml: '<section data-ssr-extra>cards</section>' }));
     expect(col).toContain('class="kicker">HUMAN MESSAGES · COL-01<');
     expect(col).toContain('page-title">Coldcard Exploit Bulletin Board<');
@@ -149,6 +166,7 @@ describe('feedview: the inlined client copy is the same code', () => {
       view({ pathname: '/tick/LEAF', kind: 'all', tick: 'LEAF', feed: [proto] }),
       view({ pathname: '/cat/other', sort: 'hot', category: 'Other', feed: [text], q: 'hello' }),
       view({ pathname: '/a/bc1qmonitored000000000000000', sort: 'hot', kind: 'all', address: 'bc1qmonitored000000000000000', feed: [text, mem] }),
+      view({ pathname: '/feed', search: '?before=3:1700000000:41', before: '3:1700000000:41', nextBefore: '2:1699990000:40', feed: [text] }),
     ]) {
       expect(clientFV.feedHTML(v)).toBe(FV.feedHTML(v));
       expect(clientFV.filtersHTML(v, false)).toBe(FV.filtersHTML(v, false));

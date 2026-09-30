@@ -38,6 +38,8 @@ export interface FeedView {
   block?: number | null;
   blockRow?: { height: number; time: number; tx_count: number; opreturn_count: number; runes_count: number; binary_count: number; stored_count: number } | null;
   feed: FeedMessage[];
+  /** The cursor this page was requested with (?before=), or null for the first page. */
+  before?: string | null;
   nextBefore?: string | null;
   feedError?: string | null;
   newBlock?: { height: number; rows: FeedMessage[] } | null;
@@ -76,6 +78,7 @@ export interface FeedParams {
   protocol: string | null;
   tick: string | null;
   block: number | null;
+  before: string | null;
 }
 
 declare const FV: {
@@ -116,6 +119,8 @@ declare const FV: {
   voteGroup(s: FeedView, m: FeedMessage, big?: boolean): string;
   routeName(pathname: string): string;
   defaultSort(routeName: string): 'hot' | 'new';
+  validCursor(raw: unknown): string | null;
+  nextHref(s: FeedView): string | null;
   feedParams(s: FeedView): FeedParams;
   feedQuery(s: FeedView, limit?: number, before?: string | null): string;
   sortHref(s: FeedView, sort: 'hot' | 'new'): string;

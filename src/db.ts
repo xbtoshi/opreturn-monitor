@@ -1126,6 +1126,30 @@ export async function monitoredActivity(db: D1Database): Promise<Map<string, num
   return new Map(results.map((r) => [r.address, Number(r.last_ts)]));
 }
 
+/** Months that have human-message representatives, oldest first, with their newest time (sitemap index). */
+export async function humanMessageMonths(db: D1Database): Promise<Array<{ month: string; count: number; last_ts: number }>> {
+  const { results } = await db
+    .prepare(
+      `SELECT strftime('%Y-%m', ts, 'unixepoch') AS month, COUNT(*) AS count, MAX(ts) AS last_ts FROM messages
+        WHERE protocol = 'text' AND is_dup = 0 AND ts > 0
+        GROUP BY month ORDER BY month ASC`
+    )
+    .all<Record<string, unknown>>();
+  return results.map((r) => ({ month: str(r, 'month'), count: num(r, 'count'), last_ts: num(r, 'last_ts') }));
+}
+
+/** Human-message representatives of one month (YYYY-MM), oldest first, capped at the sitemap limit. */
+export async function humanMessagesInMonth(db: D1Database, month: string, limit = 50000): Promise<Array<{ txid: string; ts: number }>> {
+  const [y, m] = month.split('-').map(Number);
+  const start = Date.UTC(y, m - 1, 1) / 1000;
+  const end = Date.UTC(y, m, 1) / 1000;
+  const { results } = await db
+    .prepare(`SELECT txid, ts FROM messages WHERE protocol = 'text' AND is_dup = 0 AND ts >= ? AND ts < ? ORDER BY ts ASC, id ASC LIMIT ?`)
+    .bind(start, end, limit)
+    .all<Record<string, unknown>>();
+  return results.map((r) => ({ txid: str(r, 'txid'), ts: num(r, 'ts') }));
+}
+
 export async function maxMessageId(db: D1Database): Promise<number> {
   const row = await db.prepare('SELECT COALESCE(MAX(id), 0) AS n FROM messages').first<{ n: number }>();
   return Number(row?.n ?? 0);
