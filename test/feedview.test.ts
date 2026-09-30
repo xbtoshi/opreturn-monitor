@@ -154,6 +154,8 @@ describe('feedview: the inlined client copy is the same code', () => {
       expect(clientFV.filtersHTML(v, false)).toBe(FV.filtersHTML(v, false));
       expect(clientFV.mobileCtlHTML(v)).toBe(FV.mobileCtlHTML(v));
     }
+    expect(clientFV.contactHTML()).toBe(FV.contactHTML());
+    expect(clientFV.CONTACT).toEqual(FV.CONTACT);
   });
 });
 
