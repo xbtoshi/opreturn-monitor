@@ -155,7 +155,11 @@ var FV = (function () {
   function buildQuery(q) { var parts = []; for (var k in q) { if (q[k] == null) continue; parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(q[k]).replace(/%20/g, '+')); } return parts.join('&'); }
   function withQuery(pathname, q) { var qs = buildQuery(q); return pathname + (qs ? '?' + qs : ''); }
   /** A keyset cursor is "likes:ts:id"; anything else is ignored rather than turned into a duplicate page. */
-  function validCursor(raw) { return typeof raw === 'string' && /^\d{1,12}:\d{1,12}:\d{1,12}$/.test(raw) ? raw : null; }
+  function validCursor(raw) {
+    if (typeof raw !== 'string' || !/^\d{1,12}:\d{1,12}:\d{1,12}$/.test(raw)) return null;
+    // One spelling per cursor (no leading zeros), so one row window has exactly one URL.
+    return raw.split(':').map(function (n) { return String(Number(n)); }).join(':');
+  }
   /** Request parameters the feed needs, derived from the view the same way on both sides. `before` is the page's own cursor (from ?before=). */
   function feedParams(s) {
     return { sort: s.sort === 'hot' ? 'hot' : 'new', limit: 50, kind: s.kind === 'all' ? 'all' : 'text', collection_id: s.filter || null, address: s.address || null, category: s.category || null, protocol: s.protocol || null, tick: s.tick || null, block: s.block || null, before: validCursor(s.before) };

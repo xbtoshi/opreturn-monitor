@@ -114,7 +114,7 @@ export function renderIndex(meta?: PageMeta, shell?: ShellData): string {
 <meta property="og:type" content="${esc(ogType)}" />
 <meta property="og:title" content="${esc(ogTitle)}" />
 <meta property="og:description" content="${esc(ogDesc)}" />
-<meta property="og:url" content="${esc(ogUrl)}" />
+<meta property="og:url" content="${esc(m.canonical || ogUrl)}" />
 <meta property="og:image" content="${esc(ogImage)}" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
@@ -933,7 +933,11 @@ var FV = (function () {
   function buildQuery(q) { var parts = []; for (var k in q) { if (q[k] == null) continue; parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(q[k]).replace(/%20/g, '+')); } return parts.join('&'); }
   function withQuery(pathname, q) { var qs = buildQuery(q); return pathname + (qs ? '?' + qs : ''); }
   /** A keyset cursor is "likes:ts:id"; anything else is ignored rather than turned into a duplicate page. */
-  function validCursor(raw) { return typeof raw === 'string' && /^\\d{1,12}:\\d{1,12}:\\d{1,12}$/.test(raw) ? raw : null; }
+  function validCursor(raw) {
+    if (typeof raw !== 'string' || !/^\\d{1,12}:\\d{1,12}:\\d{1,12}$/.test(raw)) return null;
+    // One spelling per cursor (no leading zeros), so one row window has exactly one URL.
+    return raw.split(':').map(function (n) { return String(Number(n)); }).join(':');
+  }
   /** Request parameters the feed needs, derived from the view the same way on both sides. \`before\` is the page's own cursor (from ?before=). */
   function feedParams(s) {
     return { sort: s.sort === 'hot' ? 'hot' : 'new', limit: 50, kind: s.kind === 'all' ? 'all' : 'text', collection_id: s.filter || null, address: s.address || null, category: s.category || null, protocol: s.protocol || null, tick: s.tick || null, block: s.block || null, before: validCursor(s.before) };
@@ -1608,7 +1612,7 @@ var FV = (function () {
     var t=e.target.closest?e.target.closest('[data-action]'):null;
     var a=t?t.getAttribute('data-action'):null;
     // An action that is also a real link (Load more): plain clicks act in-app, modified clicks open the URL as usual.
-    if(a&&t.tagName==='A'){if(e.metaKey||e.ctrlKey||e.shiftKey||e.button===1)return;e.preventDefault();}
+    if(a&&t.closest('a[href]')){if(e.metaKey||e.ctrlKey||e.shiftKey)return;e.preventDefault();}
     if(!a){
       var link=e.target.closest?e.target.closest('a[href^="/"]'):null;
       if(link&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey&&link.getAttribute('target')!=='_blank'){var href=link.getAttribute('href');if(href&&href.indexOf('/api/')!==0&&!/\\.(png|xml|txt|json)$/.test(href)){e.preventDefault();navigate(href);}}

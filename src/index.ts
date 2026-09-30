@@ -922,7 +922,7 @@ app.get('/sitemap.xml', async (c) => {
   const origin = originOf(c);
   const xml = await cachedValue<string>(origin, 'sitemap:3:index', 600, async () => {
     const months = await db.humanMessageMonths(c.env.DB).catch(() => []);
-    return generateSitemapIndexXml(origin, months, new Date().toISOString().slice(0, 10));
+    return generateSitemapIndexXml(origin, months);
   });
   return new Response(xml, { headers: SITEMAP_HEADERS });
 });

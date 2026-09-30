@@ -333,7 +333,10 @@ const dayOf = (ts: number | null | undefined): string | undefined => (ts ? new D
  * Only the pages that genuinely change with every block keep today's date.
  */
 /** The sitemap index: the pages file plus one file per month of human messages (skipping empty months). */
-export function generateSitemapIndexXml(siteUrl: string, months: Array<{ month: string; count: number; last_ts: number }>, pagesLastmod: string): string {
+export function generateSitemapIndexXml(siteUrl: string, months: Array<{ month: string; count: number; last_ts: number }>, pagesLastmod?: string): string {
+  // The pages file changes with activity, not with the clock: date it by the newest message.
+  const newest = months.reduce((m, x) => (x.count && x.last_ts > m ? x.last_ts : m), 0);
+  pagesLastmod = pagesLastmod || (newest ? new Date(newest * 1000).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
   xml += `  <sitemap>\n    <loc>${siteUrl}/sitemap-pages.xml</loc>\n    <lastmod>${pagesLastmod}</lastmod>\n  </sitemap>\n`;
   for (const m of months) {

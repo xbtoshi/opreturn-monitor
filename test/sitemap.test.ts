@@ -65,7 +65,10 @@ describe('sitemap lastmod', () => {
 
 describe('sitemap index and monthly message files', () => {
   it('lists the pages file and one file per non-empty month with the month\'s newest date', () => {
-    const xml = generateSitemapIndexXml('https://x.test', [{ month: '2026-08', count: 12, last_ts: day('2026-08-30') }, { month: '2026-09', count: 0, last_ts: 0 }, { month: 'bogus', count: 3, last_ts: day('2026-09-01') }], '2026-09-30');
+    const xml = generateSitemapIndexXml('https://x.test', [{ month: '2026-08', count: 12, last_ts: day('2026-08-30') }, { month: '2026-09', count: 0, last_ts: 0 }, { month: 'bogus', count: 3, last_ts: day('2026-09-01') }]);
+    // the pages file is dated by the newest listed month, not by the clock
+    expect(xml.indexOf('<lastmod>2026-09-01</lastmod>')).toBeGreaterThan(0);
+    expect(xml.indexOf('<lastmod>2026-09-01</lastmod>')).toBeLessThan(xml.indexOf('sitemap-messages/2026-08.xml'));
     const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map((m) => m[1]);
     expect(locs).toEqual(['https://x.test/sitemap-pages.xml', 'https://x.test/sitemap-messages/2026-08.xml']);
     expect(xml).toContain('<lastmod>2026-08-30</lastmod>');

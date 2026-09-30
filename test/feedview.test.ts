@@ -56,6 +56,7 @@ describe('feedview: request parity', () => {
     expect(FV.validCursor('3:1700000000:41')).toBe('3:1700000000:41');
     expect(FV.validCursor('../etc')).toBeNull();
     expect(FV.validCursor('a:b:c')).toBeNull();
+    expect(FV.validCursor('01:0002:3')).toBe('1:2:3');
     expect(FV.validCursor(undefined)).toBeNull();
     expect(FV.feedParams(v).before).toBe('3:1700000000:41');
     expect(FV.feedQuery(v)).toBe('/api/messages?sort=hot&limit=50&collection_id=1&kind=all&before=3%3A1700000000%3A41');
