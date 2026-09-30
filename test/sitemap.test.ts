@@ -30,7 +30,7 @@ describe('sitemap lastmod', () => {
       addrs,
       [{ txid: 'a'.repeat(64), block_time: day('2026-09-20'), created_at: '' }],
       [{ protocol: 'ico-20', last_ts: day('2026-09-25') }, { protocol: 'text', last_ts: day('2026-09-29') }],
-      [{ tick: 'LEAF', last_ts: day('2026-09-24') }],
+      [{ tick: 'LEAF', last_ts: day('2026-09-20') }, { tick: 'LEAF', last_ts: day('2026-09-24') }],
       [{ slug: 'what-is-op-return', updated: '2026-09-10' }],
       { today: '2026-09-30', categories: [{ category: 'Other', last_ts: day('2026-09-28') }], addressActivity: new Map([['bc1qcold', day('2026-09-27')]]) }
     );
@@ -50,6 +50,7 @@ describe('sitemap lastmod', () => {
     expect(lm.get('/p/ico-20')).toBe('2026-09-25');
     expect(lm.has('/p/text')).toBe(false);
     expect(lm.get('/tick/LEAF')).toBe('2026-09-24');
+    expect((xml.match(/\/tick\/LEAF</g) || []).length).toBe(1);
     expect(lm.get('/a/bc1qcold')).toBe('2026-09-27');
     expect(lm.get('/a/bc1qempty/chat')).toBeNull();
     expect(lm.get('/m/' + 'a'.repeat(64))).toBe('2026-09-20');
@@ -66,7 +67,7 @@ describe('sitemap index and monthly message files', () => {
   it('lists the pages file and one file per non-empty month with the month\'s newest date', () => {
     const xml = generateSitemapIndexXml('https://x.test', [{ month: '2026-08', count: 12, last_ts: day('2026-08-30') }, { month: '2026-09', count: 0, last_ts: 0 }, { month: 'bogus', count: 3, last_ts: day('2026-09-01') }], '2026-09-30');
     const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map((m) => m[1]);
-    expect(locs).toEqual(['https://x.test/sitemap-pages.xml', 'https://x.test/sitemap-messages-2026-08.xml']);
+    expect(locs).toEqual(['https://x.test/sitemap-pages.xml', 'https://x.test/sitemap-messages/2026-08.xml']);
     expect(xml).toContain('<lastmod>2026-08-30</lastmod>');
     expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex')).toBe(true);
   });

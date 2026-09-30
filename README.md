@@ -217,8 +217,11 @@ Cloudflare account). The hub serves our key file, polls `/sitemap.xml` every
   day.
 - The sitemap's `lastmod` values are real activity dates (newest op per
   protocol and ticker, newest message per collection, address and category);
-  only `/`, `/feed` and `/rooms` carry today's date. The sitemap is served from
-  a ten-minute edge-cached snapshot.
+  only `/`, `/feed` and `/rooms` carry today's date. `/sitemap.xml` is an index:
+  `/sitemap-pages.xml` plus `/sitemap-messages/YYYY-MM.xml` for every month with
+  human-message representatives, all ten-minute edge-cached snapshots. Feed
+  pages paginate with real `?before=<cursor>` links (self-canonical, titled
+  "· older"); protocol transaction pages and search results are `noindex`.
 
 ## Notes
 

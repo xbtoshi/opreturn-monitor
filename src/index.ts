@@ -927,9 +927,10 @@ app.get('/sitemap.xml', async (c) => {
   return new Response(xml, { headers: SITEMAP_HEADERS });
 });
 
-app.get('/sitemap-messages-:month{[0-9]{4}-[0-9]{2}}.xml', async (c) => {
+// A full path segment with a brace-free pattern: Hono ends a param's regex at the first "}".
+app.get('/sitemap-messages/:file{[0-9][0-9][0-9][0-9]-[0-9][0-9]\\.xml}', async (c) => {
   const origin = originOf(c);
-  const month = c.req.param('month') ?? '';
+  const month = (c.req.param('file') ?? '').slice(0, 7);
   const xml = await cachedValue<string>(origin, `sitemap:2:m:${month}`, 600, async () =>
     generateMessagesSitemapXml(origin, await db.humanMessagesInMonth(c.env.DB, month).catch(() => []))
   );

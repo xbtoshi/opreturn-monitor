@@ -338,7 +338,7 @@ export function generateSitemapIndexXml(siteUrl: string, months: Array<{ month: 
   xml += `  <sitemap>\n    <loc>${siteUrl}/sitemap-pages.xml</loc>\n    <lastmod>${pagesLastmod}</lastmod>\n  </sitemap>\n`;
   for (const m of months) {
     if (!m.count || !/^\d{4}-\d{2}$/.test(m.month)) continue;
-    xml += `  <sitemap>\n    <loc>${siteUrl}/sitemap-messages-${m.month}.xml</loc>\n    <lastmod>${new Date(m.last_ts * 1000).toISOString().slice(0, 10)}</lastmod>\n  </sitemap>\n`;
+    xml += `  <sitemap>\n    <loc>${siteUrl}/sitemap-messages/${m.month}.xml</loc>\n    <lastmod>${new Date(m.last_ts * 1000).toISOString().slice(0, 10)}</lastmod>\n  </sitemap>\n`;
   }
   return xml + '</sitemapindex>\n';
 }
@@ -407,8 +407,14 @@ export function generateSitemapXml(
     if (p.protocol === 'text') continue;
     urls.push({ loc: `${siteUrl}/p/${encodeURIComponent(p.protocol)}`, lastmod: dayOf(p.last_ts), changefreq: 'hourly', priority: '0.7' });
   }
+  // A ticker can live on several protocols; one page, newest activity.
+  const tickLast = new Map<string, number | null | undefined>();
   for (const t of ticks) {
-    urls.push({ loc: `${siteUrl}/tick/${encodeURIComponent(t.tick)}`, lastmod: dayOf(t.last_ts), changefreq: 'daily', priority: '0.6' });
+    const prev = tickLast.get(t.tick);
+    if (!tickLast.has(t.tick) || (t.last_ts && (!prev || t.last_ts > prev))) tickLast.set(t.tick, t.last_ts);
+  }
+  for (const [tick, last] of tickLast) {
+    urls.push({ loc: `${siteUrl}/tick/${encodeURIComponent(tick)}`, lastmod: dayOf(last), changefreq: 'daily', priority: '0.6' });
   }
 
   // Monitored Addresses & Chat

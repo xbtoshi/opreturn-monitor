@@ -326,7 +326,9 @@ export async function getMessages(
   // A tx with two ops of the same protocol yields two op rows; over-fetch a
   // little and collapse by txid below. (A tx whose two matching ops straddle
   // a page boundary can appear on both pages; rare enough to accept.)
-  const fetchLimit = viaOps ? opts.limit * 2 : opts.limit;
+  // One extra row tells us whether a next page exists, so a feed whose size is
+  // an exact multiple of the page size does not end in an empty page.
+  const fetchLimit = viaOps ? opts.limit * 2 + 1 : opts.limit + 1;
   params.push(fetchLimit);
 
   const from = viaOps
@@ -347,17 +349,24 @@ export async function getMessages(
   const seen = new Set<string>();
   const messages: Message[] = [];
   let last: Record<string, unknown> | null = null;
+  let more = false;
   for (const r of results) {
-    last = r;
     const txid = str(r, 'txid');
     if (seen.has(txid)) continue;
+    if (messages.length >= opts.limit) {
+      more = true;
+      break;
+    }
     seen.add(txid);
+    last = r;
     messages.push(mapFeedRow(r));
-    if (messages.length >= opts.limit) break;
   }
+  // Over-fetched op rows may all have collapsed into already-listed txids; the
+  // page is still "full" then, so keep a cursor rather than lose the tail.
+  if (!more && viaOps && results.length >= fetchLimit) more = true;
 
   let next_before: string | null = null;
-  if (last && (messages.length >= opts.limit || results.length >= fetchLimit)) {
+  if (last && more) {
     next_before = encodeCursor({ likes: num(last, 'likes'), ts: num(last, 'cur_ts'), id: num(last, 'cur_id') });
   }
   return { messages, next_before };
@@ -426,7 +435,7 @@ async function getMessagesByBranches(
           WHERE ${b.col} = ? AND ${baseWhere.join(' AND ')}
           ORDER BY m.${order.replace(/, /g, ', m.')} LIMIT ?`
       )
-      .bind(b.value, ...baseParams, opts.limit)
+      .bind(b.value, ...baseParams, opts.limit + 1)
   );
   const results: Record<string, unknown>[] = [];
   for (let i = 0; i < stmts.length; i += 20) {
@@ -444,16 +453,20 @@ async function getMessagesByBranches(
   const seen = new Set<number>();
   const messages: Message[] = [];
   let last: Record<string, unknown> | null = null;
+  let more = false;
   for (const r of results) {
     const id = num(r, 'id');
     if (seen.has(id)) continue;
+    if (messages.length >= opts.limit) {
+      more = true;
+      break;
+    }
     seen.add(id);
     last = r;
     messages.push(mapFeedRow(r));
-    if (messages.length >= opts.limit) break;
   }
   let next_before: string | null = null;
-  if (last && messages.length >= opts.limit) {
+  if (last && more) {
     next_before = encodeCursor({ likes: num(last, 'likes'), ts: num(last, 'cur_ts'), id: num(last, 'cur_id') });
   }
   return { messages, next_before };
