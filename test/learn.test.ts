@@ -87,6 +87,18 @@ describe('landing SSR', () => {
   });
 });
 
+describe('message structured data', () => {
+  it('gives the posting its own url and text, which Google requires for discussion forum results', async () => {
+    const { buildMessageSchema } = await import('../src/seo');
+    const s = buildMessageSchema('https://x.test', { id: 1, txid: 'a'.repeat(64), address: 'bc1qx', content: 'gm\ndata:image/png;base64,AAAA', category: null, likes: 2, is_mempool: 0, created_at: '2026-09-28 00:00:00', block_time: 1_790_000_000, raw_hex: null, fee_sats: null, fee_rate: null, collection_id: null } as never);
+    expect(s.url).toBe('https://x.test/m/' + 'a'.repeat(64));
+    expect(s.mainEntityOfPage).toBe(s.url);
+    expect(s.text).toBe('gm');
+    expect(typeof s.datePublished).toBe('string');
+    expect((s.author as { name: string }).name).toBeTruthy();
+  });
+});
+
 describe('site graph and llms.txt', () => {
   it('links the maintainer profile from exactly one Organization node and from llms.txt', async () => {
     const { buildWebSiteGraph, generateLlmsTxt } = await import('../src/seo');
