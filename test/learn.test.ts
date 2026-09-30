@@ -92,7 +92,11 @@ describe('message structured data', () => {
     const { buildMessageSchema } = await import('../src/seo');
     const s = buildMessageSchema('https://x.test', { id: 1, txid: 'a'.repeat(64), address: 'bc1qx', content: 'gm\ndata:image/png;base64,AAAA', category: null, likes: 2, is_mempool: 0, created_at: '2026-09-28 00:00:00', block_time: 1_790_000_000, raw_hex: null, fee_sats: null, fee_rate: null, collection_id: null } as never);
     expect(s.url).toBe('https://x.test/m/' + 'a'.repeat(64));
-    expect(s.mainEntityOfPage).toBe(s.url);
+    expect(s.mainEntityOfPage).toEqual({ '@type': 'WebPage', '@id': s.url });
+    expect(Object.keys(s).sort()).toEqual(['@id', '@type', 'articleBody', 'author', 'datePublished', 'headline', 'identifier', 'interactionStatistic', 'isPartOf', 'mainEntityOfPage', 'publisher', 'text', 'url']);
+    const empty = buildMessageSchema('https://x.test', { id: 2, txid: 'b'.repeat(64), address: 'bc1qx', content: null, category: null, likes: 0, is_mempool: 0, created_at: '2026-09-28 00:00:00', block_time: null, raw_hex: null, fee_sats: null, fee_rate: null, collection_id: null } as never);
+    expect(empty.text).toBe('Bitcoin OP_RETURN transmission');
+    expect(empty.articleBody).toBeUndefined();
     expect(s.text).toBe('gm');
     expect(typeof s.datePublished).toBe('string');
     expect((s.author as { name: string }).name).toBeTruthy();

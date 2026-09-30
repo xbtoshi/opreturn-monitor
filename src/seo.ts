@@ -1222,10 +1222,11 @@ export function buildMessageSchema(
     '@id': `${siteUrl}/m/${msg.txid}#post`,
     // Google's discussion-forum rules want the post's own URL and its text on the posting itself.
     url: `${siteUrl}/m/${msg.txid}`,
-    mainEntityOfPage: `${siteUrl}/m/${msg.txid}`,
+    mainEntityOfPage: { '@type': 'WebPage', '@id': `${siteUrl}/m/${msg.txid}` },
     headline: msg.content ? `\u201c${stripDataUris(msg.content).slice(0, 100)}\u201d` : 'Bitcoin OP_RETURN transmission',
-    text: stripDataUris(msg.content),
-    articleBody: stripDataUris(msg.content),
+    // An empty body must not become an empty required field.
+    text: stripDataUris(msg.content) || 'Bitcoin OP_RETURN transmission',
+    articleBody: stripDataUris(msg.content) || undefined,
     datePublished: msg.block_time
       ? new Date(msg.block_time * 1000).toISOString()
       : new Date(msg.created_at).toISOString(),
