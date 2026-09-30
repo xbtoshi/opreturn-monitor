@@ -920,7 +920,7 @@ const SITEMAP_HEADERS = {
  */
 app.get('/sitemap.xml', async (c) => {
   const origin = originOf(c);
-  const xml = await cachedValue<string>(origin, 'sitemap:2:index', 600, async () => {
+  const xml = await cachedValue<string>(origin, 'sitemap:3:index', 600, async () => {
     const months = await db.humanMessageMonths(c.env.DB).catch(() => []);
     return generateSitemapIndexXml(origin, months, new Date().toISOString().slice(0, 10));
   });
@@ -931,7 +931,7 @@ app.get('/sitemap.xml', async (c) => {
 app.get('/sitemap-messages/:file{[0-9][0-9][0-9][0-9]-[0-9][0-9]\\.xml}', async (c) => {
   const origin = originOf(c);
   const month = (c.req.param('file') ?? '').slice(0, 7);
-  const xml = await cachedValue<string>(origin, `sitemap:2:m:${month}`, 600, async () =>
+  const xml = await cachedValue<string>(origin, `sitemap:3:m:${month}`, 600, async () =>
     generateMessagesSitemapXml(origin, await db.humanMessagesInMonth(c.env.DB, month).catch(() => []))
   );
   return new Response(xml, { headers: SITEMAP_HEADERS });
@@ -940,7 +940,7 @@ app.get('/sitemap-messages/:file{[0-9][0-9][0-9][0-9]-[0-9][0-9]\\.xml}', async 
 app.get('/sitemap-pages.xml', async (c) => {
   const origin = originOf(c);
   // The aggregations behind the lastmod dates run once per TTL, not per request.
-  const xml = await cachedValue<string>(origin, 'sitemap:2:pages', 600, async () => {
+  const xml = await cachedValue<string>(origin, 'sitemap:3:pages', 600, async () => {
     const [cols, addrs, protocols, ticks, categories, activity] = await Promise.all([
       db.listCollections(c.env.DB).catch(() => []),
       db.listAddresses(c.env.DB).catch(() => []),
