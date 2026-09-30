@@ -484,11 +484,12 @@ var FV = (function () {
     who: 'The Permanent Record is built and run by @xbtoshi. It reads public Bitcoin data from open nodes, decodes every OP_RETURN output, and labels human-readable messages with an AI classifier; the labels are a reading aid, not a judgement, and nothing here is financial advice.',
     how: 'Corrections, questions about a monitored address, press, or anything else: send a direct message on X. Bugs and ideas are welcome as issues on GitHub, where the whole site is open source. Know an address that is collecting messages? Suggest it and a human reviews it before it is monitored.'
   };
+  // The links are placed by replacing one phrase each in the escaped copy; keep every phrase unique in CONTACT.
   function contactHTML() {
     var h = '<div class="about-sec" id="contact"><span class="kicker">\u25c6 ABOUT &amp; CONTACT</span>';
     h += '<p class="lede">' + esc(CONTACT.who).replace(esc(CONTACT.handle), '<a href="' + attr(CONTACT.url) + '" rel="me noopener" target="_blank">' + esc(CONTACT.handle) + '</a>') + '</p>';
     h += '<p class="lede">' + esc(CONTACT.how).replace('direct message on X', '<a href="' + attr(CONTACT.url) + '" rel="me noopener" target="_blank">direct message on X</a>').replace('issues on GitHub', '<a href="' + attr(CONTACT.repo) + '/issues" rel="noopener" target="_blank">issues on GitHub</a>') + '</p>';
-    h += '<div class="cta"><a class="btn" href="' + attr(CONTACT.url) + '" rel="me noopener" target="_blank">' + esc(CONTACT.handle) + ' on X \u2197</a><a class="btn" href="' + attr(CONTACT.repo) + '" rel="me noopener" target="_blank">Source on GitHub \u2197</a><button class="btn" type="button" data-action="suggest-open" data-col="">+ Suggest an address</button></div>';
+    h += '<div class="cta"><a class="btn" href="' + attr(CONTACT.url) + '" rel="me noopener" target="_blank">' + esc(CONTACT.handle) + ' on X \u2197</a><a class="btn" href="' + attr(CONTACT.repo) + '" rel="noopener" target="_blank">Source on GitHub \u2197</a><button class="btn" type="button" data-action="suggest-open" data-col="">+ Suggest an address</button></div>';
     h += '</div>';
     return h;
   }
