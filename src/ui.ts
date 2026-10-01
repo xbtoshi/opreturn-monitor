@@ -35,6 +35,13 @@ export interface ShellData {
   feed?: Pick<FeedView, 'collections' | 'categories' | 'protocols' | 'chain'>;
 }
 
+/**
+ * Umami analytics — self-hosted, cookieless, served first-party from
+ * p.opreturn.xyz. auto-track counts client-side route changes as pageviews.
+ * Stripped for Tor visitors in index.ts.
+ */
+export const UMAMI_TAG = '<script async defer src="https://p.opreturn.xyz/pulse.js" data-website-id="f7e0412d-1554-4e87-8995-a1231217d70e" data-auto-track="true"></script>';
+
 function esc(s: string): string {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;')
@@ -135,6 +142,7 @@ ${jsonLdScript}`;
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+${UMAMI_TAG}
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f3f1ea" />
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#16150f" />
 <title>${esc(ogTitle)}</title>

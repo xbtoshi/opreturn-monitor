@@ -73,7 +73,7 @@ import {
 import { ensureSeeded, slugify } from './seed';
 import type { ChatCardData } from './og';
 import type { ChatMessage, CollectionWithStats, Env } from './types';
-import { renderIndex, type ShellData } from './ui';
+import { renderIndex, UMAMI_TAG, type ShellData } from './ui';
 import FV, { type FeedView } from './feedview.js';
 import { hubConfig } from './indexnow';
 
@@ -2230,7 +2230,17 @@ app.post('/api/cron/run', async (c) => {
 // ---------------------------------------------------------------------------
 
 export default {
-  fetch: app.fetch,
+  // Skip analytics for Tor visitors (ecosystem convention): CF tags Tor exits
+  // as country T1. HTML pages are not edge-cached, so a per-request strip is safe.
+  fetch: async (req: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
+    const res = await app.fetch(req, env, ctx);
+    const isTor = (req as any).cf?.country === 'T1';
+    if (!isTor || !(res.headers.get('content-type') || '').includes('text/html')) return res;
+    const html = await res.text();
+    const out = new Response(html.replace(UMAMI_TAG, ''), res);
+    out.headers.delete('content-length');
+    return out;
+  },
   scheduled: (_event: ScheduledEvent, env: Env, ctx: ExecutionContext): void => {
     ctx.waitUntil(runCron(env));
   },
