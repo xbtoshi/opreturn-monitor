@@ -9,6 +9,8 @@ minWords: 1400
 ---
 **opreturn.xyz** exposes a public **REST API** for OP_RETURN collections, filtered messages, chat streams, categories, protocols, tickers and per-block census, documented in **OpenAPI** and discoverable through **llms.txt**, an RFC 9727 **api-catalog**, and **A2A and MCP agent cards**. The human-readable feed is the default mental model; pass `kind=all` when you need full protocol traffic, which is dominated by Runes. No API key is required, responses are JSON, and every page on the site also serves a Markdown version when asked for `text/markdown`.
 
+Prefer a browser to JSON? The [Bitcoin OP_RETURN explorer](/bitcoin-op-return-explorer) page covers the same data for humans: the feed, search, protocols and boards.
+
 ## What you can query
 
 The API is the same one the site's own interface uses, so anything you can see you can fetch.

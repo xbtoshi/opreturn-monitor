@@ -58,6 +58,7 @@ const NAV: Array<[string, string, string, string]> = [
   ['collections', '/collections', 'Collections', 'collections'],
   ['guide', '/guide', 'Etch a message', ''],
   ['learn', '/learn', 'Learn', 'learn'],
+  ['explorer', '/bitcoin-op-return-explorer', 'OP_RETURN explorer', ''],
   ['about', '/', 'About', ''],
 ];
 
@@ -111,7 +112,7 @@ export function renderIndex(meta?: PageMeta, shell?: ShellData): string {
     m.keywords ||
     'bitcoin op_return, op_return monitor, bitcoin message board, immutable messages, blockchain memorials, bitcoin graffiti, satoshi tributes, crypto communications';
   const jsonLdScript = m.jsonLd
-    ? `<script type="application/ld+json">${JSON.stringify(m.jsonLd)}</script>`
+    ? `<script type="application/ld+json">${JSON.stringify(m.jsonLd).replace(/</g, '\\u003c')}</script>`
     : '';
   const ogMeta = `<meta name="description" content="${esc(ogDesc)}" />
 <meta name="keywords" content="${esc(metaKeywords)}" />
@@ -558,6 +559,12 @@ ${ogMeta}
   .art-meta{font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
   .answer{border:1.5px solid var(--fg);background:var(--card);padding:18px 22px;display:flex;flex-direction:column;gap:8px;max-width:72ch;box-shadow:8px 8px 0 var(--fg)}
   .answer p{font-size:17px;line-height:1.5;font-weight:500}
+  .xlede{font-size:18px;max-width:64ch}
+  .xsearch{display:flex;flex-direction:column;gap:8px;border:1.5px solid var(--fg);background:var(--card);padding:16px 18px;max-width:72ch;box-shadow:8px 8px 0 var(--fg);scroll-margin-top:24px}
+  .xsearch-row{display:flex;gap:10px;flex-wrap:wrap}
+  .xsearch input{flex:1 1 220px;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--fg);padding:11px 12px;font-size:15px;font-family:inherit}
+  .xsearch input:focus{outline:2px solid var(--sig);outline-offset:-1px}
+  .xsearch-note{font-family:'Martian Mono',monospace;font-size:11px;color:var(--fg4)}
   .art-grid{display:grid;grid-template-columns:minmax(0,72ch) 240px;gap:48px;align-items:start}
   .art-body{font-size:17px;line-height:1.6;color:var(--fg);display:flex;flex-direction:column;gap:16px;min-width:0}
   .art-body h2{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.15;margin-top:22px;scroll-margin-top:24px}
@@ -1385,7 +1392,7 @@ var FV = (function () {
 
   /* ---- shell sync: sidebar, mobile controls, tab bar ---- */
   function isFeedScreen(){return state.screen==='feed';}
-  function navKey(){var s=state.screen;if(s==='feed'||s==='detail')return 'feed';if(s==='chat')return 'rooms';if(s==='etch')return 'guide';return s;}
+  function navKey(){var s=state.screen;if(s==='feed'||s==='detail')return 'feed';if(s==='chat')return 'rooms';if(s==='etch')return 'guide';if(s==='learn'&&location.pathname==='/bitcoin-op-return-explorer')return 'explorer';return s;}
   function syncShell(){
     var key=navKey();
     var nav=document.querySelectorAll('[data-nav]');
@@ -1489,7 +1496,7 @@ var FV = (function () {
     h+='<div class="encoder"><span class="h">ENCODE YOUR MESSAGE</span><div class="bd"><textarea id="etch-text" rows="3" placeholder="gm, permanent record">'+esc(state.etch)+'</textarea>';
     h+='<div class="meta"><span id="etch-bytes">'+e.bytes+' bytes</span><span id="etch-sats">≈ '+fmt(Math.round((e.bytes+232)*6))+' sats at 6 sat/vB</span></div>';
     h+='<div class="hex" id="etch-hex">'+esc(e.hex)+'</div><button class="btn" data-action="copy-hex">Copy hex</button></div></div>';
-    h+='<p class="gnote">This tool only reads the chain — it never asks for your keys and cannot send anything for you. Step-by-step companion: <a href="/learn/how-to-etch-op-return">How to etch an OP_RETURN message</a>.</p></div></div></main>';
+    h+='<p class="gnote">This tool only reads the chain — it never asks for your keys and cannot send anything for you. Step-by-step companion: <a href="/learn/how-to-etch-op-return">How to etch an OP_RETURN message</a>. Prefer to read messages first? <a href="/bitcoin-op-return-explorer">How the explorer works</a>.</p></div></div></main>';
     app.innerHTML=h;
   }
   function updateEtch(){var e=etchHex();var b=document.getElementById('etch-bytes'),s=document.getElementById('etch-sats'),x=document.getElementById('etch-hex');if(b)b.textContent=e.bytes+' bytes';if(s)s.textContent='≈ '+fmt(Math.round((e.bytes+232)*6))+' sats at 6 sat/vB';if(x)x.textContent=e.hex;}
@@ -1514,7 +1521,7 @@ var FV = (function () {
     h+='<span class="pill-live"><span class="d"></span>'+(ch&&ch.stored_txs?fmt(ch.stored_txs)+' OP_RETURN TXS DECODED':fmt(state.collections.reduce(function(t,c){return t+(c.message_count||0);},0))+' MESSAGES ARCHIVED')+' · UPDATING EVERY BLOCK</span>';
     h+='<h1>People are leaving messages inside Bitcoin. Forever.</h1>';
     h+='<p class="lede">Every one of these was etched into an OP_RETURN output on the blockchain — threats, confessions, prayers, ads, haiku. Immutable. Unstoppable. We scan every block, decode every OP_RETURN protocol, and keep the human messages front and centre.</p>';
-    h+='<div class="cta"><a class="btn btn-primary" href="/feed">Enter the feed →</a><a class="btn" href="/guide">Etch your own</a><a class="btn" href="/learn">Read the guides</a></div></div>';
+    h+='<div class="cta"><a class="btn btn-primary" href="/feed">Enter the feed →</a><a class="btn" href="/guide">Etch your own</a><a class="btn" href="/learn">Read the guides</a><a class="btn" href="/bitcoin-op-return-explorer">OP_RETURN explorer</a></div></div>';
     h+='<div class="livepanel"><span class="h">● LIVE FROM THE CHAIN</span>';
     if(!live.length)h+='<a href="/feed"><span class="k">waiting for the next block</span><span class="c">The feed fills in as blocks arrive.</span></a>';
     live.forEach(function(m){h+='<a href="/m/'+attr(m.txid)+'"><span class="k">'+esc(m.category||'message')+' · '+esc(timeAgo(msgTime(m)))+'</span><span class="c">'+esc(displayText(m))+'</span></a>';});
@@ -1538,7 +1545,7 @@ var FV = (function () {
   function renderLearn(){
     var key=location.pathname;
     var cur=app.querySelector('[data-learn]');
-    var want=key==='/learn'?'index':key.slice('/learn/'.length);
+    var want=key==='/learn'?'index':key.indexOf('/learn/')===0?key.slice('/learn/'.length):key.slice(1);
     if(cur&&cur.getAttribute('data-learn')===want)return;
     if(_learnHtml[key]){app.innerHTML=_learnHtml[key];applyLearnMeta();return;}
     app.innerHTML='<main class="page"><div class="empty">Loading\\u2026</div></main>';
@@ -1584,7 +1591,7 @@ var FV = (function () {
     if(r.name==='collections'){state.screen='collections';return render();}
     if(r.name==='protocols'){state.screen='protocols';return Promise.all([loadProtocols(),loadTicks(),loadChain()]).then(render);}
     if(r.name==='guide'){state.screen='etch';return render();}
-    if(r.name==='learn'){state.screen='learn';return render();}
+    if(r.name==='learn'||r.name==='bitcoin-op-return-explorer'){state.screen='learn';return render();}
     if(r.name==='feed')return feedScreen();
     if(r.name==='rooms'){var best=null;state.collections.forEach(function(c){if(!best||(c.message_count||0)>(best.message_count||0))best=c;});if(best){state.filter=best.id;state.screen='chat';resetChat();return loadChat(false).then(render);}state.screen='chat';return render();}
     if(r.name==='c'){var col=colById(Number(r.param))||colBySlug(r.param);if(col){state.filter=col.id;if(r.chat){state.screen='chat';resetChat();return loadChat(false).then(render);}return feedScreen();}state.screen='notfound';return render();}
@@ -1993,7 +2000,7 @@ var FV = (function () {
         inputSchema: {
           type: "object",
           properties: {
-            page: { type: "string", enum: ["feed", "rooms", "protocols", "collections", "guide", "about", "landing"], description: "Destination screen" }
+            page: { type: "string", enum: ["feed", "rooms", "protocols", "collections", "guide", "about", "landing", "explorer"], description: "Destination screen" }
           },
           required: ["page"]
         },
@@ -2005,7 +2012,7 @@ var FV = (function () {
     }catch(e){}
   }
 
-  function go(screen){navigate({landing:'/',about:'/',feed:'/feed',rooms:'/rooms',collections:'/collections',guide:'/guide',protocols:'/protocols'}[screen]||'/');}
+  function go(screen){navigate({landing:'/',about:'/',feed:'/feed',rooms:'/rooms',collections:'/collections',guide:'/guide',protocols:'/protocols',explorer:'/bitcoin-op-return-explorer'}[screen]||'/');}
 
   /* ---- boot ---- */
   try{applyTheme(localStorage.getItem('opreturn_theme')||'');}catch(e){applyTheme('');}

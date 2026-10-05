@@ -172,6 +172,7 @@ ${LEARN_INDEX}
 ## Machine Discovery & Agent Standards
 
 - Full Technical Dossier: ${siteUrl}/llms-full.txt
+- Bitcoin OP_RETURN Explorer (human landing: search, read, API overview): ${siteUrl}/bitcoin-op-return-explorer
 - Live Transmissions Feed: ${siteUrl}/feed
 - Curated Collections: ${siteUrl}/collections
 - Field Manual (How to Etch): ${siteUrl}/guide
@@ -323,6 +324,8 @@ export interface SitemapActivity {
   addressActivity?: ReadonlyMap<string, number>;
   /** Fixed "today" for tests. */
   today?: string;
+  /** Hand-written landing pages (path + the date their copy last changed). */
+  landings?: Array<{ path: string; updated: string }>;
 }
 
 const dayOf = (ts: number | null | undefined): string | undefined => (ts ? new Date(ts * 1000).toISOString().slice(0, 10) : undefined);
@@ -390,6 +393,7 @@ export function generateSitemapXml(
   urls.push({ loc: `${siteUrl}/protocols`, lastmod: dayOf(maxOf(protocols.map((p) => p.last_ts))) || today, changefreq: 'hourly', priority: '0.9' });
   urls.push({ loc: `${siteUrl}/rooms`, lastmod: today, changefreq: 'hourly', priority: '0.8' });
   urls.push({ loc: `${siteUrl}/learn`, lastmod: guidesLast, changefreq: 'weekly', priority: '0.9' });
+  for (const l of activity.landings || []) urls.push({ loc: `${siteUrl}${l.path}`, lastmod: l.updated, changefreq: 'monthly', priority: '0.9' });
   for (const g of guides) urls.push({ loc: `${siteUrl}/learn/${g.slug}`, lastmod: g.updated, changefreq: 'weekly', priority: '0.8' });
 
   // Collections & Chat
@@ -1110,6 +1114,8 @@ export function buildWebSiteGraph(siteUrl: string): Record<string, unknown>[] {
       alternateName: ['opreturn.xyz', 'Bitcoin OP_RETURN Monitor'],
       description: 'Real-time archive and monitor for messages etched inside the Bitcoin blockchain via OP_RETURN.',
       inLanguage: 'en',
+      // No SearchAction: /feed?q= filters the loaded page in the browser only (the SSR HTML is unfiltered,
+      // noindex, and canonicalises to /feed), so it is not a search endpoint a crawler could use.
       publisher: {
         '@type': 'Organization',
         '@id': `${siteUrl}/#organization`,
@@ -1307,6 +1313,7 @@ export function renderLandingMarkdown(
 
   md += `## Navigation & Links\n`;
   md += `- [Feed](${siteUrl}/feed)\n`;
+  md += `- [Bitcoin OP_RETURN Explorer](${siteUrl}/bitcoin-op-return-explorer)\n`;
   md += `- [Collections](${siteUrl}/collections)\n`;
   md += `- [Field Manual](${siteUrl}/guide)\n`;
   md += `- [API Documentation](${siteUrl}/llms.txt)\n`;
@@ -1470,7 +1477,7 @@ export function renderLandingSsr(d: LandingData): string {
   h += `<span class="pill-live"><span class="d"></span>${ch && ch.stored_txs ? `${fmtN(ch.stored_txs)} OP_RETURN TXS DECODED` : `${fmtN(d.messagesCount)} MESSAGES ARCHIVED`} · UPDATING EVERY BLOCK</span>`;
   h += '<h1>People are leaving messages inside Bitcoin. Forever.</h1>';
   h += '<p class="lede">Every one of these was etched into an OP_RETURN output on the blockchain — threats, confessions, prayers, ads, haiku. Immutable. Unstoppable. We scan every block, decode every OP_RETURN protocol, and keep the human messages front and centre.</p>';
-  h += '<div class="cta"><a class="btn btn-primary" href="/feed">Enter the feed →</a><a class="btn" href="/guide">Etch your own</a><a class="btn" href="/learn">Read the guides</a></div></div>';
+  h += '<div class="cta"><a class="btn btn-primary" href="/feed">Enter the feed →</a><a class="btn" href="/guide">Etch your own</a><a class="btn" href="/learn">Read the guides</a><a class="btn" href="/bitcoin-op-return-explorer">OP_RETURN explorer</a></div></div>';
   h += '<div class="livepanel"><span class="h">● LIVE FROM THE CHAIN</span>';
   if (!d.live.length) h += '<a href="/feed"><span class="k">waiting for the next block</span><span class="c">The feed fills in as blocks arrive.</span></a>';
   for (const m of d.live) {
@@ -1542,7 +1549,7 @@ export function renderGuideSsr(): string {
   h += '<div class="gstep"><div class="gnum">05</div><div><h3>Broadcast and wait</h3><p>Sign, broadcast, and watch it hit the mempool. Once a block confirms it, it lives on-chain forever. Send it to an address we monitor and it shows up in the feed here.</p></div></div>';
   h += '</div>';
   h += '<p class="gnote">This tool only reads the chain \u2014 it never asks for your keys and cannot send anything for you.</p>';
-  h += '<div class="cta" style="margin-top:26px"><a class="btn btn-primary" href="/feed">See what others have written \u2192</a></div>';
+  h += '<div class="cta" style="margin-top:26px"><a class="btn btn-primary" href="/feed">See what others have written \u2192</a><a class="btn" href="/bitcoin-op-return-explorer">Prefer to read first? The explorer</a></div>';
   h += '</section>';
 
   return h;

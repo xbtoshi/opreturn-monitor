@@ -55,6 +55,8 @@ The human-readable minority is what this site is about. Some recurring uses:
 
 The [feed](/feed) shows the newest human-readable messages from every block, with protocol traffic hidden by default. The [collections](/collections) group addresses by the phenomenon behind them. Every message has a permanent page at `/m/<txid>` that decodes the payload, lists the block and fee, and links to the transaction on a public block explorer so anyone can verify it. For an example that carries three OP_RETURN outputs in one transaction, including an inline image, see [this NFT mint](/m/266f9f90960a895a1166b7dd7d4667d63e965c19f0a60084bd3072d7df89e381).
 
+To search and browse all of it from one place, start at the [Bitcoin OP_RETURN explorer](/bitcoin-op-return-explorer) page.
+
 ## Before you etch
 
 Everything above cuts both ways. Permanence is the feature that makes a tribute meaningful and the reason a moment of anger becomes a permanent record. Before writing, read the [Field Manual](/guide): never include private keys or seed phrases, never include anything that identifies another person without their consent, and assume the sending address will be associated with the text for as long as Bitcoin exists.

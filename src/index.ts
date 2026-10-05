@@ -10,6 +10,10 @@ import { ingestOne, ingestStatus, resetIngestCursors } from './ingest';
 import { TAG_MIN_REPEATS, backfillDetails, reparseLegacy, reparseTextRows, sweepTags } from './cron';
 import { protocolLabel } from './protocols';
 import { getGuide, guideJsonLd, guideMinutes, listGuides, loadFacts, renderGuide, renderGuideHtml, renderLearnIndexHtml } from './learn';
+import { EXPLORER_PATH, EXPLORER_TITLE, explorerJsonLd, parseExplorer, renderExplorer, renderExplorerHtml } from './explorer';
+import explorerSrc from '../content/pages/bitcoin-op-return-explorer.md';
+
+const EXPLORER_DOC = parseExplorer(explorerSrc);
 import {
   addressCardSvg,
   categoryCardSvg,
@@ -940,7 +944,7 @@ app.get('/sitemap-messages/:file{[0-9][0-9][0-9][0-9]-[0-9][0-9]\\.xml}', async 
 app.get('/sitemap-pages.xml', async (c) => {
   const origin = originOf(c);
   // The aggregations behind the lastmod dates run once per TTL, not per request.
-  const xml = await cachedValue<string>(origin, 'sitemap:3:pages', 600, async () => {
+  const xml = await cachedValue<string>(origin, 'sitemap:4:pages', 600, async () => {
     const [cols, addrs, protocols, ticks, categories, activity] = await Promise.all([
       db.listCollections(c.env.DB).catch(() => []),
       db.listAddresses(c.env.DB).catch(() => []),
@@ -953,6 +957,7 @@ app.get('/sitemap-pages.xml', async (c) => {
     return generateSitemapXml(origin, finalCols, addrs, [], protocols, ticks, listGuides().map((g) => ({ slug: g.meta.slug, updated: g.meta.updated })), {
       categories,
       addressActivity: activity,
+      landings: [{ path: EXPLORER_PATH, updated: EXPLORER_DOC.meta.updated }],
     });
   });
   return new Response(xml, {
@@ -1428,7 +1433,7 @@ app.get('/', async (c) => {
     renderIndex({
       title: 'The Permanent Record \u2014 messages inside Bitcoin',
       description:
-        'People are leaving messages inside Bitcoin. Forever. Threats, confessions, prayers, ads, haiku \u2014 archived live from the chain.',
+        'People are leaving messages inside Bitcoin. Forever. Threats, confessions, prayers, haiku, archived live. Bitcoin OP_RETURN explorer, search and free API.',
       url: origin + '/',
       image: origin + '/og/default.png',
       jsonLd: { '@context': 'https://schema.org', '@graph': graph },
@@ -1627,6 +1632,34 @@ app.get('/protocols', async (c) => {
       image: origin + '/og/default.png',
       jsonLd: crumbs,
       initialHtml: renderProtocolsSsr(protocols, ticks, chain),
+    }, await shellFor(c))
+  );
+});
+
+// Category landing for "Bitcoin OP_RETURN explorer" queries; `/` stays the brand page.
+app.get(EXPLORER_PATH, async (c) => {
+  const origin = originOf(c);
+  const g = renderExplorer(EXPLORER_DOC, await loadFacts(c.env.DB));
+  if (wantsMarkdown(c)) return markdownResponse(g.markdown, origin);
+  const related = EXPLORER_DOC.meta.related
+    .map((s) => getGuide(s))
+    .filter((x): x is NonNullable<typeof x> => Boolean(x))
+    .map((d) => ({ slug: d.meta.slug, title: d.meta.title }));
+  const jsonLd = { '@context': 'https://schema.org', '@graph': explorerJsonLd(origin, g) };
+  const body = renderExplorerHtml(g, related);
+  if (c.req.query('partial') === '1') {
+    return partialResponse(body + `<script type="application/ld+json" data-learn-jsonld>${JSON.stringify(jsonLd).replace(/</g, '\\u003c')}</script>`, origin + EXPLORER_PATH);
+  }
+  applyDiscoveryHeaders(c, origin);
+  return c.html(
+    renderIndex({
+      title: EXPLORER_TITLE,
+      description: EXPLORER_DOC.meta.description,
+      url: origin + EXPLORER_PATH,
+      image: `${origin}/og/default.png`,
+      keywords: 'Bitcoin OP_RETURN explorer, OP_RETURN search, Bitcoin OP_RETURN messages, Bitcoin on-chain messages, Bitcoin OP_RETURN API',
+      jsonLd,
+      initialHtml: body,
     }, await shellFor(c))
   );
 });

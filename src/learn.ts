@@ -174,7 +174,7 @@ export function renderGuideHtml(g: RenderedGuide, related: GuideDoc[]): string {
 export function renderLearnIndexHtml(guides: Array<{ doc: GuideDoc; minutes: number }>): string {
   let h = '<main class="page" data-learn="index">';
   h += '<div class="tt"><span class="kicker">LEARN</span><h1 class="title">Guides to Bitcoin’s OP_RETURN messages</h1>';
-  h += '<p class="lede" style="max-width:70ch">Plain-language explainers written from the archive: what OP_RETURN is, what changed in Bitcoin Core 30, how to read the incident boards, how to etch a message of your own, and how to use the data as a developer or an agent. Every number in them is read live from the site.</p></div>';
+  h += '<p class="lede" style="max-width:70ch">Plain-language explainers written from the archive: what OP_RETURN is, what changed in Bitcoin Core 30, how to read the incident boards, how to etch a message of your own, and how to use the data as a developer or an agent. Every number in them is read live from the site. To search and browse the messages themselves, start at the <a href="/bitcoin-op-return-explorer">Bitcoin OP_RETURN explorer</a>.</p></div>';
   h += '<div class="table">';
   for (const { doc, minutes } of guides) {
     const m = doc.meta;
