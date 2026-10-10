@@ -293,7 +293,10 @@ export async function getMessages(
   if (!viaOps && (opts.collectionId || opts.address)) return getMessagesByBranches(db, opts);
 
   const { where, params } = messageFilters(opts);
-  where.unshift('m.is_dup = 0');
+  // A block holds at most a few hundred rows, but the planner would rather walk
+  // idx_messages_new / idx_messages_hot (both lead with is_dup) over the whole
+  // table; the unary + rules those out so it seeks idx_messages_height.
+  where.unshift(opts.blockHeight != null && !viaOps ? '+m.is_dup = 0' : 'm.is_dup = 0');
   const cur = opts.before ? decodeCursor(opts.before) : null;
 
   // Driving row for ordering + cursor: the op row when filtering by protocol/tick.
@@ -406,7 +409,11 @@ async function getMessagesByBranches(
       baseParams.push(cur.ts, cur.ts, cur.id);
     }
   }
-  const order = opts.sort === 'hot' ? 'likes DESC, ts DESC, id DESC' : 'ts DESC, id DESC';
+  // The unary + on likes keeps SQLite (no sqlite_stat1) from walking
+  // idx_messages_hot (is_dup, likes...) to skip the sort and filtering every
+  // row by the branch column: a full scan per branch. With it, each branch
+  // seeks its own (col, is_dup, ts, id) index and sorts ~limit rows in memory.
+  const order = opts.sort === 'hot' ? '+m.likes DESC, m.ts DESC, m.id DESC' : 'm.ts DESC, m.id DESC';
 
   // One branch per indexed column value.
   const branches: Array<{ col: string; value: string }> = [];
@@ -433,7 +440,7 @@ async function getMessagesByBranches(
         `SELECT ${MESSAGE_COLUMNS}, m.ts AS cur_ts, m.id AS cur_id
            FROM messages m LEFT JOIN addresses a ON a.address = m.monitored_address
           WHERE ${b.col} = ? AND ${baseWhere.join(' AND ')}
-          ORDER BY m.${order.replace(/, /g, ', m.')} LIMIT ?`
+          ORDER BY ${order} LIMIT ?`
       )
       .bind(b.value, ...baseParams, opts.limit + 1)
   );
