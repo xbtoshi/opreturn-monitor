@@ -48,10 +48,43 @@ export function contentHash(content: string | null, payloadHex?: string | null):
 }
 
 // ---------------------------------------------------------------------------
+// Per-isolate memo for site-wide aggregates
+// ---------------------------------------------------------------------------
+
+/**
+ * Collections, categories, protocol/tick and chain stats are aggregates that
+ * nearly every page renders and that change slowly, yet each one reads
+ * thousands to hundreds of thousands of D1 rows. Memoised per isolate for a
+ * short TTL; concurrent callers share one in-flight query, failures are not
+ * cached. One worker = one database, so the key needs no db identity.
+ */
+const aggregateMemo = new Map<string, { at: number; value: Promise<unknown> }>();
+
+function memoAggregate<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+  const hit = aggregateMemo.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.value as Promise<T>;
+  const value = load();
+  aggregateMemo.set(key, { at: Date.now(), value });
+  value.catch(() => {
+    if (aggregateMemo.get(key)?.value === value) aggregateMemo.delete(key);
+  });
+  return value;
+}
+
+/** Drop memoised aggregates (after collection/address writes, and between tests). */
+export function clearAggregateMemo(prefix = ''): void {
+  for (const k of [...aggregateMemo.keys()]) if (k.startsWith(prefix)) aggregateMemo.delete(k);
+}
+
+// ---------------------------------------------------------------------------
 // Collections & addresses
 // ---------------------------------------------------------------------------
 
-export async function listCollections(db: D1Database): Promise<CollectionWithStats[]> {
+export function listCollections(db: D1Database): Promise<CollectionWithStats[]> {
+  return memoAggregate('collections', 60_000, () => loadCollections(db));
+}
+
+async function loadCollections(db: D1Database): Promise<CollectionWithStats[]> {
   const { results } = await db
     .prepare(
       `SELECT c.id, c.name, c.description, c.slug, c.created_at,
@@ -87,7 +120,11 @@ export interface CategoryStat {
   count: number;
 }
 
-export async function listCategories(db: D1Database): Promise<CategoryStat[]> {
+export function listCategories(db: D1Database): Promise<CategoryStat[]> {
+  return memoAggregate('categories', 300_000, () => loadCategories(db));
+}
+
+async function loadCategories(db: D1Database): Promise<CategoryStat[]> {
   const { results } = await db
     .prepare(
       `SELECT m.category AS category, COUNT(*) AS count, MAX(m.ts) AS last_ts
@@ -129,7 +166,11 @@ export async function getCollection(db: D1Database, id: number): Promise<Collect
 // ---------------------------------------------------------------------------
 
 /** Distinct txs per protocol; `days` = 0 means all time (the default for the explorer index). */
-export async function listProtocols(db: D1Database, days = 0): Promise<ProtocolStat[]> {
+export function listProtocols(db: D1Database, days = 0): Promise<ProtocolStat[]> {
+  return memoAggregate(`protocols:${days}`, 600_000, () => loadProtocols(db, days));
+}
+
+async function loadProtocols(db: D1Database, days: number): Promise<ProtocolStat[]> {
   const since = days > 0 ? nowSeconds() - days * 86400 : 0;
   const { results } = await db
     .prepare(
@@ -144,7 +185,11 @@ export async function listProtocols(db: D1Database, days = 0): Promise<ProtocolS
   return results.map((r) => ({ protocol: str(r, 'protocol'), count: num(r, 'count'), last_ts: nullableNum(r, 'last_ts') }));
 }
 
-export async function listTicks(db: D1Database, protocol?: string, days = 0, limit = 100): Promise<TickStat[]> {
+export function listTicks(db: D1Database, protocol?: string, days = 0, limit = 100): Promise<TickStat[]> {
+  return memoAggregate(`ticks:${protocol ?? ''}:${days}:${limit}`, 600_000, () => loadTicks(db, protocol, days, limit));
+}
+
+async function loadTicks(db: D1Database, protocol: string | undefined, days: number, limit: number): Promise<TickStat[]> {
   const since = days > 0 ? nowSeconds() - days * 86400 : 0;
   const params: unknown[] = [since];
   let where = 'WHERE ts >= ? AND tick IS NOT NULL';
@@ -1202,11 +1247,15 @@ export async function markIndexNowPushed(db: D1Database, ids: number[], at: numb
 // Classification
 // ---------------------------------------------------------------------------
 
+// Both classifier queries pin idx_messages_unclassified (migration 0010): left
+// alone the planner picks idx_messages_category, where every protocol row also
+// has category IS NULL, and reads ~350K rows to find the usual zero.
+
 /** Human-text group representatives the AI has not seen yet. Protocol rows and collapsed duplicates never qualify; duplicates inherit via setCategoryForGroup. */
 export async function getUnclassifiedMessages(db: D1Database, limit: number): Promise<Message[]> {
   const { results } = await db
     .prepare(
-      `SELECT id, txid, address, content FROM messages
+      `SELECT id, txid, address, content FROM messages INDEXED BY idx_messages_unclassified
         WHERE category IS NULL AND (protocol = 'text' OR protocol IS NULL) AND is_dup = 0
           AND content IS NOT NULL AND length(trim(content)) > 0
         ORDER BY id ASC LIMIT ?`
@@ -1347,7 +1396,7 @@ export async function listTextRows(db: D1Database, after: number, limit: number)
 export async function countUnclassified(db: D1Database): Promise<number> {
   const row = await db
     .prepare(
-      `SELECT COUNT(*) AS n FROM messages
+      `SELECT COUNT(*) AS n FROM messages INDEXED BY idx_messages_unclassified
         WHERE category IS NULL AND (protocol = 'text' OR protocol IS NULL) AND is_dup = 0
           AND content IS NOT NULL AND length(trim(content)) > 0`
     )
@@ -1418,6 +1467,7 @@ export async function createCollection(
     .prepare('INSERT INTO collections (name, description, slug) VALUES (?, ?, ?)')
     .bind(name, description ?? null, slug)
     .run();
+  clearAggregateMemo('collections');
   return Number(res.meta.last_row_id);
 }
 
@@ -1427,13 +1477,16 @@ export async function createAddress(
   label: string | null,
   collectionId: number
 ): Promise<{ ok: boolean; error?: string }> {
-  const col = await getCollection(db, collectionId);
+  // Direct lookup, not the memoised list: a collection created moments ago on
+  // another isolate must already accept addresses.
+  const col = await db.prepare('SELECT 1 FROM collections WHERE id = ?').bind(collectionId).first();
   if (!col) return { ok: false, error: 'collection not found' };
   try {
     await db
       .prepare('INSERT OR IGNORE INTO addresses (address, label, collection_id) VALUES (?, ?, ?)')
       .bind(address, label ?? null, collectionId)
       .run();
+    clearAggregateMemo('collections');
     return { ok: true };
   } catch {
     return { ok: false, error: 'failed to insert address' };
@@ -1442,6 +1495,7 @@ export async function createAddress(
 
 export async function deleteAddress(db: D1Database, id: number): Promise<boolean> {
   const res = await db.prepare('DELETE FROM addresses WHERE id = ?').bind(id).run();
+  clearAggregateMemo('collections');
   return res.meta.changes > 0;
 }
 
@@ -1607,7 +1661,11 @@ export interface ChainStats {
   stored_txs: number;
 }
 
-export async function getChainStats(db: D1Database): Promise<ChainStats> {
+export function getChainStats(db: D1Database): Promise<ChainStats> {
+  return memoAggregate('chain', 60_000, () => loadChainStats(db));
+}
+
+async function loadChainStats(db: D1Database): Promise<ChainStats> {
   const row = await db
     .prepare(
       `SELECT COUNT(*) AS blocks, MIN(height) AS lo, MAX(height) AS hi,
