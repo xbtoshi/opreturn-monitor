@@ -48,22 +48,48 @@ export function contentHash(content: string | null, payloadHex?: string | null):
 }
 
 // ---------------------------------------------------------------------------
-// Per-isolate memo for site-wide aggregates
+// Shared cache for site-wide aggregates
 // ---------------------------------------------------------------------------
 
 /**
  * Collections, categories, protocol/tick and chain stats are aggregates that
  * nearly every page renders and that change slowly, yet each one reads
- * thousands to hundreds of thousands of D1 rows. Memoised per isolate for a
- * short TTL; concurrent callers share one in-flight query, failures are not
- * cached. One worker = one database, so the key needs no db identity.
+ * thousands to hundreds of thousands of D1 rows. Crawler traffic spreads over
+ * many colos and cold isolates, so neither the Cache API nor an isolate memo
+ * keeps them from being recomputed constantly. The result is stored in
+ * agg_cache (migration 0011), making each key a global once-per-TTL
+ * computation and a hit a one-row read; isolates also memo it briefly.
+ * Concurrent callers share one in-flight promise; failures are not cached.
+ * One worker = one database, so the isolate key needs no db identity.
  */
+const ISOLATE_TTL_MS = 30_000;
 const aggregateMemo = new Map<string, { at: number; value: Promise<unknown> }>();
 
-function memoAggregate<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+function memoAggregate<T>(db: D1Database, key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
   const hit = aggregateMemo.get(key);
-  if (hit && Date.now() - hit.at < ttlMs) return hit.value as Promise<T>;
-  const value = load();
+  if (hit && Date.now() - hit.at < Math.min(ttlMs, ISOLATE_TTL_MS)) return hit.value as Promise<T>;
+  const value = (async () => {
+    // A missing table (migration not yet applied) or a bad row just falls through to load().
+    const row = await db
+      .prepare('SELECT value, at FROM agg_cache WHERE key = ?')
+      .bind(key)
+      .first<{ value: string; at: number }>()
+      .catch(() => null);
+    if (row && Date.now() - Number(row.at) < ttlMs) {
+      try {
+        return JSON.parse(row.value) as T;
+      } catch {
+        /* recompute below */
+      }
+    }
+    const fresh = await load();
+    await db
+      .prepare('INSERT OR REPLACE INTO agg_cache (key, value, at) VALUES (?, ?, ?)')
+      .bind(key, JSON.stringify(fresh), Date.now())
+      .run()
+      .catch(() => undefined);
+    return fresh;
+  })();
   aggregateMemo.set(key, { at: Date.now(), value });
   value.catch(() => {
     if (aggregateMemo.get(key)?.value === value) aggregateMemo.delete(key);
@@ -71,9 +97,15 @@ function memoAggregate<T>(key: string, ttlMs: number, load: () => Promise<T>): P
   return value;
 }
 
-/** Drop memoised aggregates (after collection/address writes, and between tests). */
+/** Drop isolate-memoised aggregates (between tests; writes use invalidateAggregate). */
 export function clearAggregateMemo(prefix = ''): void {
   for (const k of [...aggregateMemo.keys()]) if (k.startsWith(prefix)) aggregateMemo.delete(k);
+}
+
+/** After a write: forget an aggregate here and in agg_cache so every isolate recomputes it. */
+async function invalidateAggregate(db: D1Database, key: string): Promise<void> {
+  clearAggregateMemo(key);
+  await db.prepare('DELETE FROM agg_cache WHERE key = ?').bind(key).run().catch(() => undefined);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +113,7 @@ export function clearAggregateMemo(prefix = ''): void {
 // ---------------------------------------------------------------------------
 
 export function listCollections(db: D1Database): Promise<CollectionWithStats[]> {
-  return memoAggregate('collections', 60_000, () => loadCollections(db));
+  return memoAggregate(db, 'collections', 60_000, () => loadCollections(db));
 }
 
 async function loadCollections(db: D1Database): Promise<CollectionWithStats[]> {
@@ -121,7 +153,7 @@ export interface CategoryStat {
 }
 
 export function listCategories(db: D1Database): Promise<CategoryStat[]> {
-  return memoAggregate('categories', 300_000, () => loadCategories(db));
+  return memoAggregate(db, 'categories', 300_000, () => loadCategories(db));
 }
 
 async function loadCategories(db: D1Database): Promise<CategoryStat[]> {
@@ -167,7 +199,7 @@ export async function getCollection(db: D1Database, id: number): Promise<Collect
 
 /** Distinct txs per protocol; `days` = 0 means all time (the default for the explorer index). */
 export function listProtocols(db: D1Database, days = 0): Promise<ProtocolStat[]> {
-  return memoAggregate(`protocols:${days}`, 600_000, () => loadProtocols(db, days));
+  return memoAggregate(db, `protocols:${days}`, 600_000, () => loadProtocols(db, days));
 }
 
 async function loadProtocols(db: D1Database, days: number): Promise<ProtocolStat[]> {
@@ -186,7 +218,7 @@ async function loadProtocols(db: D1Database, days: number): Promise<ProtocolStat
 }
 
 export function listTicks(db: D1Database, protocol?: string, days = 0, limit = 100): Promise<TickStat[]> {
-  return memoAggregate(`ticks:${protocol ?? ''}:${days}:${limit}`, 600_000, () => loadTicks(db, protocol, days, limit));
+  return memoAggregate(db, `ticks:${protocol ?? ''}:${days}:${limit}`, 600_000, () => loadTicks(db, protocol, days, limit));
 }
 
 async function loadTicks(db: D1Database, protocol: string | undefined, days: number, limit: number): Promise<TickStat[]> {
@@ -1467,7 +1499,7 @@ export async function createCollection(
     .prepare('INSERT INTO collections (name, description, slug) VALUES (?, ?, ?)')
     .bind(name, description ?? null, slug)
     .run();
-  clearAggregateMemo('collections');
+  await invalidateAggregate(db, 'collections');
   return Number(res.meta.last_row_id);
 }
 
@@ -1486,7 +1518,7 @@ export async function createAddress(
       .prepare('INSERT OR IGNORE INTO addresses (address, label, collection_id) VALUES (?, ?, ?)')
       .bind(address, label ?? null, collectionId)
       .run();
-    clearAggregateMemo('collections');
+    await invalidateAggregate(db, 'collections');
     return { ok: true };
   } catch {
     return { ok: false, error: 'failed to insert address' };
@@ -1495,7 +1527,7 @@ export async function createAddress(
 
 export async function deleteAddress(db: D1Database, id: number): Promise<boolean> {
   const res = await db.prepare('DELETE FROM addresses WHERE id = ?').bind(id).run();
-  clearAggregateMemo('collections');
+  await invalidateAggregate(db, 'collections');
   return res.meta.changes > 0;
 }
 
@@ -1662,7 +1694,7 @@ export interface ChainStats {
 }
 
 export function getChainStats(db: D1Database): Promise<ChainStats> {
-  return memoAggregate('chain', 60_000, () => loadChainStats(db));
+  return memoAggregate(db, 'chain', 60_000, () => loadChainStats(db));
 }
 
 async function loadChainStats(db: D1Database): Promise<ChainStats> {
