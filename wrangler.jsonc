@@ -36,7 +36,7 @@
   // ---------------------------------------------------------------------------
   "vars": {
     "SITE_URL": "https://opreturn.xyz",
-    "OPENAI_MODEL": "deepseek-v4-flash",
+    "OPENAI_MODEL": "deepseek-v4.1-flash",
     "OPENAI_API_BASE": "https://opencode.ai/zen/go/v1",
     // Esplora-style API. btc.tx.taxi is a full mempool-electrs instance that
     // serves raw blocks 2-3x faster than mempool.space; the fallbacks are
