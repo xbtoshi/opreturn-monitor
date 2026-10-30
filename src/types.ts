@@ -122,6 +122,8 @@ export interface Env {
   ETH_BLOCKSCOUT_URL?: string;
   /** Optional free Blockscout API key; the keyless limit is shared across Cloudflare egress IPs. */
   ETH_BLOCKSCOUT_API_KEY?: string;
+  /** Comma-separated path-forward relay hosts (https://<host>/proxy/<url>) tried before a direct fetch. */
+  EGRESS_RELAYS?: string;
   /** "0" stops polling Ethereum addresses (kill switch); unset or anything else = enabled. */
   EVM_POLL?: string;
 }

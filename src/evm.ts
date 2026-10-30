@@ -157,17 +157,33 @@ export class BlockscoutError extends Error {
   }
 }
 
+const RELAY_HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+
+/** Valid relay hosts from EGRESS_RELAYS (scheme and trailing slashes stripped, junk skipped). */
+export function relayHosts(env: Pick<Env, 'EGRESS_RELAYS'>): string[] {
+  return (env.EGRESS_RELAYS ?? '')
+    .split(',')
+    .map((h) => h.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, ''))
+    .filter((h) => RELAY_HOST.test(h));
+}
+
+/** Statuses worth another route: per-IP limits (429), blocks (403) and upstream/relay failures. */
+const RETRY_STATUS = new Set([403, 429, 500, 502, 503, 504]);
+
 export async function fetchPage(
   base: string,
   address: string,
   params: Record<string, unknown> | null,
   fetchFn: FetchLike = fetch,
-  apiKey?: string
+  apiKey?: string,
+  /** Relay host to go through (https://<host>/proxy/<url>); omitted = direct. */
+  via?: string
 ): Promise<BlockscoutPage> {
   const entries = Object.entries(params || {}).map(([k, v]): [string, string] => [k, String(v)]);
   if (apiKey) entries.push(['apikey', apiKey]);
   const qs = entries.length ? '?' + new URLSearchParams(entries).toString() : '';
-  const res = await fetchFn(`${base}/api/v2/addresses/${address}/transactions${qs}`, {
+  const target = `${base}/api/v2/addresses/${address}/transactions${qs}`;
+  const res = await fetchFn(via ? `https://${via}/proxy/${target}` : target, {
     headers: { accept: 'application/json', 'user-agent': 'opreturn.xyz (+https://opreturn.xyz)' },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
@@ -197,8 +213,8 @@ export interface EvmDeps {
   setState?: (key: string, value: string) => Promise<void>;
 }
 
-/** Pause between Blockscout requests; the keyless limit is shared by every Worker on the same egress IPs. */
-const REQUEST_GAP_MS = 1000;
+/** Pause between Blockscout requests (relays carry most of them; direct shares Cloudflare's egress IPs). */
+const REQUEST_GAP_MS = 500;
 
 /**
  * Poll every watched Ethereum address, one request at a time: first the
@@ -238,18 +254,31 @@ export async function pollEvmAddresses(env: Env, addresses: string[], deps: EvmD
     return n;
   };
 
-  /** One request; null when it failed (recorded) or the run is rate-limited. */
+  const relays = relayHosts(env);
+  /**
+   * One request: through the relays first (rotated, so load spreads), direct last. A retryable
+   * status or network error moves to the next route; any other status stops. Null when every
+   * route failed (recorded) or the run is rate-limited (every route answered 429).
+   */
   const get = async (address: string, params: Record<string, unknown> | null): Promise<BlockscoutPage | null> => {
     if (limited) return null;
-    if (requests++ > 0 && gap > 0) await new Promise((r) => setTimeout(r, gap));
-    try {
-      return await fetchPage(base, address, params, fetchFn, apiKey);
-    } catch (e) {
-      if (e instanceof BlockscoutError && e.status === 429) limited = true;
-      errors.push(String(e).slice(0, 120));
-      console.error('evm poll:', String(e).slice(0, 200));
-      return null;
+    const n = requests++;
+    if (n > 0 && gap > 0) await new Promise((r) => setTimeout(r, gap));
+    const routes: Array<string | undefined> = [...relays.slice(n % (relays.length || 1)), ...relays.slice(0, n % (relays.length || 1)), undefined];
+    let all429 = true;
+    for (const via of routes) {
+      try {
+        return await fetchPage(base, address, params, fetchFn, apiKey, via);
+      } catch (e) {
+        const status = e instanceof BlockscoutError ? e.status : 0;
+        if (status !== 429) all429 = false;
+        errors.push(`${via ?? 'direct'}: ${String(e).slice(0, 100)}`);
+        console.error('evm poll:', via ?? 'direct', String(e).slice(0, 200));
+        if (status && !RETRY_STATUS.has(status)) return null;
+      }
     }
+    if (all429) limited = true;
+    return null;
   };
 
   const newest = new Map<string, BlockscoutPage>();

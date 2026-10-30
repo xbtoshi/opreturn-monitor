@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import FV, { type FeedView } from '../src/feedview.js';
-import { evmText, isEvmAddress, normAddress, pollEvmAddresses, startCursor, toNewMessage, type BlockscoutPage } from '../src/evm';
+import { evmText, isEvmAddress, normAddress, pollEvmAddresses, relayHosts, startCursor, toNewMessage, type BlockscoutPage } from '../src/evm';
 import { insertMessageStatements, type NewMessage } from '../src/db';
 import { buildMessageSchema, renderAddressMarkdown, renderMessageMarkdown } from '../src/seo';
 import { messageCardSvg } from '../src/og';
@@ -215,6 +215,41 @@ describe('pollEvmAddresses', () => {
     });
     expect(urls.every((u) => u.includes('apikey=k1'))).toBe(true);
     expect(urls.map((u) => (u.includes('index=9') ? 'old' : 'new'))).toEqual(['new', 'new', 'old', 'old']);
+  });
+
+  it('goes through the egress relays first, rotating them, and falls back route by route', async () => {
+    const relayEnv = { ...env, EGRESS_RELAYS: ' https://Relay1.test/ , relay2.test, not a host, ' } as Env;
+    expect(relayHosts(relayEnv)).toEqual(['relay1.test', 'relay2.test']);
+    const urls: string[] = [];
+    const quiet = { gapMs: 0, insert: async () => true, known: async () => new Set<string>(), getState: async () => ({ ['evm_backfill:' + WATCHED.toLowerCase()]: 'done', 'evm_backfill:0xc887af690e0301cd4edbbce8f8d31b4ec65b286a': 'done' }), setState: async () => undefined };
+    // relay1 is rate-limited, relay2 works
+    await pollEvmAddresses(relayEnv, [WATCHED, '0xc887aF690E0301CD4edBbCe8F8d31b4EC65B286A'], {
+      ...quiet,
+      fetchFn: async (u) => { urls.push(u); return u.startsWith('https://relay1.test/') ? new Response('', { status: 429 }) : page(null); },
+    });
+    const target = 'https://eth.blockscout.com/api/v2/addresses/' + WATCHED.toLowerCase() + '/transactions';
+    expect(urls[0]).toBe('https://relay1.test/proxy/' + target);
+    expect(urls[1]).toBe('https://relay2.test/proxy/' + target);
+    // second request starts on the next relay
+    expect(urls[2]).toMatch(/^https:\/\/relay2\.test\/proxy\//);
+    expect(urls.length).toBe(3);
+  });
+
+  it('marks the run rate-limited only when every route answers 429, and stops on a non-retryable status', async () => {
+    const relayEnv = { ...env, EGRESS_RELAYS: 'relay1.test,relay2.test' } as Env;
+    const state: Record<string, string> = {};
+    const base = { gapMs: 0, insert: async () => true, known: async () => new Set<string>(), getState: async () => ({}), setState: async (k: string, v: string) => { state[k] = v; } };
+    let urls: string[] = [];
+    await pollEvmAddresses(relayEnv, [WATCHED], { ...base, fetchFn: async (u) => { urls.push(u); return u.includes('/proxy/') ? new Response('', { status: 429 }) : page(null); } });
+    expect(urls.length).toBe(2 + 1); // two relays, then direct succeeds
+    expect(JSON.parse(state.evm_last_run).rate_limited).toBe(false);
+    urls = [];
+    await pollEvmAddresses(relayEnv, [WATCHED, '0xc887aF690E0301CD4edBbCe8F8d31b4EC65B286A'], { ...base, fetchFn: async (u) => { urls.push(u); return new Response('', { status: 429 }); } });
+    expect(urls.length).toBe(3); // every route 429 on the first address, then the run stops
+    expect(JSON.parse(state.evm_last_run).rate_limited).toBe(true);
+    urls = [];
+    await pollEvmAddresses(relayEnv, [WATCHED], { ...base, fetchFn: async (u) => { urls.push(u); return new Response('', { status: 404 }); } });
+    expect(urls.length).toBe(1); // a 404 is not a route problem
   });
 
   it('keeps Ethereum addresses out of the Bitcoin poll loop', () => {
