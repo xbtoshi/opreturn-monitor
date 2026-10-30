@@ -134,6 +134,7 @@ describe('pollEvmAddresses', () => {
       return url.includes('?') ? page(null) : page({ index: 174 });
     };
     const deps = {
+      gapMs: 0,
       fetchFn,
       insert: async (r: NewMessage) => (stored.has(r.txid) ? false : (stored.set(r.txid, r), true)),
       known: async (txids: string[]) => new Set(txids.filter((x) => stored.has(x))),
@@ -159,6 +160,7 @@ describe('pollEvmAddresses', () => {
   it('skips a malformed item without losing the rest of the page', async () => {
     const body = { items: [null, { nope: 1 }, ...fixture.items], next_page_params: null };
     const res = await pollEvmAddresses(env, [WATCHED], {
+      gapMs: 0,
       fetchFn: async () => new Response(JSON.stringify(body), { status: 200 }),
       insert: async () => true,
       known: async () => new Set<string>(),
@@ -175,6 +177,7 @@ describe('pollEvmAddresses', () => {
     expect(calls).toBe(0);
     const urls: string[] = [];
     await pollEvmAddresses({ ...env, ETH_BLOCKSCOUT_URL: 'https://bs.test///' }, [WATCHED], {
+      gapMs: 0,
       fetchFn: async (u) => { urls.push(u); return page(null); },
       insert: async () => false,
       known: async () => new Set<string>(),
@@ -182,6 +185,36 @@ describe('pollEvmAddresses', () => {
       setState: async () => undefined,
     });
     expect(urls).toEqual(['https://bs.test/api/v2/addresses/' + WATCHED.toLowerCase() + '/transactions']);
+  });
+
+  it('stops the whole poll on a 429, fetching every newest page before any backlog', async () => {
+    const urls: string[] = [];
+    const state: Record<string, string> = {};
+    const res = await pollEvmAddresses(env, [WATCHED, '0x8532FA14ACAf483729C449b8458aedDb900543D4', '0xc887aF690E0301CD4edBbCe8F8d31b4EC65B286A'], {
+      gapMs: 0,
+      fetchFn: async (u) => { urls.push(u); return u.includes('0x8532') ? new Response('slow down', { status: 429 }) : page({ index: 1 }); },
+      insert: async () => true,
+      known: async () => new Set<string>(),
+      getState: async () => ({}),
+      setState: async (k, v) => { state[k] = v; },
+    });
+    expect(urls.length).toBe(2); // 0x5227 newest, then 0x8532 → 429, nothing after
+    expect(res).toMatchObject({ failed: 2, pages: 0 });
+    expect(JSON.parse(state.evm_last_run)).toMatchObject({ rate_limited: true });
+  });
+
+  it('sends the optional API key and fetches newest pages before older ones', async () => {
+    const urls: string[] = [];
+    await pollEvmAddresses({ ...env, ETH_BLOCKSCOUT_API_KEY: 'k1' }, [WATCHED, '0xc887aF690E0301CD4edBbCe8F8d31b4EC65B286A'], {
+      gapMs: 0,
+      fetchFn: async (u) => { urls.push(u); return page(u.includes('index') ? null : { index: 9 }); },
+      insert: async () => true,
+      known: async () => new Set<string>(),
+      getState: async () => ({}),
+      setState: async () => undefined,
+    });
+    expect(urls.every((u) => u.includes('apikey=k1'))).toBe(true);
+    expect(urls.map((u) => (u.includes('index=9') ? 'old' : 'new'))).toEqual(['new', 'new', 'old', 'old']);
   });
 
   it('keeps Ethereum addresses out of the Bitcoin poll loop', () => {

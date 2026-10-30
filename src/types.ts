@@ -120,6 +120,8 @@ export interface Env {
   INDEXNOW_HOST?: string;
   /** Blockscout instance for the Ethereum board (default https://eth.blockscout.com). */
   ETH_BLOCKSCOUT_URL?: string;
+  /** Optional free Blockscout API key; the keyless limit is shared across Cloudflare egress IPs. */
+  ETH_BLOCKSCOUT_API_KEY?: string;
   /** "0" stops polling Ethereum addresses (kill switch); unset or anything else = enabled. */
   EVM_POLL?: string;
 }

@@ -151,18 +151,27 @@ export function blockscoutBase(env: Pick<Env, 'ETH_BLOCKSCOUT_URL'>): string {
   return (env.ETH_BLOCKSCOUT_URL || 'https://eth.blockscout.com').replace(/\/+$/, '');
 }
 
+export class BlockscoutError extends Error {
+  constructor(public status: number, address: string) {
+    super(`blockscout ${status} for ${address}`);
+  }
+}
+
 export async function fetchPage(
   base: string,
   address: string,
   params: Record<string, unknown> | null,
-  fetchFn: FetchLike = fetch
+  fetchFn: FetchLike = fetch,
+  apiKey?: string
 ): Promise<BlockscoutPage> {
-  const qs = params ? '?' + new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString() : '';
+  const entries = Object.entries(params || {}).map(([k, v]): [string, string] => [k, String(v)]);
+  if (apiKey) entries.push(['apikey', apiKey]);
+  const qs = entries.length ? '?' + new URLSearchParams(entries).toString() : '';
   const res = await fetchFn(`${base}/api/v2/addresses/${address}/transactions${qs}`, {
     headers: { accept: 'application/json', 'user-agent': 'opreturn.xyz (+https://opreturn.xyz)' },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`blockscout ${res.status} for ${address}`);
+  if (!res.ok) throw new BlockscoutError(res.status, address);
   const body = (await res.json()) as Partial<BlockscoutPage>;
   if (!Array.isArray(body.items)) throw new Error(`blockscout: no items for ${address}`);
   return { items: body.items, next_page_params: body.next_page_params ?? null };
@@ -182,14 +191,20 @@ export interface EvmDeps {
   insert?: (row: db.NewMessage) => Promise<boolean>;
   /** Which of these txids are already stored (one query per page instead of one write per row). */
   known?: (txids: string[]) => Promise<Set<string>>;
+  /** Pause between requests (tests pass 0). */
+  gapMs?: number;
   getState?: () => Promise<Record<string, string>>;
   setState?: (key: string, value: string) => Promise<void>;
 }
 
+/** Pause between Blockscout requests; the keyless limit is shared by every Worker on the same egress IPs. */
+const REQUEST_GAP_MS = 1000;
+
 /**
- * Poll every watched Ethereum address: the newest page each run, plus up to
- * three older pages until the history is in. One failing address never stops
- * the others. EVM_POLL = "0" turns it off.
+ * Poll every watched Ethereum address, one request at a time: first the
+ * newest page of each address, then older pages until each history is in.
+ * A 429 ends the poll for this run (no hammering); any other failure only
+ * skips that address. EVM_POLL = "0" turns it off.
  */
 export async function pollEvmAddresses(env: Env, addresses: string[], deps: EvmDeps = {}): Promise<EvmPollResult> {
   const out: EvmPollResult = { inserted: 0, failed: 0 };
@@ -199,10 +214,15 @@ export async function pollEvmAddresses(env: Env, addresses: string[], deps: EvmD
   const getState = deps.getState ?? (() => db.getIngestState(env.DB));
   const setState = deps.setState ?? ((key: string, value: string) => db.setIngestState(env.DB, { [key]: value }));
   const known = deps.known ?? ((txids: string[]) => db.knownTxids(env.DB, txids));
+  const gap = deps.gapMs ?? REQUEST_GAP_MS;
   const base = blockscoutBase(env);
+  const apiKey = env.ETH_BLOCKSCOUT_API_KEY || undefined;
   const started = Date.now();
-  let pages = 0;
   const state = await getState().catch(() => ({} as Record<string, string>));
+  const errors: string[] = [];
+  let pages = 0;
+  let requests = 0;
+  let limited = false;
 
   const storePage = async (page: BlockscoutPage, watched: string): Promise<number> => {
     // One malformed item must not drop the rest of the page.
@@ -218,35 +238,51 @@ export async function pollEvmAddresses(env: Env, addresses: string[], deps: EvmD
     return n;
   };
 
-  const results = await Promise.allSettled(
-    addresses.map(async (raw) => {
-      const address = raw.toLowerCase();
-      const key = `evm_backfill:${address}`;
-      const newest = await fetchPage(base, address, null, fetchFn);
-      let inserted = await storePage(newest, address);
-      let cursor = startCursor(state[key], newest);
-      const backlogStart = Date.now();
-      for (let i = 0; i < BACKFILL_PAGES_PER_RUN && cursor !== 'done' && Date.now() - backlogStart < BACKFILL_BUDGET_MS; i++) {
-        const page = await fetchPage(base, address, cursor, fetchFn);
-        pages++;
-        inserted += await storePage(page, address);
-        cursor = page.next_page_params ?? 'done';
-        await setState(key, cursor === 'done' ? 'done' : JSON.stringify(cursor));
-      }
-      return inserted;
-    })
-  );
-  for (const r of results) {
-    if (r.status === 'fulfilled') out.inserted += r.value;
-    else {
-      out.failed++;
-      console.error('evm poll:', String(r.reason).slice(0, 200));
+  /** One request; null when it failed (recorded) or the run is rate-limited. */
+  const get = async (address: string, params: Record<string, unknown> | null): Promise<BlockscoutPage | null> => {
+    if (limited) return null;
+    if (requests++ > 0 && gap > 0) await new Promise((r) => setTimeout(r, gap));
+    try {
+      return await fetchPage(base, address, params, fetchFn, apiKey);
+    } catch (e) {
+      if (e instanceof BlockscoutError && e.status === 429) limited = true;
+      errors.push(String(e).slice(0, 120));
+      console.error('evm poll:', String(e).slice(0, 200));
+      return null;
+    }
+  };
+
+  const newest = new Map<string, BlockscoutPage>();
+  const failed = new Set<string>();
+  for (const raw of addresses) {
+    const address = raw.toLowerCase();
+    const page = await get(address, null);
+    if (!page) {
+      failed.add(address);
+      continue;
+    }
+    newest.set(address, page);
+    out.inserted += await storePage(page, address);
+  }
+
+  const backlogStart = Date.now();
+  for (const [address, first] of newest) {
+    const key = `evm_backfill:${address}`;
+    let cursor = startCursor(state[key], first);
+    for (let i = 0; i < BACKFILL_PAGES_PER_RUN && cursor !== 'done' && Date.now() - backlogStart < BACKFILL_BUDGET_MS; i++) {
+      const page = await get(address, cursor);
+      if (!page) break;
+      pages++;
+      out.inserted += await storePage(page, address);
+      cursor = page.next_page_params ?? 'done';
+      await setState(key, cursor === 'done' ? 'done' : JSON.stringify(cursor));
     }
   }
+
+  out.failed = failed.size;
   out.pages = pages;
   out.ms = Date.now() - started;
   // The scheduled handler does not log its summary; leave a trace like the classifier does.
-  const errors = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected').map((r) => String(r.reason).slice(0, 120));
-  await setState('evm_last_run', JSON.stringify({ at: new Date().toISOString(), ...out, errors })).catch(() => undefined);
+  await setState('evm_last_run', JSON.stringify({ at: new Date().toISOString(), ...out, rate_limited: limited, errors })).catch(() => undefined);
   return out;
 }
