@@ -9,6 +9,8 @@ export interface Collection {
 export interface CollectionWithStats extends Collection {
   address_count: number;
   message_count: number;
+  /** 'eth' when the collection watches Ethereum addresses (only the Binance hack board), else 'btc'. */
+  chain?: 'btc' | 'eth';
 }
 
 export interface Address {
@@ -116,6 +118,10 @@ export interface Env {
   INDEXNOW_HUB_URL?: string;
   /** The host the hub enrolled us under (defaults to SITE_URL's host). */
   INDEXNOW_HOST?: string;
+  /** Blockscout instance for the Ethereum board (default https://eth.blockscout.com). */
+  ETH_BLOCKSCOUT_URL?: string;
+  /** "0" stops polling Ethereum addresses (kill switch); unset or anything else = enabled. */
+  EVM_POLL?: string;
 }
 
 export interface RunSummary {
@@ -135,4 +141,7 @@ export interface RunSummary {
   phase_ms: Record<string, number>;
   /** IndexNow push result for this run (see src/indexnow.ts). */
   indexnow?: { skipped?: string; attempted: number; queued: number; error?: string };
+  /** Ethereum board poll (src/evm.ts): new rows and failed address fetches this run. */
+  evm_inserted?: number;
+  evm_failed?: number;
 }

@@ -1,6 +1,7 @@
 import { classifyBatch } from './classify';
 import { pushIndexNow } from './indexnow';
 import * as db from './db';
+import { isEvmAddress, pollEvmAddresses } from './evm';
 import { ingestBlocks } from './ingest';
 import {
   blockHeightFromTx,
@@ -65,7 +66,10 @@ export async function runCron(env: Env): Promise<RunSummary> {
   let skipped = 0;
   let failedFetches = 0;
 
-  const addresses = await db.listAddresses(env.DB);
+  const all = await db.listAddresses(env.DB);
+  // Ethereum addresses (the Binance hack board) never reach the Bitcoin mempool API.
+  const addresses = all.filter((a) => !isEvmAddress(a.address));
+  const evmAddresses = all.filter((a) => isEvmAddress(a.address)).map((a) => a.address);
 
   // Fetch a few addresses at a time (the network wait dominates), then write
   // each address's rows sequentially so D1 sees a steady stream.
@@ -126,6 +130,11 @@ export async function runCron(env: Env): Promise<RunSummary> {
   }
 
   lap('poll');
+  const evm = await pollEvmAddresses(env, evmAddresses).catch((e) => {
+    console.error('evm poll:', String(e).slice(0, 200));
+    return { inserted: 0, failed: evmAddresses.length };
+  });
+  lap('evm');
   const reparsed = await reparseLegacy(env.DB, REPARSE_PER_RUN);
   // The tag sweep is a GROUP BY over all text rows; four times an hour is plenty.
   if (new Date().getMinutes() % 15 < 3) await sweepTags(env.DB);
@@ -149,6 +158,8 @@ export async function runCron(env: Env): Promise<RunSummary> {
     reparsed,
     details_filled: detailsFilled,
     blocks_ingested: blocksIngested,
+    evm_inserted: evm.inserted,
+    evm_failed: evm.failed,
     indexnow,
     took_ms: Date.now() - started,
     phase_ms: phase,

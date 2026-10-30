@@ -17,6 +17,10 @@ var FV = (function () {
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
   function attr(s) { return esc(s); }
   function fmt(n) { return Number(n || 0).toLocaleString('en-US'); }
+  /* Ethereum rows (one scoped collection) are recognised by format: 0x + 64 hex tx hash, 0x + 40 hex address. */
+  function isEvmTx(h) { return /^0x[0-9a-fA-F]{64}$/.test(String(h || '')); }
+  function isEvmAddress(a) { return /^0x[0-9a-fA-F]{40}$/.test(String(a || '')); }
+  function txLink(m) { return isEvmTx(m.txid) ? 'https://etherscan.io/tx/' + m.txid : 'https://mempool.space/tx/' + m.txid; }
   function shortAddr(a) { a = String(a || ''); return a.length > 16 ? a.slice(0, 10) + '…' + a.slice(-4) : a; }
   function catCode(c) { return 'COL-' + ('0' + c).slice(-2); }
   function timeAgo(ts, now) {
@@ -265,7 +269,7 @@ var FV = (function () {
     if (text.length > 420) h += '<span class="readmore">… read full message →</span>';
     h += mediaHTML(splitMedia(m.content));
     h += '<div class="foot">' + voteGroup(s, m, false);
-    h += '<span class="chain">' + (m.block_height != null ? '<a href="/block/' + m.block_height + '">#' + fmt(m.block_height) + '</a>' : 'unconfirmed') + ' · <a href="/a/' + attr(m.address) + '">' + esc(shortAddr(m.address)) + '</a>' + (feeText(m) ? ' · ' + esc(feeText(m)) : '') + '</span>';
+    h += '<span class="chain">' + (isEvmTx(m.txid) ? '<a href="' + attr(txLink(m)) + '" target="_blank" rel="noopener">Ethereum ↗</a>' : m.block_height != null ? '<a href="/block/' + m.block_height + '">#' + fmt(m.block_height) + '</a>' : 'unconfirmed') + ' · <a href="/a/' + attr(m.address) + '">' + esc(shortAddr(m.address)) + '</a>' + (feeText(m) ? ' · ' + esc(feeText(m)) : '') + '</span>';
     h += '<a class="open" href="/m/' + attr(m.txid) + '">Open →</a></div></article>';
     return h;
   }
@@ -412,12 +416,14 @@ var FV = (function () {
       related.forEach(function (r) { h += '<a href="/m/' + attr(r.txid) + '"><span>' + esc(displayText(r).replace(/\n+/g, ' / ')) + '</span><span>' + esc(timeAgo(msgTime(r), s.now)) + '</span></a>'; });
       h += '</div>';
     }
-    h += '<p class="caption">Etched into the Bitcoin blockchain. It cannot be deleted, edited, or taken down.</p>';
+    var evm = isEvmTx(m.txid);
+    h += '<p class="caption">' + (evm ? 'Sent as Ethereum transaction input data. It cannot be deleted, edited, or taken down.' : 'Etched into the Bitcoin blockchain. It cannot be deleted, edited, or taken down.') + '</p>';
     h += '</div>';
     h += '<div class="facts"><span class="h">ON-CHAIN RECORD</span>';
     h += factRow('TXID', m.txid, true);
-    h += factRow('BLOCK', m.block_height != null ? '<a href="/block/' + m.block_height + '">#' + fmt(m.block_height) + '</a>' + (m.block_time != null ? ' · ' + dateOf(m.block_time) : '') : (m.is_mempool ? 'unconfirmed (in mempool)' : '—'));
-    h += factRow('FEE', (feeText(m) || '—') + (m.fee_sats != null ? ' · ' + fmtSats(m.fee_sats) + ' sats <span id="feeusd" style="display:block;line-height:1.45em;min-height:1.45em;color:var(--fg4)">' + esc(s.feeUsd || '') + '</span>' : ''));
+    if (evm) h += factRow('CHAIN', 'Ethereum' + (m.block_time != null ? ' · ' + dateOf(m.block_time) : ''));
+    else h += factRow('BLOCK', m.block_height != null ? '<a href="/block/' + m.block_height + '">#' + fmt(m.block_height) + '</a>' + (m.block_time != null ? ' · ' + dateOf(m.block_time) : '') : (m.is_mempool ? 'unconfirmed (in mempool)' : '—'));
+    if (!evm) h += factRow('FEE', (feeText(m) || '—') + (m.fee_sats != null ? ' · ' + fmtSats(m.fee_sats) + ' sats <span id="feeusd" style="display:block;line-height:1.45em;min-height:1.45em;color:var(--fg4)">' + esc(s.feeUsd || '') + '</span>' : ''));
     h += factRow('ADDRESS', m.address, true);
     if (m.sender && m.sender !== m.address) h += factRow('SENDER', m.sender, true);
     if (m.recipient && m.recipient !== m.address) h += factRow('RECIPIENT', m.recipient, true);
@@ -426,7 +432,7 @@ var FV = (function () {
     h += factRow('CATEGORY', proto ? '—' : (m.category ? '<a href="/cat/' + encodeURIComponent(catSlug(m.category)) + '">' + esc(m.category) + '</a> (AI)' : 'unclassified'));
     h += factRow('SIZE', byteSize(m.content));
     h += factRow('TIME', esc(timeAgo(msgTime(m), s.now)) + (m.block_time != null ? ' · ' + clock(m.block_time) : ''));
-    h += '<a class="ext" href="https://mempool.space/tx/' + attr(m.txid) + '" target="_blank" rel="noopener">VIEW ON MEMPOOL.SPACE ↗</a></div>';
+    h += '<a class="ext" href="' + attr(txLink(m)) + '" target="_blank" rel="noopener">' + (evm ? 'VIEW ON ETHERSCAN ↗' : 'VIEW ON MEMPOOL.SPACE ↗') + '</a></div>';
     h += '</div></main>';
     return h;
   }
@@ -465,6 +471,7 @@ var FV = (function () {
     var chat = s.chat || { messages: [], participants: [], nextBefore: null };
     var col = s.filter ? colById(s, s.filter) : null;
     var title = s.address ? s.address : (col ? col.name : 'Chat rooms');
+    var evmRoom = s.address ? isEvmAddress(s.address) : Boolean(col && col.chain === 'eth');
     var h = '<main class="page narrow"><div class="tt"><span class="kicker">CHAT ROOM · OLDEST TO NEWEST</span><h2 class="title page-title">' + esc(title) + '</h2></div>';
     h += '<div class="chips">'; (s.collections || []).forEach(function (c) { h += '<a class="chip' + (s.filter === c.id ? ' active' : '') + '" href="/c/' + attr(colSlug(c)) + '/chat">' + esc(shortCol(c)) + '</a>'; }); h += '</div>';
     var msgs = chat.messages || [];
@@ -482,8 +489,14 @@ var FV = (function () {
     var lastDay = '', lastSender = null, lastTs = 0;
     msgs.forEach(function (m) { var ts = tsOf(m); var day = dateOf(ts); if (day !== lastDay) { h += '<div class="day">' + day + '</div>'; lastDay = day; lastSender = null; } var sender = m.sender || ''; var first = sender !== lastSender || ts - lastTs > 600; h += bubbleHTML(s, m, first, multi); lastSender = sender; lastTs = ts; });
     h += '</div>';
-    h += '<div class="roomfoot"><span>New replies land with each block · <button class="clearall" data-action="share-room" style="padding:0">SHARE ROOM ↗</button></span><a class="etch" href="/guide">ETCH A REPLY →</a></div>';
-    h += '<p class="caption">Every bubble is an OP_RETURN output etched into Bitcoin. Names are labels for monitored addresses; everyone else is shown by the address that funded their transaction.</p></main>';
+    var share = '<button class="clearall" data-action="share-room" style="padding:0">SHARE ROOM ↗</button>';
+    if (evmRoom) {
+      h += '<div class="roomfoot"><span>New replies land as Ethereum transactions confirm · ' + share + '</span></div>';
+      h += '<p class="caption">Every bubble is the input data of an Ethereum transaction sent to or from the watched wallets. Names are labels for monitored addresses; everyone else is shown by the address that sent the transaction.</p></main>';
+    } else {
+      h += '<div class="roomfoot"><span>New replies land with each block · ' + share + '</span><a class="etch" href="/guide">ETCH A REPLY →</a></div>';
+      h += '<p class="caption">Every bubble is an OP_RETURN output etched into Bitcoin. Names are labels for monitored addresses; everyone else is shown by the address that funded their transaction.</p></main>';
+    }
     return h;
   }
 
@@ -508,7 +521,7 @@ var FV = (function () {
   return {
     CONTACT: CONTACT, contactHTML: contactHTML,
     HOSTILE: HOSTILE, PROTO_LABEL: PROTO_LABEL, PROTO_BLURB: PROTO_BLURB,
-    esc: esc, attr: attr, fmt: fmt, shortAddr: shortAddr, catCode: catCode, timeAgo: timeAgo, msgTime: msgTime, tsOf: tsOf, feeText: feeText, whenText: whenText,
+    esc: esc, attr: attr, fmt: fmt, isEvmTx: isEvmTx, isEvmAddress: isEvmAddress, txLink: txLink, shortAddr: shortAddr, catCode: catCode, timeAgo: timeAgo, msgTime: msgTime, tsOf: tsOf, feeText: feeText, whenText: whenText,
     shortCol: shortCol, colSlug: colSlug, catSlug: catSlug, catDot: catDot, protoLabel: protoLabel, protoBlurb: protoBlurb, isTokenProto: isTokenProto, isProto: isProto,
     fmtAmt: fmtAmt, primaryOp: primaryOp, splitMedia: splitMedia, mediaHTML: mediaHTML, parseCryptoEnvelope: parseCryptoEnvelope, displayText: displayText, opLine: opLine, envBadges: envBadges,
     colById: colById, colName: colName, colBySlug: colBySlug, colIndex: colIndex, catName: catName, voteGroup: voteGroup,

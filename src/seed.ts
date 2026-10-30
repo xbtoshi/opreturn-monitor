@@ -55,7 +55,8 @@ export async function ensureSeeded(db: D1Database): Promise<void> {
         .prepare(
           'INSERT INTO addresses (address, label, collection_id) VALUES (?, ?, ?) ON CONFLICT(address) DO UPDATE SET label = excluded.label'
         )
-        .bind(addr.address, addr.label, collectionId)
+        // Ethereum addresses are stored lowercase, matching Blockscout-derived sender/recipient.
+        .bind(/^0x[0-9a-fA-F]{40}$/.test(addr.address) ? addr.address.toLowerCase() : addr.address, addr.label, collectionId)
         .run();
     }
   }

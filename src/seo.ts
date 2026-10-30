@@ -107,7 +107,7 @@ export function generateLlmsTxt(siteUrl: string, guides: Array<{ slug: string; t
   const LEARN_INDEX = guides.map((g) => `- [${g.title}](${siteUrl}/learn/${g.slug}) — ${g.description}`).join('\n') || `- ${siteUrl}/learn`;
   return `# The Permanent Record — Bitcoin OP_RETURN Monitor
 
-> opreturn.xyz is a real-time, high-availability monitor and historical archive for arbitrary data and messages embedded inside the Bitcoin blockchain via OP_RETURN outputs. It tracks active bulletin boards, hacker communications, dormant wallet notices, and cultural memorials, with AI categorization and high-performance edge caching.
+> opreturn.xyz is a real-time, high-availability monitor and historical archive for arbitrary data and messages embedded inside the Bitcoin blockchain via OP_RETURN outputs. It tracks active bulletin boards, hacker communications, dormant wallet notices, and cultural memorials, with AI categorization and high-performance edge caching. One collection, the Binance Hack (Ethereum) Bulletin Board, is the exception: it archives Ethereum transaction input data sent to the October 2026 Binance exploiter wallets, and its message hashes and addresses are 0x-prefixed.
 
 ## What is Bitcoin OP_RETURN?
 
@@ -128,6 +128,7 @@ The archive focuses on addresses that have evolved into public bulletin boards:
 6. **Russian Intelligence Marking Campaign**: Addresses marked in 2022 via OP_RETURN as associated with GRU / SVR / FSB intelligence agencies.
 7. **Cultural Memorials & Digital Graffiti**: Permanent personal tributes, biblical verses, and vanity address communications.
 8. **Historical Hacker Negotiation Boards**: Historic addresses used for public bounty negotiations and victim-attacker dialogue.
+9. **Binance Hack (Ethereum) Bulletin Board**: Ethereum transaction input data (not OP_RETURN) sent to the four exploiter wallets people address after the 29 October 2026 Binance hot-wallet drain.
 
 ## Protocol Registry (full-chain explorer)
 
@@ -222,11 +223,12 @@ export function generateLlmsFullTxt(
 
 ## 1. System Architecture
 
-The Permanent Record is an edge-native Bitcoin OP_RETURN monitor built on:
+The Permanent Record is an edge-native Bitcoin OP_RETURN monitor. One collection, the Binance Hack (Ethereum) Bulletin Board, is the exception: it archives Ethereum transaction input data sent to the October 2026 Binance exploiter wallets, read from a public Blockscout instance, with 0x-prefixed hashes and addresses. It is built on:
 - **Cloudflare Workers**: High-performance V8 isolate runtime handling HTTP routing, content negotiation, and SSR.
 - **Cloudflare D1 (SQLite)**: Globally replicated database storing collections, monitored addresses, and classified messages.
 - **Hono**: Ultrafast, zero-dependency web framework.
 - **mempool.space API**: Multi-endpoint live blockchain polling (confirmed and unconfirmed mempool transactions).
+- **Blockscout API (eth.blockscout.com)**: Polls the Ethereum board's watched wallets for text input data.
 - **Edge Resvg (WASM)**: On-demand serverless generation of OpenGraph PNG social cards.
 - **Proof-of-Work Mining (16-bit SHA-256)**: Client-side spam mitigation for likes and address suggestions.
 
@@ -498,7 +500,7 @@ export function generateOpenApiJson(siteUrl: string): Record<string, unknown> {
       title: 'The Permanent Record API',
       version: '1.0.0',
       description:
-        'REST API for querying Bitcoin OP_RETURN messages, monitored addresses, curated collections, and classifications.',
+        'REST API for querying Bitcoin OP_RETURN messages, monitored addresses, curated collections, and classifications. One collection, the Binance Hack (Ethereum) Bulletin Board, is the exception: it archives Ethereum transaction input data sent to the October 2026 Binance exploiter wallets, and its message hashes and addresses are 0x-prefixed.',
     },
     servers: [{ url: siteUrl }],
     paths: {
@@ -1223,15 +1225,17 @@ export function buildMessageSchema(
   msg: Message,
   colName?: string
 ): Record<string, unknown> {
+  const evm = FV.isEvmTx(msg.txid);
+  const fallback = evm ? 'Ethereum input-data message' : 'Bitcoin OP_RETURN transmission';
   return {
     '@type': 'SocialMediaPosting',
     '@id': `${siteUrl}/m/${msg.txid}#post`,
     // Google's discussion-forum rules want the post's own URL and its text on the posting itself.
     url: `${siteUrl}/m/${msg.txid}`,
     mainEntityOfPage: { '@type': 'WebPage', '@id': `${siteUrl}/m/${msg.txid}` },
-    headline: msg.content ? `\u201c${stripDataUris(msg.content).slice(0, 100)}\u201d` : 'Bitcoin OP_RETURN transmission',
+    headline: msg.content ? `\u201c${stripDataUris(msg.content).slice(0, 100)}\u201d` : fallback,
     // An empty body must not become an empty required field.
-    text: stripDataUris(msg.content) || 'Bitcoin OP_RETURN transmission',
+    text: stripDataUris(msg.content) || fallback,
     articleBody: stripDataUris(msg.content) || undefined,
     datePublished: msg.block_time
       ? new Date(msg.block_time * 1000).toISOString()
@@ -1240,7 +1244,7 @@ export function buildMessageSchema(
     author: {
       '@type': 'Person',
       name: msg.sender ? shortAddr(msg.sender) : shortAddr(msg.address),
-      url: `https://mempool.space/address/${msg.sender || msg.address}`,
+      url: evm ? `https://etherscan.io/address/${msg.sender || msg.address}` : `https://mempool.space/address/${msg.sender || msg.address}`,
     },
     publisher: {
       '@type': 'Organization',
@@ -1249,7 +1253,7 @@ export function buildMessageSchema(
     },
     isPartOf: {
       '@type': 'CollectionPage',
-      name: colName || 'Bitcoin OP_RETURN transmissions',
+      name: colName || (evm ? 'Ethereum input-data messages' : 'Bitcoin OP_RETURN transmissions'),
       url: `${siteUrl}/collections`,
     },
     interactionStatistic: {
@@ -1301,7 +1305,7 @@ export function renderLandingMarkdown(
     md += `> \u201c${featuredMsg.content || ''}\u201d\n\n`;
     md += `- **Collection**: ${colName || 'Monitored address'}\n`;
     md += `- **Address**: \`${featuredMsg.address}\`\n`;
-    md += `- **Transaction**: [${featuredMsg.txid}](https://mempool.space/tx/${featuredMsg.txid})\n`;
+    md += `- **Transaction**: [${featuredMsg.txid}](${FV.txLink(featuredMsg)})\n`;
     md += `- **Likes**: ${featuredMsg.likes}\n`;
     md += `- **Artifact Link**: ${siteUrl}/m/${featuredMsg.txid}\n\n`;
   }
@@ -1399,11 +1403,13 @@ export function renderMessageMarkdown(
   msg: Message,
   colName?: string
 ): string {
-  let md = `# Bitcoin OP_RETURN Artifact\n\n`;
-  md += `> \u201c${msg.content || 'OP_RETURN'}\u201d\n\n`;
+  const evm = FV.isEvmTx(msg.txid);
+  let md = evm ? `# Ethereum Input-Data Message\n\n` : `# Bitcoin OP_RETURN Artifact\n\n`;
+  md += `> \u201c${msg.content || (evm ? 'input data' : 'OP_RETURN')}\u201d\n\n`;
   if (colName) md += `- **Collection**: ${colName}\n`;
   md += `- **Address**: \`${msg.address}\`\n`;
-  md += `- **Transaction**: [${msg.txid}](https://mempool.space/tx/${msg.txid})\n`;
+  md += `- **Transaction**: [${msg.txid}](${FV.txLink(msg)})\n`;
+  if (evm) md += `- **Chain**: Ethereum (transaction input data)\n`;
   md += `- **Status**: ${msg.is_mempool ? 'In Mempool' : 'Confirmed'}\n`;
   md += `- **Likes**: ${msg.likes}\n`;
   if (msg.category) md += `- **Category**: ${msg.category}\n`;
@@ -1412,9 +1418,10 @@ export function renderMessageMarkdown(
 }
 
 export function renderAddressMarkdown(siteUrl: string, address: string): string {
-  let md = `# Bitcoin Address Record: ${address}\n\n`;
-  md += `Every archived OP_RETURN message sent to \`${address}\`.\n\n`;
-  md += `- [View on mempool.space](https://mempool.space/address/${address})\n`;
+  const evm = FV.isEvmAddress(address);
+  let md = evm ? `# Ethereum Address Record: ${address}\n\n` : `# Bitcoin Address Record: ${address}\n\n`;
+  md += evm ? `Every archived Ethereum input-data message sent to or from \`${address}\`.\n\n` : `Every archived OP_RETURN message sent to \`${address}\`.\n\n`;
+  md += evm ? `- [View on Etherscan](https://etherscan.io/address/${address})\n` : `- [View on mempool.space](https://mempool.space/address/${address})\n`;
   md += `- [View Chat Stream](${siteUrl}/a/${encodeURIComponent(address)}/chat)\n`;
   return md;
 }
@@ -1425,13 +1432,13 @@ export function renderCategoryMarkdown(
   count: number
 ): string {
   let md = `# Category: ${categoryName}\n\n`;
-  md += `${count} archived Bitcoin OP_RETURN messages classified under this taxonomy.\n\n`;
+  md += `${count} archived messages classified under this taxonomy: Bitcoin OP_RETURN text, plus the one Ethereum board.\n\n`;
   md += `- [Browse Feed](${siteUrl}/feed)\n`;
   return md;
 }
 
 export function renderFeedMarkdown(siteUrl: string): string {
-  return `# All Transmissions — The Permanent Record\n\nHuman messages from every block of the Bitcoin chain, plus decoded token, bridge and sidechain protocols.\n\n- [Collections](${siteUrl}/collections)\n- [Field Manual](${siteUrl}/guide)\n- [API Specification](${siteUrl}/llms.txt)\n- Feed API: ${siteUrl}/api/messages?kind=all\n`;
+  return `# All Transmissions — The Permanent Record\n\nHuman messages from every block of the Bitcoin chain, plus decoded token, bridge and sidechain protocols, and the Binance hack board's Ethereum messages.\n\n- [Collections](${siteUrl}/collections)\n- [Field Manual](${siteUrl}/guide)\n- [API Specification](${siteUrl}/llms.txt)\n- Feed API: ${siteUrl}/api/messages?kind=all\n`;
 }
 
 // ---------------------------------------------------------------------------

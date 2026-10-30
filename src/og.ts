@@ -262,7 +262,9 @@ export function messageCardSvg(msg: Message, colName: string): string {
   svg += `<text x="${RX}" y="582" text-anchor="end" font-family="${MONO}" font-size="24" font-weight="600" fill="${SIG}">${likes}</text>`;
   const hx = RX - lw - 24;
   svg += heart(hx, 562, 22, SIG);
-  if (msg.fee_rate != null) {
+  if (/^0x[0-9a-fA-F]{64}$/.test(msg.txid)) {
+    svg += `<text x="${(hx - 12).toFixed(0)}" y="582" text-anchor="end" font-family="${MONO}" font-size="20" letter-spacing="2" fill="${MUTED}">ETHEREUM</text>`;
+  } else if (msg.fee_rate != null) {
     svg += `<text x="${(hx - 12).toFixed(0)}" y="582" text-anchor="end" font-family="${MONO}" font-size="20" fill="${MUTED}">${esc(msg.fee_rate + ' sat/vB')}</text>`;
   }
   return svg + '</svg>';

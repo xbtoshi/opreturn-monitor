@@ -43,7 +43,7 @@ export interface FeedView {
   nextBefore?: string | null;
   feedError?: string | null;
   newBlock?: { height: number; rows: FeedMessage[] } | null;
-  collections?: Array<{ id: number; name: string; slug?: string | null; description?: string | null; message_count?: number }>;
+  collections?: Array<{ id: number; name: string; slug?: string | null; description?: string | null; message_count?: number; chain?: 'btc' | 'eth' }>;
   categories?: Array<{ category: string; count: number }>;
   protocols?: Array<{ protocol: string; count: number }>;
   ticks?: Array<{ tick: string; protocol: string; count: number }>;
@@ -90,6 +90,12 @@ declare const FV: {
   esc(s: unknown): string;
   attr(s: unknown): string;
   fmt(n: number | null | undefined): string;
+  /** Ethereum tx hash (0x + 64 hex). The one Ethereum collection is recognised by format. */
+  isEvmTx(h: string | null | undefined): boolean;
+  /** Ethereum address (0x + 40 hex). */
+  isEvmAddress(a: string | null | undefined): boolean;
+  /** Block explorer URL for a row: Etherscan for Ethereum, mempool.space for Bitcoin. */
+  txLink(m: { txid: string }): string;
   shortAddr(a: string | null | undefined): string;
   catCode(n: number): string;
   timeAgo(ts: number | string | null | undefined, now?: number): string;

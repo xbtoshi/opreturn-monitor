@@ -121,6 +121,7 @@ async function loadCollections(db: D1Database): Promise<CollectionWithStats[]> {
     .prepare(
       `SELECT c.id, c.name, c.description, c.slug, c.created_at,
               (SELECT COUNT(*) FROM addresses a WHERE a.collection_id = c.id) AS address_count,
+              (SELECT COUNT(*) FROM addresses a WHERE a.collection_id = c.id AND a.address LIKE '0x%') AS evm_count,
               (SELECT COUNT(*) FROM messages m
                  JOIN addresses a ON a.address = m.monitored_address
                 WHERE a.collection_id = c.id) AS message_count
@@ -137,6 +138,7 @@ async function loadCollections(db: D1Database): Promise<CollectionWithStats[]> {
     created_at: str(r, 'created_at'),
     address_count: num(r, 'address_count'),
     message_count: num(r, 'message_count'),
+    chain: num(r, 'evm_count') > 0 ? ('eth' as const) : ('btc' as const),
   }));
 }
 
@@ -260,6 +262,8 @@ export interface GetMessagesOpts {
   kind?: 'text' | 'all';
   /** Only rows mined in this block. */
   blockHeight?: number;
+  /** 'btc' leaves out the Ethereum board's rows (the landing page speaks only about Bitcoin). */
+  chain?: 'btc';
   sort: 'hot' | 'new';
   limit: number;
   /** Opaque keyset cursor from a previous page's next_before ("likes:ts:id"). */
@@ -325,6 +329,7 @@ function messageFilters(opts: {
   category?: string;
   kind?: 'text' | 'all';
   blockHeight?: number;
+  chain?: 'btc';
 }): {
   where: string[];
   params: unknown[];
@@ -350,6 +355,7 @@ function messageFilters(opts: {
     where.push('m.block_height = ?');
     params.push(opts.blockHeight);
   }
+  if (opts.chain === 'btc') where.push("m.txid NOT LIKE '0x%'");
   return { where, params };
 }
 
@@ -472,6 +478,7 @@ async function getMessagesByBranches(
     baseParams.push(opts.category);
   }
   if (opts.kind === 'text') baseWhere.push("m.protocol = 'text'");
+  if (opts.chain === 'btc') baseWhere.push("m.txid NOT LIKE '0x%'");
   if (opts.blockHeight != null) {
     baseWhere.push('m.block_height = ?');
     baseParams.push(opts.blockHeight);
@@ -748,6 +755,11 @@ export interface NewMessage {
   monitored_address: string | null;
   content_hash: string;
   ops: DecodedOp[];
+  /**
+   * Starting value for detail_tries. Ethereum rows arrive complete from Blockscout and pass 3,
+   * which keeps them out of the mempool.space detail backfill (partial index: detail_tries < 3).
+   */
+  detail_tries?: number;
 }
 
 export interface GroupKey {
@@ -763,8 +775,8 @@ export function insertMessageStatements(db: D1Database, msg: NewMessage): D1Prep
       .prepare(
         `INSERT OR IGNORE INTO messages
            (txid, address, content, is_mempool, raw_hex, fee_sats, fee_rate, block_time, block_height, sender,
-            protocol, recipient, monitored_address, content_hash, ts)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            protocol, recipient, monitored_address, content_hash, ts, detail_tries)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         msg.txid,
@@ -781,7 +793,8 @@ export function insertMessageStatements(db: D1Database, msg: NewMessage): D1Prep
         msg.recipient,
         msg.monitored_address,
         msg.content_hash,
-        ts
+        ts,
+        msg.detail_tries ?? 0
       ),
   ];
   // Runes / opaque payloads are census-only: they never become ops rows, so
@@ -999,7 +1012,7 @@ export async function listTextRowsForReparse(db: D1Database, after: number, limi
   const { results } = await db
     .prepare(
       `SELECT id, txid, address, content, ts, protocol FROM messages
-        WHERE id > ? AND (protocol = 'text' OR protocol IS NULL) ORDER BY id ASC LIMIT ?`
+        WHERE id > ? AND (protocol = 'text' OR protocol IS NULL) AND txid NOT LIKE '0x%' ORDER BY id ASC LIMIT ?`
     )
     .bind(after, limit)
     .all<Record<string, unknown>>();
@@ -1064,7 +1077,7 @@ export async function listFrequentTokenGroups(db: D1Database, min: number, limit
   const { results } = await db
     .prepare(
       `SELECT address, content_hash, MIN(content) AS content, COUNT(*) AS n FROM messages
-        WHERE protocol = 'text' AND content_hash IS NOT NULL
+        WHERE protocol = 'text' AND content_hash IS NOT NULL AND txid NOT LIKE '0x%'
           AND length(content) BETWEEN 2 AND 12 AND content NOT LIKE '% %' AND content NOT LIKE '%' || char(10) || '%'
         GROUP BY address, content_hash HAVING n >= ?
         ORDER BY n DESC LIMIT ?`
@@ -1116,7 +1129,7 @@ export interface DetailRow {
  */
 export async function listMessagesNeedingDetail(db: D1Database, limit: number): Promise<DetailRow[]> {
   const base = `SELECT txid, address, content_hash FROM messages
-        WHERE detail_tries < 3 AND (sender IS NULL OR recipient IS NULL OR fee_sats IS NULL)`;
+        WHERE detail_tries < 3 AND (sender IS NULL OR recipient IS NULL OR fee_sats IS NULL) AND txid NOT LIKE '0x%'`;
   const rows: DetailRow[] = [];
   // Two bounded passes so each walks the partial index in id order instead of sorting the backlog.
   for (const cond of ["AND protocol = 'text'", "AND (protocol IS NULL OR protocol != 'text')"]) {

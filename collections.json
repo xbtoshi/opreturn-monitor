@@ -186,5 +186,28 @@
         "label": "Mt. Gox related (also appears in dormant notices)"
       }
     ]
+  },
+  {
+    "name": "Binance Hack (Ethereum) Bulletin Board",
+    "description": "The archive's only non-Bitcoin board. On 29 October 2026 Binance hot wallets were drained across several chains; on Ethereum the funds landed in wallets Etherscan labels \"Binance Hot Wallet Exploiter\". People write to the attacker by sending Ethereum transactions whose input data is plain text: victims' pleas, begging, praise, insults, offers. These are the four exploiter wallets people actually address (checked on 30 October 2026); the other labelled wallets only receive one sender's identical text every few minutes. Messages here are Ethereum input data, not OP_RETURN outputs.",
+    "slug": "binance-hack-ethereum-bulletin-board",
+    "addresses": [
+      {
+        "address": "0x5227f603c1ee34ce3c06efe6477003bdfccb2f8c",
+        "label": "Binance Hot Wallet Exploiter 2 (main sweep receiver)"
+      },
+      {
+        "address": "0x8532fa14acaf483729c449b8458aeddb900543d4",
+        "label": "Binance Hot Wallet Exploiter 8 (195,460 ETH)"
+      },
+      {
+        "address": "0xc887af690e0301cd4edbbce8f8d31b4ec65b286a",
+        "label": "Binance Hot Wallet Exploiter 19"
+      },
+      {
+        "address": "0x7c8601d4645b93cea45f71e118a729332e6b5ca0",
+        "label": "Binance Hot Wallet Exploiter (attacker's first wallet)"
+      }
+    ]
   }
 ]

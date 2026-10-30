@@ -9,6 +9,7 @@ import { fetchHistoricalPriceUsd, mempoolHosts } from './mempool';
 import { ingestOne, ingestStatus, resetIngestCursors } from './ingest';
 import { TAG_MIN_REPEATS, backfillDetails, reparseLegacy, reparseTextRows, sweepTags } from './cron';
 import { protocolLabel } from './protocols';
+import { isEvmAddress, normAddress } from './evm';
 import { getGuide, guideJsonLd, guideMinutes, listGuides, loadFacts, renderGuide, renderGuideHtml, renderLearnIndexHtml } from './learn';
 import { EXPLORER_PATH, EXPLORER_TITLE, explorerJsonLd, parseExplorer, renderExplorer, renderExplorerHtml } from './explorer';
 import explorerSrc from '../content/pages/bitcoin-op-return-explorer.md';
@@ -111,7 +112,7 @@ async function refreshShell(d1: D1Database, origin: string): Promise<void> {
           collections: cols.length,
         },
         feed: {
-          collections: cols.map((col) => ({ id: col.id, name: col.name, slug: col.slug, description: col.description, message_count: col.message_count })),
+          collections: cols.map((col) => ({ id: col.id, name: col.name, slug: col.slug, description: col.description, message_count: col.message_count, chain: col.chain })),
           categories,
           protocols: protocols.filter((p) => p.protocol !== 'text'),
           chain: { ...stats, recent },
@@ -236,7 +237,7 @@ app.get('/api/collections', async (c) => {
 app.get('/api/messages', async (c) => {
   const rawCollection = c.req.query('collection_id');
   const collectionId = rawCollection ? Number(rawCollection) : undefined;
-  const address = c.req.query('address') || undefined;
+  const address = c.req.query('address') ? normAddress(c.req.query('address')!) : undefined;
   const rawCategory = c.req.query('category');
   const category = rawCategory ? categoryFromSlug(rawCategory) ?? undefined : undefined;
   const sort = c.req.query('sort') === 'hot' ? ('hot' as const) : ('new' as const);
@@ -371,7 +372,7 @@ app.get('/api/block/:height', async (c) => {
 app.get('/api/chat', async (c) => {
   const rawCollection = c.req.query('collection_id');
   const collectionId = rawCollection ? Number(rawCollection) : undefined;
-  const address = c.req.query('address') || undefined;
+  const address = c.req.query('address') ? normAddress(c.req.query('address')!) : undefined;
   if (!collectionId && !address) return c.json({ error: 'collection_id or address required' }, 400);
   const limit = Math.min(Math.max(Number(c.req.query('limit')) || 200, 1), 200);
   const before = c.req.query('before') || undefined;
@@ -1383,7 +1384,7 @@ app.get('/', async (c) => {
     const [cols, addrs, feedRes] = await Promise.all([
       db.listCollections(c.env.DB).catch(() => []),
       db.listAddresses(c.env.DB).catch(() => []),
-      db.getMessages(c.env.DB, { sort: 'hot', limit: 1, kind: 'text' }).catch(() => ({ messages: [] })),
+      db.getMessages(c.env.DB, { sort: 'hot', limit: 1, kind: 'text', chain: 'btc' }).catch(() => ({ messages: [] })),
     ]);
     const feat = feedRes.messages[0] || null;
     const cmap = new Map(cols.map((col) => [col.id, col.name]));
@@ -1401,8 +1402,8 @@ app.get('/', async (c) => {
   const [cols, addrs, feedRes, liveRes, chain, protocols, categories] = await Promise.all([
     db.listCollections(c.env.DB).catch(() => []),
     db.listAddresses(c.env.DB).catch(() => []),
-    db.getMessages(c.env.DB, { sort: 'hot', limit: 1, kind: 'text' }).catch(() => ({ messages: [] })),
-    db.getMessages(c.env.DB, { sort: 'new', limit: 4, kind: 'text' }).catch(() => ({ messages: [] })),
+    db.getMessages(c.env.DB, { sort: 'hot', limit: 1, kind: 'text', chain: 'btc' }).catch(() => ({ messages: [] })),
+    db.getMessages(c.env.DB, { sort: 'new', limit: 4, kind: 'text', chain: 'btc' }).catch(() => ({ messages: [] })),
     db.getChainStats(c.env.DB).catch(() => null),
     db.listProtocols(c.env.DB).catch(() => []),
     db.listCategories(c.env.DB).catch(() => []),
@@ -1456,7 +1457,7 @@ app.get('/feed', async (c) => {
   return c.html(
     renderIndex({
       title: 'All transmissions \u2014 The Permanent Record',
-      description: 'Every monitored OP_RETURN message, live from the Bitcoin chain.',
+      description: 'Every monitored message, live from the Bitcoin chain, plus the Binance hack board on Ethereum.',
       url: origin + '/feed',
       image: origin + '/og/default.png',
       jsonLd: crumbs,
@@ -1689,6 +1690,8 @@ app.get('/guide', async (c) => {
 
 app.get('/m/:txid', async (c) => {
   const txid = c.req.param('txid')!;
+  if (/^0x[0-9a-fA-F]{64}$/.test(txid) && txid !== txid.toLowerCase()) return c.redirect(`/m/${txid.toLowerCase()}`, 301);
+  const evm = FV.isEvmTx(txid);
   const msg = await db.getMessageByTxid(c.env.DB, txid);
   const origin = originOf(c);
   if (!msg) {
@@ -1743,14 +1746,14 @@ app.get('/m/:txid', async (c) => {
   // Twins of the same message to the same address share one canonical page.
   const rep = msg.is_dup ? await db.getRepresentativeTxid(c.env.DB, msg.id).catch(() => null) : null;
   const descBits = [
-    isProto ? `${protocolLabel(msg.protocol as string)} OP_RETURN transaction` : 'Bitcoin OP_RETURN message',
+    isProto ? `${protocolLabel(msg.protocol as string)} OP_RETURN transaction` : evm ? 'Ethereum input-data message' : 'Bitcoin OP_RETURN message',
     colName ? `in ${colName}` : `to ${shortAddr(msg.address)}`,
     msg.block_height != null ? `block ${msg.block_height.toLocaleString()}` : when,
     isProto ? messageExcerpt(msg, 90) : `${msg.likes} likes`,
   ];
   return c.html(
     renderIndex({
-      title: isProto ? `${headline} \u2014 Bitcoin OP_RETURN` : `${headline} \u2014 OP_RETURN message`,
+      title: isProto ? `${headline} \u2014 Bitcoin OP_RETURN` : evm ? `${headline} \u2014 on-chain message (Ethereum)` : `${headline} \u2014 OP_RETURN message`,
       description: descBits.filter(Boolean).join(' \u00b7 '),
       url: `${origin}/m/${txid}`,
       canonical: rep && rep !== txid ? `${origin}/m/${rep}` : undefined,
@@ -1876,8 +1879,10 @@ app.get('/c/:slug/chat', async (c) => {
 
 
 app.get('/a/:address', async (c) => {
-  const address = c.req.param('address');
+  const address = normAddress(c.req.param('address'));
+  if (address !== c.req.param('address')) return c.redirect(`/a/${address}${new URL(c.req.url).search}`, 301);
   const origin = originOf(c);
+  const evm = isEvmAddress(address);
   if (wantsMarkdown(c)) {
     return markdownResponse(renderAddressMarkdown(origin, address), origin);
   }
@@ -1891,8 +1896,8 @@ app.get('/a/:address', async (c) => {
   ]);
   return c.html(
     renderIndex({
-      title: monitored?.label ? `${monitored.label} \u2014 ${shortAddr(address)} OP_RETURN record` : `Address record \u2014 ${address}`,
-      description: `${view.feed.length ? view.feed.length + '+' : 'Every'} archived OP_RETURN message${monitored?.label ? ' involving ' + monitored.label : ''} sent to or from ${address}.`,
+      title: monitored?.label ? `${monitored.label} \u2014 ${shortAddr(address)} ${evm ? 'Ethereum message record' : 'OP_RETURN record'}` : `Address record \u2014 ${address}`,
+      description: `${view.feed.length ? view.feed.length + '+' : 'Every'} archived ${evm ? 'Ethereum input-data' : 'OP_RETURN'} message${monitored?.label ? ' involving ' + monitored.label : ''} sent to or from ${address}.`,
       url: `${origin}/a/${address}`,
       image: `${origin}/og/address/${encodeURIComponent(address)}.png`,
       noindex: !indexable,
@@ -1906,7 +1911,8 @@ app.get('/a/:address', async (c) => {
 });
 
 app.get('/a/:address/chat', async (c) => {
-  const address = c.req.param('address');
+  const address = normAddress(c.req.param('address'));
+  if (address !== c.req.param('address')) return c.redirect(`/a/${address}/chat${new URL(c.req.url).search}`, 301);
   const origin = originOf(c);
   if (wantsMarkdown(c)) {
     return markdownResponse(
@@ -2126,7 +2132,8 @@ app.get('/icon-512.png', async () => pngResponse(await iconPng(512)));
 app.get('/og/default.png', async () => pngResponse(await svgToPng(defaultCardSvg())));
 
 app.get('/og/message/:txid', async (c) => {
-  const txid = c.req.param('txid')!.replace(/\.png$/, '');
+  const raw = c.req.param('txid')!.replace(/\.png$/, '');
+  const txid = /^0x[0-9a-fA-F]{64}$/.test(raw) ? raw.toLowerCase() : raw;
   const msg = await db.getMessageByTxid(c.env.DB, txid);
   if (!msg) return jsonError('not found', 404);
   const cmap = await collectionMap(c.env.DB);
@@ -2187,7 +2194,7 @@ app.get('/og/chat/collection/:slug', async (c) => {
 });
 
 app.get('/og/chat/address/:address', async (c) => {
-  const address = c.req.param('address')!.replace(/\.png$/, '');
+  const address = normAddress(c.req.param('address')!.replace(/\.png$/, ''));
   const count = await db.countMessagesForAddress(c.env.DB, address);
   const data = await chatCardData(c.env.DB, { address }, midEllipsis(address, 30), count);
   if (count === 0 && data.partyCount === 0) return jsonError('not found', 404);
@@ -2220,7 +2227,7 @@ app.get('/og/tick/:tick', async (c) => {
 });
 
 app.get('/og/address/:address', async (c) => {
-  const address = c.req.param('address')!.replace(/\.png$/, '');
+  const address = normAddress(c.req.param('address')!.replace(/\.png$/, ''));
   return pngResponse(await svgToPng(addressCardSvg(address)));
 });
 

@@ -85,8 +85,9 @@ const RULES = `Rules:
 - A formal notice or claim is Legal / Ownership Notices; a request to get in touch is Contact / Negotiation.
 - Use Other only when nothing else fits, for example unreadable strings or bare identifiers.`;
 
-export const SYSTEM_PROMPT = `You classify short text messages that were permanently embedded in the Bitcoin blockchain
-via OP_RETURN outputs. They are often sent to a famous address as a public bulletin board.
+export const SYSTEM_PROMPT = `You classify short text messages that were permanently embedded in a blockchain transaction,
+usually a Bitcoin OP_RETURN output and sometimes Ethereum transaction input data. They are often
+sent to a famous address as a public bulletin board.
 
 Respond with EXACTLY ONE category name and nothing else. No quotes, no punctuation, no explanation.
 
@@ -95,7 +96,7 @@ ${taxonomyBlock()}
 
 ${RULES}`;
 
-export const BATCH_SYSTEM_PROMPT = `You classify short text messages embedded in the Bitcoin blockchain via OP_RETURN outputs.
+export const BATCH_SYSTEM_PROMPT = `You classify short text messages embedded in blockchain transactions (usually Bitcoin OP_RETURN outputs, sometimes Ethereum transaction input data).
 
 The user gives you a numbered list of messages. For EACH message reply with exactly one line in this format:
 N: Category
