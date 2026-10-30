@@ -136,17 +136,24 @@ describe('pollEvmAddresses', () => {
     const deps = {
       fetchFn,
       insert: async (r: NewMessage) => (stored.has(r.txid) ? false : (stored.set(r.txid, r), true)),
+      known: async (txids: string[]) => new Set(txids.filter((x) => stored.has(x))),
       getState: async () => ({ ...state }),
       setState: async (k: string, v: string) => { state[k] = v; },
     };
     const addrs = [WATCHED, '0x8532FA14ACAf483729C449b8458aedDb900543D4'];
     const first = await pollEvmAddresses(env, addrs, deps);
-    expect(first).toEqual({ inserted: 6, failed: 1 });
+    expect(first).toMatchObject({ inserted: 6, failed: 1, pages: 1 });
     expect(state['evm_backfill:' + WATCHED.toLowerCase()]).toBe('done');
     expect(urls[0]).toBe('https://eth.blockscout.com/api/v2/addresses/' + WATCHED.toLowerCase() + '/transactions');
     expect(urls.some((u) => u.endsWith('?index=174'))).toBe(true);
-    const again = await pollEvmAddresses(env, addrs, deps);
-    expect(again).toEqual({ inserted: 0, failed: 1 });
+    let writes = 0;
+    const again = await pollEvmAddresses(env, addrs, { ...deps, insert: async (r: NewMessage) => { writes++; return deps.insert(r); } });
+    expect(again).toMatchObject({ inserted: 0, failed: 1, pages: 0 });
+    // stored rows are skipped by one lookup, never re-written
+    expect(writes).toBe(0);
+    const run = JSON.parse(state.evm_last_run);
+    expect(run).toMatchObject({ inserted: 0, failed: 1 });
+    expect(run.errors[0]).toContain('boom');
   });
 
   it('skips a malformed item without losing the rest of the page', async () => {
@@ -154,10 +161,11 @@ describe('pollEvmAddresses', () => {
     const res = await pollEvmAddresses(env, [WATCHED], {
       fetchFn: async () => new Response(JSON.stringify(body), { status: 200 }),
       insert: async () => true,
+      known: async () => new Set<string>(),
       getState: async () => ({}),
       setState: async () => undefined,
     });
-    expect(res).toEqual({ inserted: 6, failed: 0 });
+    expect(res).toMatchObject({ inserted: 6, failed: 0 });
   });
 
   it('does nothing when EVM_POLL is "0", and trims a trailing slash from the Blockscout URL', async () => {
@@ -169,6 +177,7 @@ describe('pollEvmAddresses', () => {
     await pollEvmAddresses({ ...env, ETH_BLOCKSCOUT_URL: 'https://bs.test///' }, [WATCHED], {
       fetchFn: async (u) => { urls.push(u); return page(null); },
       insert: async () => false,
+      known: async () => new Set<string>(),
       getState: async () => ({ ['evm_backfill:' + WATCHED.toLowerCase()]: 'done' }),
       setState: async () => undefined,
     });

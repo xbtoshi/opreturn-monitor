@@ -767,6 +767,20 @@ export interface GroupKey {
   content_hash: string;
 }
 
+/** The subset of these txids already in messages (chunks stay under D1's bind limit). */
+export async function knownTxids(db: D1Database, txids: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let i = 0; i < txids.length; i += 90) {
+    const chunk = txids.slice(i, i + 90);
+    const { results } = await db
+      .prepare(`SELECT txid FROM messages WHERE txid IN (${chunk.map(() => '?').join(',')})`)
+      .bind(...chunk)
+      .all<{ txid: string }>();
+    for (const r of results) out.add(r.txid);
+  }
+  return out;
+}
+
 /** Statements that write one message + its ops (no dedupe yet). */
 export function insertMessageStatements(db: D1Database, msg: NewMessage): D1PreparedStatement[] {
   const ts = msg.block_time ?? nowSeconds();

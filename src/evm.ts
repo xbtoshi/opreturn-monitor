@@ -36,7 +36,7 @@ const MAX_INPUT_BYTES = 8192;
 const BACKFILL_PAGES_PER_RUN = 3;
 /** Blockscout pages for busy wallets take ~8 s cold; four run in parallel. */
 const FETCH_TIMEOUT_MS = 30000;
-/** No new backfill page starts after this much of the run; the newest page is always fetched. */
+/** No new backfill page starts after this long on the backlog (counted after the newest page is stored). */
 const BACKFILL_BUDGET_MS = 60000;
 
 export function isEvmAddress(a: string | null | undefined): boolean {
@@ -171,12 +171,17 @@ export async function fetchPage(
 export interface EvmPollResult {
   inserted: number;
   failed: number;
+  /** Older pages fetched this run (0 once every backlog is done). */
+  pages?: number;
+  ms?: number;
 }
 
 /** Storage the poller needs; the defaults are D1, tests pass fakes. */
 export interface EvmDeps {
   fetchFn?: FetchLike;
   insert?: (row: db.NewMessage) => Promise<boolean>;
+  /** Which of these txids are already stored (one query per page instead of one write per row). */
+  known?: (txids: string[]) => Promise<Set<string>>;
   getState?: () => Promise<Record<string, string>>;
   setState?: (key: string, value: string) => Promise<void>;
 }
@@ -193,18 +198,23 @@ export async function pollEvmAddresses(env: Env, addresses: string[], deps: EvmD
   const insert = deps.insert ?? ((row: db.NewMessage) => db.insertMessage(env.DB, row));
   const getState = deps.getState ?? (() => db.getIngestState(env.DB));
   const setState = deps.setState ?? ((key: string, value: string) => db.setIngestState(env.DB, { [key]: value }));
+  const known = deps.known ?? ((txids: string[]) => db.knownTxids(env.DB, txids));
   const base = blockscoutBase(env);
   const started = Date.now();
+  let pages = 0;
   const state = await getState().catch(() => ({} as Record<string, string>));
 
   const storePage = async (page: BlockscoutPage, watched: string): Promise<number> => {
+    // One malformed item must not drop the rest of the page.
+    const rows = page.items
+      .filter((tx) => tx && typeof tx === 'object' && typeof tx.hash === 'string')
+      .map((tx) => toNewMessage(tx, watched))
+      .filter((r): r is db.NewMessage => r !== null);
+    if (!rows.length) return 0;
+    // Every run re-reads the newest page; rows already stored cost one SELECT, not a write each.
+    const seen = await known(rows.map((r) => r.txid));
     let n = 0;
-    for (const tx of page.items) {
-      // One malformed item must not drop the rest of the page.
-      if (!tx || typeof tx !== 'object' || typeof tx.hash !== 'string') continue;
-      const row = toNewMessage(tx, watched);
-      if (row && (await insert(row))) n++;
-    }
+    for (const row of rows) if (!seen.has(row.txid) && (await insert(row))) n++;
     return n;
   };
 
@@ -215,8 +225,10 @@ export async function pollEvmAddresses(env: Env, addresses: string[], deps: EvmD
       const newest = await fetchPage(base, address, null, fetchFn);
       let inserted = await storePage(newest, address);
       let cursor = startCursor(state[key], newest);
-      for (let i = 0; i < BACKFILL_PAGES_PER_RUN && cursor !== 'done' && Date.now() - started < BACKFILL_BUDGET_MS; i++) {
+      const backlogStart = Date.now();
+      for (let i = 0; i < BACKFILL_PAGES_PER_RUN && cursor !== 'done' && Date.now() - backlogStart < BACKFILL_BUDGET_MS; i++) {
         const page = await fetchPage(base, address, cursor, fetchFn);
+        pages++;
         inserted += await storePage(page, address);
         cursor = page.next_page_params ?? 'done';
         await setState(key, cursor === 'done' ? 'done' : JSON.stringify(cursor));
@@ -231,5 +243,10 @@ export async function pollEvmAddresses(env: Env, addresses: string[], deps: EvmD
       console.error('evm poll:', String(r.reason).slice(0, 200));
     }
   }
+  out.pages = pages;
+  out.ms = Date.now() - started;
+  // The scheduled handler does not log its summary; leave a trace like the classifier does.
+  const errors = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected').map((r) => String(r.reason).slice(0, 120));
+  await setState('evm_last_run', JSON.stringify({ at: new Date().toISOString(), ...out, errors })).catch(() => undefined);
   return out;
 }
