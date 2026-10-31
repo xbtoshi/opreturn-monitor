@@ -38,6 +38,8 @@ const BACKFILL_PAGES_PER_RUN = 3;
 const FETCH_TIMEOUT_MS = 30000;
 /** No new backfill page starts after this long on the backlog (counted after the newest page is stored). */
 const BACKFILL_BUDGET_MS = 60000;
+/** Pause between Blockscout requests (relays carry most of them; direct shares Cloudflare's egress IPs). */
+const REQUEST_GAP_MS = 500;
 
 export function isEvmAddress(a: string | null | undefined): boolean {
   return EVM_ADDRESS.test(String(a ?? ''));
@@ -170,6 +172,22 @@ export function relayHosts(env: Pick<Env, 'EGRESS_RELAYS'>): string[] {
 /** Statuses worth another route: per-IP limits (429), blocks (403) and upstream/relay failures. */
 const RETRY_STATUS = new Set([403, 429, 500, 502, 503, 504]);
 
+/** Full Blockscout URL for a path, with params and the optional API key. */
+export function blockscoutUrl(base: string, path: string, params: Record<string, unknown> | null, apiKey?: string): string {
+  const entries = Object.entries(params || {}).map(([k, v]): [string, string] => [k, String(v)]);
+  if (apiKey) entries.push(['apikey', apiKey]);
+  const qs = entries.length ? '?' + new URLSearchParams(entries).toString() : '';
+  return `${base}${path}${qs}`;
+}
+
+function toPage(address: string) {
+  return (raw: unknown): BlockscoutPage => {
+    const body = raw as Partial<BlockscoutPage>;
+    if (!Array.isArray(body?.items)) throw new Error(`blockscout: no items for ${address}`);
+    return { items: body.items, next_page_params: body.next_page_params ?? null };
+  };
+}
+
 export async function fetchPage(
   base: string,
   address: string,
@@ -179,18 +197,88 @@ export async function fetchPage(
   /** Relay host to go through (https://<host>/proxy/<url>); omitted = direct. */
   via?: string
 ): Promise<BlockscoutPage> {
-  const entries = Object.entries(params || {}).map(([k, v]): [string, string] => [k, String(v)]);
-  if (apiKey) entries.push(['apikey', apiKey]);
-  const qs = entries.length ? '?' + new URLSearchParams(entries).toString() : '';
-  const target = `${base}/api/v2/addresses/${address}/transactions${qs}`;
+  return toPage(address)(await fetchJson(blockscoutUrl(base, `/api/v2/addresses/${address}/transactions`, params, apiKey), address, fetchFn, via, FETCH_TIMEOUT_MS));
+}
+
+async function fetchJson(target: string, subject: string, fetchFn: FetchLike, via: string | undefined, timeoutMs: number): Promise<unknown> {
   const res = await fetchFn(via ? `https://${via}/proxy/${target}` : target, {
     headers: { accept: 'application/json', 'user-agent': 'opreturn.xyz (+https://opreturn.xyz)' },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   });
-  if (!res.ok) throw new BlockscoutError(res.status, address);
-  const body = (await res.json()) as Partial<BlockscoutPage>;
-  if (!Array.isArray(body.items)) throw new Error(`blockscout: no items for ${address}`);
-  return { items: body.items, next_page_params: body.next_page_params ?? null };
+  if (!res.ok) throw new BlockscoutError(res.status, subject);
+  return res.json();
+}
+
+export interface BlockscoutClient {
+  /**
+   * One request: through the relays first (rotated by request number, so load spreads), direct
+   * last. A retryable status, network error or a body `parse` rejects moves to the next route;
+   * any other status stops. Null when every route failed (recorded in `errors`), the run is
+   * rate-limited (every route answered 429 once) or the deadline has passed.
+   */
+  get<T>(path: string, params: Record<string, unknown> | null, parse: (body: unknown) => T, subject?: string): Promise<T | null>;
+  errors: string[];
+  limited(): boolean;
+  timedOut(): boolean;
+}
+
+export interface ClientOpts {
+  fetchFn?: FetchLike;
+  /** Pause between requests. */
+  gapMs?: number;
+  /** Per request (per route). */
+  timeoutMs?: number;
+  /** Absolute time (ms) after which no request or route attempt starts. */
+  deadline?: number;
+  /** Log prefix. */
+  label?: string;
+  /** Clock for the deadline (tests). */
+  now?: () => number;
+}
+
+export function blockscoutClient(env: Env, opts: ClientOpts = {}): BlockscoutClient {
+  const fetchFn = opts.fetchFn ?? fetch;
+  const gap = opts.gapMs ?? REQUEST_GAP_MS;
+  const timeoutMs = opts.timeoutMs ?? FETCH_TIMEOUT_MS;
+  const label = opts.label ?? 'blockscout';
+  const base = blockscoutBase(env);
+  const apiKey = env.ETH_BLOCKSCOUT_API_KEY || undefined;
+  const relays = relayHosts(env);
+  const errors: string[] = [];
+  let requests = 0;
+  let limited = false;
+  let timedOut = false;
+  const now = opts.now ?? Date.now;
+  const late = () => opts.deadline !== undefined && now() >= opts.deadline && (timedOut = true);
+
+  return {
+    errors,
+    limited: () => limited,
+    timedOut: () => timedOut,
+    async get(path, params, parse, subject = path) {
+      if (limited || late()) return null;
+      const n = requests++;
+      if (n > 0 && gap > 0) await new Promise((r) => setTimeout(r, gap));
+      const k = n % (relays.length || 1);
+      const routes: Array<string | undefined> = [...relays.slice(k), ...relays.slice(0, k), undefined];
+      const target = blockscoutUrl(base, path, params, apiKey);
+      let all429 = true;
+      for (const via of routes) {
+        if (late()) return null;
+        try {
+          return parse(await fetchJson(target, subject, fetchFn, via, timeoutMs));
+        } catch (e) {
+          const status = e instanceof BlockscoutError ? e.status : 0;
+          if (status !== 429) all429 = false;
+          errors.push(`${via ?? 'direct'}: ${String(e).slice(0, 100)}`);
+          console.error(`${label}:`, via ?? 'direct', String(e).slice(0, 200));
+          if (status && !RETRY_STATUS.has(status)) return null;
+        }
+      }
+      if (all429) limited = true;
+      return null;
+    },
+  };
 }
 
 export interface EvmPollResult {
@@ -213,8 +301,6 @@ export interface EvmDeps {
   setState?: (key: string, value: string) => Promise<void>;
 }
 
-/** Pause between Blockscout requests (relays carry most of them; direct shares Cloudflare's egress IPs). */
-const REQUEST_GAP_MS = 500;
 
 /**
  * Poll every watched Ethereum address, one request at a time: first the
@@ -231,14 +317,10 @@ export async function pollEvmAddresses(env: Env, addresses: string[], deps: EvmD
   const setState = deps.setState ?? ((key: string, value: string) => db.setIngestState(env.DB, { [key]: value }));
   const known = deps.known ?? ((txids: string[]) => db.knownTxids(env.DB, txids));
   const gap = deps.gapMs ?? REQUEST_GAP_MS;
-  const base = blockscoutBase(env);
-  const apiKey = env.ETH_BLOCKSCOUT_API_KEY || undefined;
   const started = Date.now();
   const state = await getState().catch(() => ({} as Record<string, string>));
-  const errors: string[] = [];
+  const client = blockscoutClient(env, { fetchFn, gapMs: gap, label: 'evm poll' });
   let pages = 0;
-  let requests = 0;
-  let limited = false;
 
   const storePage = async (page: BlockscoutPage, watched: string): Promise<number> => {
     // One malformed item must not drop the rest of the page.
@@ -254,32 +336,8 @@ export async function pollEvmAddresses(env: Env, addresses: string[], deps: EvmD
     return n;
   };
 
-  const relays = relayHosts(env);
-  /**
-   * One request: through the relays first (rotated, so load spreads), direct last. A retryable
-   * status or network error moves to the next route; any other status stops. Null when every
-   * route failed (recorded) or the run is rate-limited (every route answered 429).
-   */
-  const get = async (address: string, params: Record<string, unknown> | null): Promise<BlockscoutPage | null> => {
-    if (limited) return null;
-    const n = requests++;
-    if (n > 0 && gap > 0) await new Promise((r) => setTimeout(r, gap));
-    const routes: Array<string | undefined> = [...relays.slice(n % (relays.length || 1)), ...relays.slice(0, n % (relays.length || 1)), undefined];
-    let all429 = true;
-    for (const via of routes) {
-      try {
-        return await fetchPage(base, address, params, fetchFn, apiKey, via);
-      } catch (e) {
-        const status = e instanceof BlockscoutError ? e.status : 0;
-        if (status !== 429) all429 = false;
-        errors.push(`${via ?? 'direct'}: ${String(e).slice(0, 100)}`);
-        console.error('evm poll:', via ?? 'direct', String(e).slice(0, 200));
-        if (status && !RETRY_STATUS.has(status)) return null;
-      }
-    }
-    if (all429) limited = true;
-    return null;
-  };
+  const get = (address: string, params: Record<string, unknown> | null): Promise<BlockscoutPage | null> =>
+    client.get(`/api/v2/addresses/${address}/transactions`, params, toPage(address), address);
 
   const newest = new Map<string, BlockscoutPage>();
   const failed = new Set<string>();
@@ -312,6 +370,6 @@ export async function pollEvmAddresses(env: Env, addresses: string[], deps: EvmD
   out.pages = pages;
   out.ms = Date.now() - started;
   // The scheduled handler does not log its summary; leave a trace like the classifier does.
-  await setState('evm_last_run', JSON.stringify({ at: new Date().toISOString(), ...out, rate_limited: limited, errors })).catch(() => undefined);
+  await setState('evm_last_run', JSON.stringify({ at: new Date().toISOString(), ...out, rate_limited: client.limited(), errors: client.errors })).catch(() => undefined);
   return out;
 }

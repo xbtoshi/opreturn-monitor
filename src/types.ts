@@ -126,6 +126,12 @@ export interface Env {
   EGRESS_RELAYS?: string;
   /** "0" stops polling Ethereum addresses (kill switch); unset or anything else = enabled. */
   EVM_POLL?: string;
+  /** ntfy topic for hack-wallet movement alerts (secret: the topic is the credential). Unset = watch off. */
+  NTFY_TOPIC?: string;
+  /** ntfy server (default https://ntfy.sh). */
+  NTFY_BASE?: string;
+  /** "0" stops the hack-wallet movement watch (kill switch). */
+  WATCH_POLL?: string;
 }
 
 export interface RunSummary {
@@ -148,4 +154,7 @@ export interface RunSummary {
   /** Ethereum board poll (src/evm.ts): new rows and failed address fetches this run. */
   evm_inserted?: number;
   evm_failed?: number;
+  /** Hack-wallet movement watch (src/watch.ts): alerts sent, and whether any signal is not being read. */
+  watch_alerts?: number;
+  watch_degraded?: boolean;
 }

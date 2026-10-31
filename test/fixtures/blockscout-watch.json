@@ -1,0 +1,692 @@
+{
+ "_note": "Live Blockscout v2 responses, 2026-10-31, trimmed. tx/tt/address: 0x5227 (Binance Exploiter 2). internal: Uniswap V2 router sample (watched wallets have none yet).",
+ "transactions_from": {
+  "items": [
+   {
+    "block_number": 26307052,
+    "hash": "0x19c2a82ee1b801b5c2c9e41c0f9d599a81234c8098e1c35b49958f2eafd22a31",
+    "from": {
+     "hash": "0x5227f603C1eE34CE3C06eFe6477003BDfCCB2f8c"
+    },
+    "to": {
+     "hash": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+    },
+    "value": "0",
+    "fee": {
+     "type": "actual",
+     "value": "34423784163080"
+    },
+    "method": "swapExactTokensForETHSupportingFeeOnTransferTokens",
+    "status": "ok",
+    "result": "success",
+    "type": 2,
+    "timestamp": "2026-10-30T17:25:23.000000Z"
+   },
+   {
+    "block_number": 26307048,
+    "hash": "0xc49886c41dc679a88ebecbeab41074e8a6b36cf6831ec4aaa01bfca828bd2aae",
+    "from": {
+     "hash": "0x5227f603C1eE34CE3C06eFe6477003BDfCCB2f8c"
+    },
+    "to": {
+     "hash": "0x491604c0FDF08347Dd1fa4Ee062a822A5DD06B5D"
+    },
+    "value": "0",
+    "fee": {
+     "type": "actual",
+     "value": "13783625112516"
+    },
+    "method": "approve",
+    "status": "ok",
+    "result": "success",
+    "type": 2,
+    "timestamp": "2026-10-30T17:24:35.000000Z"
+   },
+   {
+    "block_number": 26305175,
+    "hash": "0x230b5d9ec55aa34e0de8342c1b0f5ef8ca46d11d9f13dfaeadd2dff3351b5272",
+    "from": {
+     "hash": "0x5227f603C1eE34CE3C06eFe6477003BDfCCB2f8c"
+    },
+    "to": {
+     "hash": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+    },
+    "value": "0",
+    "fee": {
+     "type": "actual",
+     "value": "32228602557652"
+    },
+    "method": "swapExactTokensForETHSupportingFeeOnTransferTokens",
+    "status": "ok",
+    "result": "success",
+    "type": 2,
+    "timestamp": "2026-10-30T11:08:35.000000Z"
+   },
+   {
+    "block_number": 26304838,
+    "hash": "0xe47d6f784ec3fa861a67167830775fbc40f537857db66ffe18b0f382d61ec59f",
+    "from": {
+     "hash": "0x5227f603C1eE34CE3C06eFe6477003BDfCCB2f8c"
+    },
+    "to": {
+     "hash": "0x081131434f93063751813C619Ecca9C4dC7862a3"
+    },
+    "value": "0",
+    "fee": {
+     "type": "actual",
+     "value": "8836108147236"
+    },
+    "method": "approve",
+    "status": "ok",
+    "result": "success",
+    "type": 2,
+    "timestamp": "2026-10-30T10:01:11.000000Z"
+   }
+  ],
+  "next_page_params": {
+   "index": 398,
+   "value": "0",
+   "filter": "from",
+   "hash": "0xafd6f666a274b0550232650dbac5df351f093602390a7a8531dc9789132db6b1",
+   "inserted_at": "2026-10-30T03:30:45.085696Z",
+   "block_number": 26302890,
+   "fee": "200895565548599",
+   "items_count": 50
+  }
+ },
+ "token_transfers_from": {
+  "items": [
+   {
+    "block_number": 26308412,
+    "log_index": 930,
+    "transaction_hash": "0x3fc1c5768d6d166657a151c92b59f61181172e5379ac968a8c467bc1dd00792d",
+    "from": {
+     "hash": "0x5227f603C1eE34CE3C06eFe6477003BDfCCB2f8c"
+    },
+    "to": {
+     "hash": "0xB3d0e669Cd92e1CF6975eC75ba051Ae9Ad5A5FdB"
+    },
+    "token": {
+     "address_hash": "0xe430D281f19ECa78dF4541520E55197c62520E9D",
+     "symbol": "ETH",
+     "name": "ETH",
+     "decimals": "18",
+     "type": "ERC-20",
+     "exchange_rate": null,
+     "reputation": "ok",
+     "holders_count": "0"
+    },
+    "total": {
+     "decimals": "18",
+     "value": "520000000000000000"
+    },
+    "type": "token_transfer",
+    "timestamp": "2026-10-30T21:58:11.000000Z"
+   },
+   {
+    "block_number": 26308408,
+    "log_index": 560,
+    "transaction_hash": "0x413a39562b50a370f7bcd30bb3782b4b1dc5356e5d74f34776d04187dee2cbc4",
+    "from": {
+     "hash": "0x5227f603C1eE34CE3C06eFe6477003BDfCCB2f8c"
+    },
+    "to": {
+     "hash": "0xb3dDC0c26D87655452A86cD7b4dd90d084065FDB"
+    },
+    "token": {
+     "address_hash": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+     "symbol": "WBTC",
+     "name": "Wrapped Bitcoin",
+     "decimals": "8",
+     "type": "ERC-20",
+     "exchange_rate": "77317",
+     "reputation": "ok",
+     "holders_count": "204589"
+    },
+    "total": {
+     "decimals": "8",
+     "value": "0"
+    },
+    "type": "token_transfer",
+    "timestamp": "2026-10-30T21:57:23.000000Z"
+   },
+   {
+    "block_number": 26308398,
+    "log_index": 1228,
+    "transaction_hash": "0xc919522b4467275e7243ed36c4040ab709aa7ff7ab41715e052d2c7648616733",
+    "from": {
+     "hash": "0x5227f603C1eE34CE3C06eFe6477003BDfCCB2f8c"
+    },
+    "to": {
+     "hash": "0xB3d0e669Cd92e1CF6975eC75ba051Ae9Ad5A5FdB"
+    },
+    "token": {
+     "address_hash": "0xe430D281f19ECa78dF4541520E55197c62520E9D",
+     "symbol": "ETH",
+     "name": "ETH",
+     "decimals": "18",
+     "type": "ERC-20",
+     "exchange_rate": null,
+     "reputation": "ok",
+     "holders_count": "0"
+    },
+    "total": {
+     "decimals": "18",
+     "value": "520000000000000000"
+    },
+    "type": "token_transfer",
+    "timestamp": "2026-10-30T21:55:23.000000Z"
+   },
+   {
+    "block_number": 26308282,
+    "log_index": 467,
+    "transaction_hash": "0x2f387767346d1e1f0487c074ab2a7693bcae9e2665c78284ba23987af08fef5f",
+    "from": {
+     "hash": "0x5227f603C1eE34CE3C06eFe6477003BDfCCB2f8c"
+    },
+    "to": {
+     "hash": "0xCf4be59619436dD966049E7E7619Ff9D3e2723E0"
+    },
+    "token": {
+     "address_hash": "0xe430D281f19ECa78dF4541520E55197c62520E9D",
+     "symbol": "ETH",
+     "name": "ETH",
+     "decimals": "18",
+     "type": "ERC-20",
+     "exchange_rate": null,
+     "reputation": "ok",
+     "holders_count": "0"
+    },
+    "total": {
+     "decimals": "18",
+     "value": "510000000000000000"
+    },
+    "type": "token_transfer",
+    "timestamp": "2026-10-30T21:32:11.000000Z"
+   },
+   {
+    "block_number": 26307052,
+    "log_index": 0,
+    "transaction_hash": "0x19c2a82ee1b801b5c2c9e41c0f9d599a81234c8098e1c35b49958f2eafd22a31",
+    "from": {
+     "hash": "0x5227f603C1eE34CE3C06eFe6477003BDfCCB2f8c"
+    },
+    "to": {
+     "hash": "0x58EEB5D44Dc41965AB0a9E563536175C8dc5C3B3"
+    },
+    "token": {
+     "address_hash": "0x491604c0FDF08347Dd1fa4Ee062a822A5DD06B5D",
+     "symbol": "CTSI",
+     "name": "Cartesi",
+     "decimals": "18",
+     "type": "ERC-20",
+     "exchange_rate": "0.0265597",
+     "reputation": "ok",
+     "holders_count": "19319"
+    },
+    "total": {
+     "decimals": "18",
+     "value": "13875383020000000402784256"
+    },
+    "type": "token_transfer",
+    "timestamp": "2026-10-30T17:25:23.000000Z"
+   },
+   {
+    "block_number": 26305175,
+    "log_index": 37,
+    "transaction_hash": "0x230b5d9ec55aa34e0de8342c1b0f5ef8ca46d11d9f13dfaeadd2dff3351b5272",
+    "from": {
+     "hash": "0x5227f603C1eE34CE3C06eFe6477003BDfCCB2f8c"
+    },
+    "to": {
+     "hash": "0x4AadB3498f407e4D558589514Bb9a4b341475E31"
+    },
+    "token": {
+     "address_hash": "0x081131434f93063751813C619Ecca9C4dC7862a3",
+     "symbol": "DAR",
+     "name": "Mines of Dalarnia",
+     "decimals": "6",
+     "type": "ERC-20",
+     "exchange_rate": "0.03233356",
+     "reputation": "ok",
+     "holders_count": "3826"
+    },
+    "total": {
+     "decimals": "6",
+     "value": "3530547650000"
+    },
+    "type": "token_transfer",
+    "timestamp": "2026-10-30T11:08:35.000000Z"
+   }
+  ],
+  "next_page_params": {
+   "index": 792,
+   "filter": "from",
+   "block_number": 26303228
+  }
+ },
+ "address": {
+  "hash": "0x5227f603C1eE34CE3C06eFe6477003BDfCCB2f8c",
+  "coin_balance": "4807882838188860100",
+  "block_number_balance_updated_at": 26309802
+ },
+ "internal_from": {
+  "items": [
+   {
+    "block_number": 26309805,
+    "created_contract": null,
+    "error": null,
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+     "implementations": [],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "metadata": {
+      "tags": [
+       {
+        "meta": {
+         "bgColor": "#FFFFFF",
+         "projectName": "Uniswap V2",
+         "tagIcon ": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+         "tagUrl": "https://scout-app.kleros.io/single-tags/0x21dee62fd8759eac196977676d698320331baf2d86a275f6fd61b587d90cafc8",
+         "textColor": "#FF007A",
+         "tooltipAttribution": "https://www.openlabelsinitiative.org?utm_source=blockscout",
+         "tooltipAttributionIcon": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+         "tooltipDescription": "Up-to-date Uniswap V2 Router contract.",
+         "tooltipUrl": "https://uniswap.info",
+         "verifiedDomains": [
+          "app.thorswap.finance",
+          "app.uniswap.org",
+          "bitpif.com",
+          "memetics.finance",
+          "defi.alva-p.xyz",
+          "1.horswap.eth.limo",
+          "2.horswap.eth.limo",
+          "court.kleros.io",
+          "uniswap-push.vercel.app",
+          "uni.cp0x.com"
+         ]
+        },
+        "name": "Uniswap V3: Universal Router",
+        "ordinal": 10,
+        "slug": "uniswap-v3-universal-router",
+        "tagType": "name"
+       },
+       {
+        "meta": {},
+        "name": "DEX",
+        "ordinal": 0,
+        "slug": "dex",
+        "tagType": "generic"
+       },
+       {
+        "meta": {
+         "appActionButtonText": "Uniswap",
+         "appID": "uniswap",
+         "bgColor": "#FF007A",
+         "tagIcon": "https://blockscout-content.s3.amazonaws.com/uniswap.png",
+         "tagUrl": "https://uniswap.org/?utm_source=Blockscout",
+         "textColor": "#FFFFFF",
+         "tooltipDescription": "Trade crypto and NFTs safely on the top DeFi platform. Swapping made simple. Buy and sell crypto on Ethereum, Base, Arbitrum, Polygon, and more.",
+         "tooltipTitle": "Uniswap",
+         "tooltipUrl": "https://uniswap.org/?utm_source=Blockscout"
+        },
+        "name": "Uniswap V2",
+        "ordinal": 0,
+        "slug": "uniswap-v2",
+        "tagType": "protocol"
+       }
+      ]
+     },
+     "name": "UniswapV2Router02",
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_limit": "28267",
+    "index": 10,
+    "success": true,
+    "timestamp": "2026-10-31T02:37:59.000000Z",
+    "to": {
+     "ens_domain_name": null,
+     "hash": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+     "implementations": [],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "metadata": {
+      "tags": [
+       {
+        "meta": {
+         "projectName": "Wrapped Ether",
+         "tagUrl": "https://app.klerosscout.eth.limo/#/?registry=Single_Tags&itemdetails=0xe27ff4957dc5c9bb33feafde33089e0c03fb4999f3e8d01f4720334161a17224@0x66260c69d03837016d88c9877e61e08ef74c59f2",
+         "tokenAttributes": "{\"logo_url\":\"https://cdn.kleros.link/ipfs/QmRyTdB5Cc7zH7G4YwWs7jh98zNGLQN1NfJ8KTWTXikhcP/WETH\",\"token_symbol\":\"WETH\",\"token_name\":\"WETH\",\"decimals\":18}",
+         "tooltipDescription": "wETH is wrapped ETH which confroms to the ERC20 standard",
+         "tooltipUrl": "https://weth.io/",
+         "verifiedDomains": [
+          "traderjoexyz.com",
+          "app.mav.xyz",
+          "core.app",
+          "shibaswap.com",
+          "app.dodoex.io",
+          "app.uniswap.org",
+          "explorer.reservoir.tools",
+          "pancakeswap.finance",
+          "swapr.eth.limo"
+         ]
+        },
+        "name": "WETH Token (v2)",
+        "ordinal": 10,
+        "slug": "weth-token-v2",
+        "tagType": "name"
+       },
+       {
+        "meta": {},
+        "name": "Token Contract",
+        "ordinal": 0,
+        "slug": "token-contract",
+        "tagType": "generic"
+       },
+       {
+        "meta": {},
+        "name": "Wrapped Token",
+        "ordinal": 0,
+        "slug": "wrapped-token",
+        "tagType": "generic"
+       },
+       {
+        "meta": {
+         "main_entity": "Wrapped",
+         "tagIcon ": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+         "textColor": "#C163D4",
+         "tooltipAttribution": "https://www.openlabelsinitiative.org?utm_source=blockscout",
+         "tooltipAttributionIcon": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+         "tooltipDescription": "Provided by OLI",
+         "tooltipUrl": "https://weth.io/"
+        },
+        "name": "Wrapped Ether",
+        "ordinal": 0,
+        "slug": "wrapped-ether",
+        "tagType": "name"
+       },
+       {
+        "meta": {
+         "tagIcon ": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+         "textColor": "#C163D4",
+         "tooltipAttribution": "https://www.openlabelsinitiative.org?utm_source=blockscout",
+         "tooltipAttributionIcon": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+         "tooltipDescription": "Provided by OLI"
+        },
+        "name": "WETH9",
+        "ordinal": 0,
+        "slug": "weth9",
+        "tagType": "name"
+       },
+       {
+        "meta": {
+         "data": "ok"
+        },
+        "name": "Credible token",
+        "ordinal": 0,
+        "slug": "credible-token",
+        "tagType": "token_reputation"
+       }
+      ]
+     },
+     "name": "WETH9",
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "transaction_hash": "0xab6a916f98e6bb3a7f703c710d011e15a71998fc7d0806f809a2afbbb68b8379",
+    "transaction_index": 400,
+    "type": "staticcall",
+    "value": "0"
+   },
+   {
+    "block_number": 26309805,
+    "created_contract": null,
+    "error": null,
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+     "implementations": [],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "metadata": {
+      "tags": [
+       {
+        "meta": {
+         "bgColor": "#FFFFFF",
+         "projectName": "Uniswap V2",
+         "tagIcon ": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+         "tagUrl": "https://scout-app.kleros.io/single-tags/0x21dee62fd8759eac196977676d698320331baf2d86a275f6fd61b587d90cafc8",
+         "textColor": "#FF007A",
+         "tooltipAttribution": "https://www.openlabelsinitiative.org?utm_source=blockscout",
+         "tooltipAttributionIcon": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+         "tooltipDescription": "Up-to-date Uniswap V2 Router contract.",
+         "tooltipUrl": "https://uniswap.info",
+         "verifiedDomains": [
+          "app.thorswap.finance",
+          "app.uniswap.org",
+          "bitpif.com",
+          "memetics.finance",
+          "defi.alva-p.xyz",
+          "1.horswap.eth.limo",
+          "2.horswap.eth.limo",
+          "court.kleros.io",
+          "uniswap-push.vercel.app",
+          "uni.cp0x.com"
+         ]
+        },
+        "name": "Uniswap V3: Universal Router",
+        "ordinal": 10,
+        "slug": "uniswap-v3-universal-router",
+        "tagType": "name"
+       },
+       {
+        "meta": {},
+        "name": "DEX",
+        "ordinal": 0,
+        "slug": "dex",
+        "tagType": "generic"
+       },
+       {
+        "meta": {
+         "appActionButtonText": "Uniswap",
+         "appID": "uniswap",
+         "bgColor": "#FF007A",
+         "tagIcon": "https://blockscout-content.s3.amazonaws.com/uniswap.png",
+         "tagUrl": "https://uniswap.org/?utm_source=Blockscout",
+         "textColor": "#FFFFFF",
+         "tooltipDescription": "Trade crypto and NFTs safely on the top DeFi platform. Swapping made simple. Buy and sell crypto on Ethereum, Base, Arbitrum, Polygon, and more.",
+         "tooltipTitle": "Uniswap",
+         "tooltipUrl": "https://uniswap.org/?utm_source=Blockscout"
+        },
+        "name": "Uniswap V2",
+        "ordinal": 0,
+        "slug": "uniswap-v2",
+        "tagType": "protocol"
+       }
+      ]
+     },
+     "name": "UniswapV2Router02",
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_limit": "71839",
+    "index": 6,
+    "success": true,
+    "timestamp": "2026-10-31T02:37:59.000000Z",
+    "to": {
+     "ens_domain_name": null,
+     "hash": "0x1bAE46E64D0DA761D0ee65D12eeeB62B0B7B367c",
+     "implementations": [],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "metadata": null,
+     "name": "UniswapV2Pair",
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "transaction_hash": "0xab6a916f98e6bb3a7f703c710d011e15a71998fc7d0806f809a2afbbb68b8379",
+    "transaction_index": 400,
+    "type": "call",
+    "value": "0"
+   },
+   {
+    "block_number": 26309805,
+    "created_contract": null,
+    "error": null,
+    "from": {
+     "ens_domain_name": null,
+     "hash": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+     "implementations": [],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": true,
+     "metadata": {
+      "tags": [
+       {
+        "meta": {
+         "bgColor": "#FFFFFF",
+         "projectName": "Uniswap V2",
+         "tagIcon ": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+         "tagUrl": "https://scout-app.kleros.io/single-tags/0x21dee62fd8759eac196977676d698320331baf2d86a275f6fd61b587d90cafc8",
+         "textColor": "#FF007A",
+         "tooltipAttribution": "https://www.openlabelsinitiative.org?utm_source=blockscout",
+         "tooltipAttributionIcon": "https://blockscout-icons.s3.us-east-1.amazonaws.com/OLI_tag_logo.svg",
+         "tooltipDescription": "Up-to-date Uniswap V2 Router contract.",
+         "tooltipUrl": "https://uniswap.info",
+         "verifiedDomains": [
+          "app.thorswap.finance",
+          "app.uniswap.org",
+          "bitpif.com",
+          "memetics.finance",
+          "defi.alva-p.xyz",
+          "1.horswap.eth.limo",
+          "2.horswap.eth.limo",
+          "court.kleros.io",
+          "uniswap-push.vercel.app",
+          "uni.cp0x.com"
+         ]
+        },
+        "name": "Uniswap V3: Universal Router",
+        "ordinal": 10,
+        "slug": "uniswap-v3-universal-router",
+        "tagType": "name"
+       },
+       {
+        "meta": {},
+        "name": "DEX",
+        "ordinal": 0,
+        "slug": "dex",
+        "tagType": "generic"
+       },
+       {
+        "meta": {
+         "appActionButtonText": "Uniswap",
+         "appID": "uniswap",
+         "bgColor": "#FF007A",
+         "tagIcon": "https://blockscout-content.s3.amazonaws.com/uniswap.png",
+         "tagUrl": "https://uniswap.org/?utm_source=Blockscout",
+         "textColor": "#FFFFFF",
+         "tooltipDescription": "Trade crypto and NFTs safely on the top DeFi platform. Swapping made simple. Buy and sell crypto on Ethereum, Base, Arbitrum, Polygon, and more.",
+         "tooltipTitle": "Uniswap",
+         "tooltipUrl": "https://uniswap.org/?utm_source=Blockscout"
+        },
+        "name": "Uniswap V2",
+        "ordinal": 0,
+        "slug": "uniswap-v2",
+        "tagType": "protocol"
+       }
+      ]
+     },
+     "name": "UniswapV2Router02",
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "gas_limit": "74367",
+    "index": 5,
+    "success": true,
+    "timestamp": "2026-10-31T02:37:59.000000Z",
+    "to": {
+     "ens_domain_name": null,
+     "hash": "0x743f1B0291a490B924FfcFe8508Af2A9aC1a6552",
+     "implementations": [],
+     "is_contract": true,
+     "is_scam": false,
+     "is_verified": false,
+     "metadata": null,
+     "name": "over.computer",
+     "private_tags": [],
+     "proxy_type": null,
+     "public_tags": [],
+     "reputation": "ok",
+     "watchlist_names": []
+    },
+    "transaction_hash": "0xab6a916f98e6bb3a7f703c710d011e15a71998fc7d0806f809a2afbbb68b8379",
+    "transaction_index": 400,
+    "type": "staticcall",
+    "value": "0"
+   }
+  ],
+  "next_page_params": {
+   "index": 4,
+   "filter": "from",
+   "block_number": 26309798,
+   "transaction_index": 186,
+   "items_count": 50
+  }
+ },
+ "internal_7702": {
+  "_note": "EOA 0x4DE23f3f\u2026 delegated via EIP-7702 (proxy_type eip7702); the outer tx was sent by another account, ETH left via the delegated code.",
+  "address": "0x4de23f3f0fb3318287378adbde030cf61714b2f3",
+  "items": [
+   {
+    "block_number": 26308731,
+    "index": 1,
+    "transaction_hash": "0xc3165407e402062593b6d23d990e0428ca6306c7c04665c4247cc3f7718eeb4c",
+    "from": {
+     "hash": "0x4DE23f3f0Fb3318287378AdbdE030cf61714b2f3"
+    },
+    "to": {
+     "hash": "0x8CD8005BF70f09153b50198D4D3546F8b451bD18"
+    },
+    "value": "9",
+    "type": "call",
+    "success": true,
+    "error": null,
+    "timestamp": "2026-10-30T23:02:11.000000Z"
+   }
+  ]
+ },
+ "address_7702": {
+  "proxy_type": "eip7702",
+  "implementations": [
+   {
+    "address_hash": "0xe6B97aA1490c93c28A14D86C13C9dc9c950643ed",
+    "name": "Poisoner"
+   }
+  ],
+  "coin_balance": "0",
+  "block_number_balance_updated_at": 26309875
+ }
+}

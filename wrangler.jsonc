@@ -61,7 +61,11 @@
     "INDEXNOW_HOST": "opreturn.xyz",
     // Blockscout limits keyless reads per IP and Worker egress IPs are shared (HTTP 429);
     // fetch through our path-forward relays (https://<host>/proxy/<url>, same boxes as kyc.rip).
-    "EGRESS_RELAYS": "proxy.kyc.rip,proxy2.kyc.rip,proxy3.kyc.rip"
+    "EGRESS_RELAYS": "proxy.kyc.rip,proxy2.kyc.rip,proxy3.kyc.rip",
+    // Hack-wallet movement watch (src/watch.ts): phone alerts via ntfy when a watched
+    // Ethereum wallet sends funds out. Needs the NTFY_TOPIC secret; "0" turns it off.
+    "NTFY_BASE": "https://ntfy.sh",
+    "WATCH_POLL": "1"
     // Set these to real values in production, ideally via wrangler secret put.
   },
 
@@ -70,5 +74,6 @@
   //   wrangler secret put OPENAI_API_KEY
   //   wrangler secret put ADMIN_KEY
   //   wrangler secret put CRON_SECRET
+  //   wrangler secret put NTFY_TOPIC   (random 16-64 chars [A-Za-z0-9_-]; the topic is the credential)
   // ---------------------------------------------------------------------------
 }

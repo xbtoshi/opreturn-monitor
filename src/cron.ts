@@ -2,6 +2,7 @@ import { classifyBatch } from './classify';
 import { pushIndexNow } from './indexnow';
 import * as db from './db';
 import { isEvmAddress, pollEvmAddresses } from './evm';
+import { watchEvmOutflows } from './watch';
 import { ingestBlocks } from './ingest';
 import {
   blockHeightFromTx,
@@ -135,6 +136,12 @@ export async function runCron(env: Env): Promise<RunSummary> {
     return { inserted: 0, failed: evmAddresses.length };
   });
   lap('evm');
+  const watched = all.filter((a) => isEvmAddress(a.address)).map((a) => ({ address: a.address, label: a.label }));
+  const watch = await watchEvmOutflows(env, watched).catch((e) => {
+    console.error('watch:', String(e).slice(0, 200));
+    return { alerts: 0, degraded: true };
+  });
+  lap('watch');
   const reparsed = await reparseLegacy(env.DB, REPARSE_PER_RUN);
   // The tag sweep is a GROUP BY over all text rows; four times an hour is plenty.
   if (new Date().getMinutes() % 15 < 3) await sweepTags(env.DB);
@@ -160,6 +167,8 @@ export async function runCron(env: Env): Promise<RunSummary> {
     blocks_ingested: blocksIngested,
     evm_inserted: evm.inserted,
     evm_failed: evm.failed,
+    watch_alerts: watch.alerts,
+    watch_degraded: watch.degraded,
     indexnow,
     took_ms: Date.now() - started,
     phase_ms: phase,
